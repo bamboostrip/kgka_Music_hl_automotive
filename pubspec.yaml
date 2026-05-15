@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  http: ^1.5.0
+  just_audio: ^0.10.4
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
