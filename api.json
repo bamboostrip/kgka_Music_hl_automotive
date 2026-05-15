@@ -1,0 +1,8126 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "KuGou Music API",
+    "description": "酷狗音乐API",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://localhost:7293/"
+    }
+  ],
+  "paths": {
+    "/album/shop": {
+      "get": {
+        "tags": [
+          "Album"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/album": {
+      "get": {
+        "tags": [
+          "Album"
+        ],
+        "parameters": [
+          {
+            "name": "album_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/album/detail": {
+      "get": {
+        "tags": [
+          "Album"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/album/songs": {
+      "get": {
+        "tags": [
+          "Album"
+        ],
+        "summary": "获取专辑歌曲列表。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "专辑 ID。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "description": "每页数量。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "专辑歌曲列表。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AlbumSongItem"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AlbumSongItem"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AlbumSongItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artist/follow": {
+      "post": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/artist/unfollow": {
+      "post": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/artist/follow/newsongs": {
+      "post": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "last_album_id",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64",
+              "default": 0
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "opt_sort",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/artist/honour": {
+      "post": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/artist/lists": {
+      "get": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "musician",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "sextypes",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "hotsize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/singer/list": {
+      "get": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "sextype",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "hotsize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/artist/videos": {
+      "get": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/artist/detail": {
+      "get": {
+        "tags": [
+          "Artist"
+        ],
+        "summary": "获取歌手详情。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "歌手 ID。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "歌手详情。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingerDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingerDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingerDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artist/audios": {
+      "get": {
+        "tags": [
+          "Artist"
+        ],
+        "summary": "获取歌手歌曲。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "歌手 ID。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "description": "每页数量。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "排序方式:new/hot",
+            "schema": {
+              "type": "string",
+              "default": "new"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "歌手歌曲分页结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingerAudioResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingerAudioResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingerAudioResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artist/albums": {
+      "get": {
+        "tags": [
+          "Artist"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "new"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/captcha/sent": {
+      "post": {
+        "tags": [
+          "Captcha"
+        ],
+        "summary": "发送手机验证码。",
+        "parameters": [
+          {
+            "name": "mobile",
+            "in": "query",
+            "description": "手机号。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "验证码发送结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendCodeResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendCodeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendCodeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/music": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "mixsongid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/comment/playlist": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/comment/album": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/comment/count": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "special_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/comment/floor": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "special_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mixsongid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "song"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "show_classify",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "show_hotword_list",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/comment/music/classify": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "mixsongid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/comment/music/hotword": {
+      "get": {
+        "tags": [
+          "Comment"
+        ],
+        "parameters": [
+          {
+            "name": "mixsongid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hot_word",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/top/playlist": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "summary": "歌单推荐",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "推荐歌单分页结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendPlaylistResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendPlaylistResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendPlaylistResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/top/song": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "summary": "新歌速递",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 21608
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/recommend/songs": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "summary": "获取每日推荐歌曲。",
+        "responses": {
+          "200": {
+            "description": "每日推荐歌曲结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyRecommendResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyRecommendResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyRecommendResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/recommend": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/yueku": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/yueku/banner": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/yueku/fm": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/top/album": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/top/card": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/top/card/youth": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "parameters": [
+          {
+            "name": "card_id",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 3005
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "tagid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/top/ip": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/pc/diantai": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/brush": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "parameters": [
+          {
+            "name": "song_pool_id",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "normal"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/everyday/friend": {
+      "post": {
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/everyday/history": {
+      "post": {
+        "tags": [
+          "Discovery"
+        ],
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "list"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "ios"
+            }
+          },
+          {
+            "name": "history_name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/personal/fm": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "summary": "获取私人FM推荐 / 上报电台播放行为 (为什么这个接口这么麻烦酷)",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "description": "音乐 hash",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "songid",
+            "in": "query",
+            "description": "音乐 songid",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "playtime",
+            "in": "query",
+            "description": "已播放时间 (秒)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "行为: play (获取推荐), garbage (标记为不喜欢)",
+            "schema": {
+              "type": "string",
+              "default": "play"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "模式: normal (红心), small (小众), peak (30s 速览)",
+            "schema": {
+              "type": "string",
+              "default": "normal"
+            }
+          },
+          {
+            "name": "songPoolId",
+            "in": "query",
+            "description": "AI 策略池: 0 (口味Alpha), 1 (风格Beta), 2 (Gamma)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "isOverplay",
+            "in": "query",
+            "description": "该歌曲是否自然播放到结束",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "remainSongCnt",
+            "in": "query",
+            "description": "列表剩余歌曲数 (如果填5，只会告诉服务器你的行为不会返回歌曲)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "私人 FM 推荐结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalFmResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalFmResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalFmResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fm/recommend": {
+      "get": {
+        "tags": [
+          "Fm"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/fm/songs": {
+      "get": {
+        "tags": [
+          "Fm"
+        ],
+        "parameters": [
+          {
+            "name": "fmid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 2
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": -1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/fm/class": {
+      "get": {
+        "tags": [
+          "Fm"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/fm/image": {
+      "get": {
+        "tags": [
+          "Fm"
+        ],
+        "parameters": [
+          {
+            "name": "fmid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/login/cellphone": {
+      "post": {
+        "tags": [
+          "Login"
+        ],
+        "summary": "手机验证码登录",
+        "requestBody": {
+          "description": "手机号和短信验证码。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileLoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileLoginRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "登录结果和账号 Token 信息。轮询此接口可获取二维码扫码状态, 408 为等待扫描，404 为已经扫描，403 为拒绝登录，405 为登录成功，402 为已过期",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login/qr/key": {
+      "get": {
+        "tags": [
+          "Login"
+        ],
+        "summary": "获取二维码 Key 和链接",
+        "responses": {
+          "200": {
+            "description": "二维码 Key、登录链接和展示信息。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QRCode"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QRCode"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QRCode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login/qr/check": {
+      "get": {
+        "tags": [
+          "Login"
+        ],
+        "summary": "检查二维码扫码状态",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "description": "二维码 Key",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "二维码登录状态。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QrLoginStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QrLoginStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QrLoginStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login/token": {
+      "post": {
+        "tags": [
+          "Login"
+        ],
+        "summary": "刷新 Token",
+        "responses": {
+          "200": {
+            "description": "刷新后的 Token 信息。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshTokenResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshTokenResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login/logout": {
+      "post": {
+        "tags": [
+          "Login"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/search/lyric": {
+      "get": {
+        "tags": [
+          "Lyric"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keywords",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "man",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/lyric": {
+      "get": {
+        "tags": [
+          "Lyric"
+        ],
+        "summary": "获取歌词内容。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "歌词候选 ID。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accesskey",
+            "in": "query",
+            "description": "歌词访问 Key。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fmt",
+            "in": "query",
+            "description": "歌词格式。",
+            "schema": {
+              "type": "string",
+              "default": "krc"
+            }
+          },
+          {
+            "name": "decode",
+            "in": "query",
+            "description": "是否解码歌词。",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "歌词内容和解析后的歌词行。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LyricResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LyricResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LyricResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/video/detail": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/video/url": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/longaudio/album/detail": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "album_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/longaudio/album/audios": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "album_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/longaudio/daily/recommend": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/longaudio/rank/recommend": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/longaudio/vip/recommend": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/longaudio/week/recommend": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/ip": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "audios"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/ip/detail": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/ip/playlist": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/ip/zone": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/ip/zone/home": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/lists": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/audio/list": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "module_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/collection/list": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/lists/v2": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "rec"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/module": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/module/info": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "module_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/music": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/scene/video/list": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/theme/music": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/theme/playlist": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/theme/music/detail": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/theme/playlist/track": {
+      "get": {
+        "tags": [
+          "MediaCatalog"
+        ],
+        "parameters": [
+          {
+            "name": "theme_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sheet/collection": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "position",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 2
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sheet/collection/detail": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sheet/detail": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sheet/hot": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "opern_type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sheet/list": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "opern_type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/detail": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "获取歌单详情。",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "歌单 ID。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "歌单详情。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/playlist/tags": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "获取歌单标签分类。",
+        "responses": {
+          "200": {
+            "description": "歌单标签分类列表。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaylistTagCategory"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaylistTagCategory"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaylistTagCategory"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/playlist/track/all": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "获取歌单全部歌曲。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "歌单 ID。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "description": "每页数量。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "歌单歌曲分页结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistSongResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistSongResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistSongResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/playlist/track/all/new": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "listid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/similar": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/effect": {
+      "get": {
+        "tags": [
+          "PlayList"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/add": {
+      "post": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "    收藏歌单\r\n<param name=\"name\">歌单名称。</param>\r\n<param name=\"list_create_gid\">歌单 ID。</param>",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "list_create_gid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/create": {
+      "post": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "    新建歌单\r\n<param name=\"name\">歌单名称。</param>\r\n<param name=\"type\">是否设为隐私，0：公开，1：隐私，仅支持创建歌单时传入</param>",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/del": {
+      "post": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "取消收藏 / 删除歌单",
+        "parameters": [
+          {
+            "name": "listid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/playlist/tracks/add": {
+      "post": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "对歌单添加歌曲",
+        "requestBody": {
+          "description": "要添加的歌曲列表。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTracksRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTracksRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTracksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "添加歌曲结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddSongResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddSongResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddSongResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/playlist/tracks/del": {
+      "post": {
+        "tags": [
+          "PlayList"
+        ],
+        "summary": "对歌单删除歌曲",
+        "parameters": [
+          {
+            "name": "listid",
+            "in": "query",
+            "description": "目标歌单 ID。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileids",
+            "in": "query",
+            "description": "歌曲 fileid，多个值用英文逗号分隔。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除歌曲结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveSongResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveSongResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveSongResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rank/list": {
+      "get": {
+        "tags": [
+          "Rank"
+        ],
+        "summary": "获取所有榜单",
+        "parameters": [
+          {
+            "name": "withsong",
+            "in": "query",
+            "description": "是否包含榜单歌曲。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "榜单列表。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankListResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankListResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rank/info": {
+      "get": {
+        "tags": [
+          "Rank"
+        ],
+        "parameters": [
+          {
+            "name": "rankid",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "rank_cid",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "album_img",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "zone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/rank/audio": {
+      "get": {
+        "tags": [
+          "Rank"
+        ],
+        "summary": "获取榜单歌曲",
+        "parameters": [
+          {
+            "name": "rankid",
+            "in": "query",
+            "description": "榜单 ID。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "description": "每页数量。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "榜单歌曲分页结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankSongResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankSongResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankSongResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/register/dev": {
+      "get": {
+        "tags": [
+          "Register"
+        ],
+        "summary": "初始化设备标识。",
+        "responses": {
+          "200": {
+            "description": "设备初始化是否成功。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/playhistory/upload": {
+      "post": {
+        "tags": [
+          "Report"
+        ],
+        "parameters": [
+          {
+            "name": "mxid",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "pc",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/lastest/songs/listen": {
+      "post": {
+        "tags": [
+          "Report"
+        ],
+        "parameters": [
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/listen/timeadd": {
+      "post": {
+        "tags": [
+          "Report"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "搜索歌曲或专辑等",
+        "parameters": [
+          {
+            "name": "keywords",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "song"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/search/special": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "搜索歌单。",
+        "parameters": [
+          {
+            "name": "keywords",
+            "in": "query",
+            "description": "搜索关键词。",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "匹配的歌单列表。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchPlaylistItem"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchPlaylistItem"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchPlaylistItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/album": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "搜索专辑。",
+        "parameters": [
+          {
+            "name": "keywords",
+            "in": "query",
+            "description": "搜索关键词。",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "匹配的专辑列表。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchAlbumItem"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchAlbumItem"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchAlbumItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/hot": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "获取热搜",
+        "responses": {
+          "200": {
+            "description": "热搜关键词和热度信息。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchHotResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchHotResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchHotResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/default": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/search/suggest": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "keywords",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "albumTipCount",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "correctTipCount",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "mvTipCount",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "musicTipCount",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/search/mixed": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/search/complex": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "keywords",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/audio": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/audio/related": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "show_type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "show_detail",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/audio/accompany/matching": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mixId",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64",
+              "default": 0
+            }
+          },
+          {
+            "name": "fileName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/audio/ktv/total": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "songId",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "songHash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "singerName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/song/climax": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/song/ranking": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/song/ranking/filter": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/kmr/audio/mv": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/kmr/audio": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "base"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/privilege/lite": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/images": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/images/audio": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "summary": "获取歌曲图片。",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "description": "歌曲 Hash。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "返回数量。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "歌曲图片结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioImageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioImageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioImageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/song/url/new": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "free_part",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/song/url": {
+      "get": {
+        "tags": [
+          "Song"
+        ],
+        "summary": "获取歌曲播放地址。",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "description": "歌曲 Hash。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "quality",
+            "in": "query",
+            "description": "音质。",
+            "schema": {
+              "type": "string",
+              "default": "128"
+            }
+          },
+          {
+            "name": "album_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "free_part",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "播放地址和音频信息。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayUrlData"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayUrlData"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayUrlData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/detail": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "获取当前登录用户详情。",
+        "responses": {
+          "200": {
+            "description": "用户详情。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailModel"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailModel"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailModel"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/vip/detail": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "获取当前登录用户 VIP 信息。",
+        "responses": {
+          "200": {
+            "description": "用户 VIP 信息。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserVipResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserVipResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserVipResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/playlist": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "分页获取当前登录用户歌单。",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "description": "每页数量。",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "用户歌单结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPlaylistResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPlaylistResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPlaylistResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/history": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/listen": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/follow": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/cloud": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/cloud/url": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "album_audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "audio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/follow/message": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/video/collect": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/video/love": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/favorite/count": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "mixsongids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/server/now": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/all": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/amway": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "global_collection_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/detail": {
+      "post": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "global_collection_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/similar": {
+      "post": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/song": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "global_collection_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/song/detail": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "global_collection_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/channel/sub": {
+      "post": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "global_collection_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "t",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/dynamic": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/dynamic/recent": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/listen/song": {
+      "post": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "mixsongid",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64",
+              "default": 666075191
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/union/vip": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/user/song": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "parameters": [
+          {
+            "name": "userid",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pagesize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/vip": {
+      "post": {
+        "tags": [
+          "Youth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/youth/day/vip": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "summary": "领取当天 VIP，不可多领。",
+        "responses": {
+          "200": {
+            "description": "领取结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OneDayVipModel"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OneDayVipModel"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OneDayVipModel"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/youth/day/vip/upgrade": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "summary": "升级到概念版VIP。",
+        "responses": {
+          "200": {
+            "description": "升级结果。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeVipModel"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeVipModel"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeVipModel"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/youth/month/vip/record": {
+      "get": {
+        "tags": [
+          "Youth"
+        ],
+        "summary": "获取VIP 领取记录。",
+        "responses": {
+          "200": {
+            "description": "VIP 领取记录。",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/VipReceiveHistoryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VipReceiveHistoryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VipReceiveHistoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddSongItem": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "albumId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mixSongId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AddSongResponse": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "当前歌单内的歌曲总数",
+            "format": "int32"
+          },
+          "listid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "目标歌单 ID",
+            "format": "int64"
+          },
+          "info": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddSongItem"
+            },
+            "description": "成功添加的歌曲列表"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "添加歌曲到歌单响应"
+      },
+      "AddTracksRequest": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddSongItem"
+            }
+          }
+        }
+      },
+      "AlbumLite": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "专辑 ID。",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "description": "专辑名称。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "简化专辑信息。"
+      },
+      "AlbumSongAlbumInfo": {
+        "type": "object",
+        "properties": {
+          "album_name": {
+            "type": "string",
+            "description": "专辑名称。"
+          },
+          "cover": {
+            "type": "string",
+            "description": "封面图地址。"
+          }
+        },
+        "description": "专辑信息。"
+      },
+      "AlbumSongAudioInfo": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string",
+            "description": "歌曲 Hash。"
+          },
+          "duration": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "时长，单位为毫秒。",
+            "format": "int32"
+          }
+        },
+        "description": "专辑歌曲音频信息。"
+      },
+      "AlbumSongAuthor": {
+        "type": "object",
+        "properties": {
+          "author_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "作者 ID。",
+            "format": "int64"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "作者名称。"
+          }
+        },
+        "description": "专辑歌曲作者信息。"
+      },
+      "AlbumSongBase": {
+        "type": "object",
+        "properties": {
+          "audio_name": {
+            "type": "string",
+            "description": "歌曲名称。"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "歌手名称。"
+          },
+          "album_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "专辑 ID。",
+            "format": "int64"
+          }
+        },
+        "description": "专辑歌曲基础信息。"
+      },
+      "AlbumSongItem": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "description": "基础信息。",
+            "$ref": "#/components/schemas/AlbumSongBase"
+          },
+          "audio_info": {
+            "description": "音频信息。",
+            "$ref": "#/components/schemas/AlbumSongAudioInfo"
+          },
+          "album_info": {
+            "description": "专辑信息。",
+            "$ref": "#/components/schemas/AlbumSongAlbumInfo"
+          },
+          "authors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlbumSongAuthor"
+            },
+            "description": "作者列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "专辑中的单首歌曲"
+      },
+      "AudioImageAuthor": {
+        "type": "object",
+        "properties": {
+          "author_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "作者 ID。",
+            "format": "int64"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "作者名称。"
+          },
+          "is_publish": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否已发布。",
+            "format": "int32"
+          },
+          "res_hash": {
+            "type": "string",
+            "description": "资源 Hash。"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "头像地址。"
+          },
+          "sizable_avatar": {
+            "type": "string",
+            "description": "可变尺寸头像地址。"
+          },
+          "audio_publish_date": {
+            "type": "string",
+            "description": "音频发布日期。"
+          },
+          "imgs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AudioImageItem"
+              }
+            },
+            "description": "作者写真资源集合。"
+          }
+        },
+        "description": "作者写真信息。"
+      },
+      "AudioImageItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "图片 ID。",
+            "format": "int64"
+          },
+          "file_hash": {
+            "type": "string",
+            "description": "文件 Hash。"
+          },
+          "sizable_portrait": {
+            "type": "string",
+            "description": "可变尺寸写真地址。"
+          },
+          "filename": {
+            "type": "string",
+            "description": "文件名。"
+          },
+          "publish_time": {
+            "type": "string",
+            "description": "发布时间。"
+          },
+          "source": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "来源标记。",
+            "format": "int32"
+          }
+        },
+        "description": "单张写真资源。"
+      },
+      "AudioImageResponse": {
+        "type": "object",
+        "properties": {
+          "errcode": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "错误码。",
+            "format": "int32"
+          },
+          "errmsg": {
+            "type": "string",
+            "description": "错误信息。"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AudioImageAuthor"
+              }
+            },
+            "description": "作者写真分组数据。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "歌曲作者写真，对应 /images/audio。"
+      },
+      "BusiVipInfo": {
+        "type": "object",
+        "properties": {
+          "is_vip": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否是 VIP (1: 是, 0: 否)",
+            "format": "int32"
+          },
+          "product_type": {
+            "type": "string",
+            "description": "VIP 类型标识\r\nsvip = 概念版VIPtvip = 畅听VIP"
+          },
+          "busi_type": {
+            "type": "string",
+            "description": "业务类型 (如 \"concept\")"
+          },
+          "vip_begin_time": {
+            "type": "string",
+            "description": "开始时间"
+          },
+          "vip_end_time": {
+            "type": "string",
+            "description": "结束时间"
+          },
+          "vip_clearday": {
+            "type": "string",
+            "description": "清除时间"
+          }
+        }
+      },
+      "DailyRecommendResponse": {
+        "type": "object",
+        "properties": {
+          "creation_date": {
+            "type": "string",
+            "description": "推荐日期 (例如: \"20260131\")"
+          },
+          "cover_img_url": {
+            "type": "string",
+            "description": "每日推荐封面图"
+          },
+          "sub_title": {
+            "type": "string",
+            "description": "副标题"
+          },
+          "song_list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyRecommendSong"
+            },
+            "description": "歌曲列表"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "每日推荐响应数据 (对应 data 节点)"
+      },
+      "DailyRecommendSong": {
+        "type": "object",
+        "properties": {
+          "songname": {
+            "type": "string",
+            "description": "歌曲名称"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "歌手名称"
+          },
+          "hash": {
+            "type": "string",
+            "description": "文件 Hash (标准音质/128k)"
+          },
+          "time_length": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "时长 (秒)",
+            "format": "int32"
+          },
+          "album_id": {
+            "type": "string",
+            "description": "专辑 ID"
+          },
+          "album_name": {
+            "type": "string",
+            "description": "专辑名称"
+          },
+          "songid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌曲 ID (AudioID)",
+            "format": "int64"
+          },
+          "mixsongid": {
+            "type": "string",
+            "description": "混合 ID (用于歌词搜索等)"
+          },
+          "sizable_cover": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "封面"
+          },
+          "rec_copy_write": {
+            "type": "string",
+            "description": "推荐理由/文案 (例如: \"人气歌曲推荐\")"
+          },
+          "rec_sub_copy_write": {
+            "type": "string",
+            "description": "子推荐语 (例如: \"昨日收听破万\")"
+          },
+          "hash_320": {
+            "type": "string",
+            "description": "320K 音质对应的 Hash。"
+          },
+          "filesize_320": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "320K 音质文件大小。",
+            "format": "int64"
+          },
+          "hash_flac": {
+            "type": "string",
+            "description": "FLAC 无损音质对应的 Hash。"
+          },
+          "filesize_flac": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "FLAC 无损音质文件大小。",
+            "format": "int64"
+          },
+          "hash_192": {
+            "type": "string",
+            "description": "Hi-Res 音质对应的 Hash。"
+          },
+          "privilege": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "权限位 (0=免费, 8=免费/会员混杂, 10=VIP, 1=付费)",
+            "format": "int32"
+          },
+          "is_original": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否原唱 (1=是, 0=否)",
+            "format": "int32"
+          },
+          "singerinfo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SingerLite"
+            },
+            "description": "歌手列表 (复用已有的 SingerLite)"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "每日推荐单曲信息"
+      },
+      "JsonElement": {},
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "userid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "用户 ID。",
+            "format": "int64"
+          },
+          "token": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "登录 Token。"
+          },
+          "t1": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "附加登录凭证 `t1`。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "登录响应数据"
+      },
+      "LyricResult": {
+        "required": [
+          "rawContent",
+          "decodedContent",
+          "decodedTranslation",
+          "rawJson"
+        ],
+        "type": "object",
+        "properties": {
+          "rawContent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decodedContent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decodedTranslation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rawJson": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
+      "MobileLoginRequest": {
+        "required": [
+          "mobile",
+          "code"
+        ],
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "OneDayVipModel": {
+        "type": "object",
+        "properties": {
+          "ad_vip_num": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "获得的 VIP 天数。",
+            "format": "int32"
+          },
+          "ad_vip_end_time": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "VIP 到期时间。",
+            "format": "int32"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "领取一天 VIP 的结果。"
+      },
+      "PersonalFmResponse": {
+        "type": "object",
+        "properties": {
+          "song_list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonalFmSong"
+            },
+            "description": "推荐的歌曲列表。"
+          },
+          "mode": {
+            "type": "string",
+            "description": "当前推荐模式"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "私人 FM 或猜你喜欢响应数据。"
+      },
+      "PersonalFmSong": {
+        "type": "object",
+        "properties": {
+          "songname": {
+            "type": "string",
+            "description": "歌曲名称。"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "歌手名称字符串。"
+          },
+          "hash": {
+            "type": "string",
+            "description": "歌曲 Hash。"
+          },
+          "time_length": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "时长，单位为秒。",
+            "format": "int32"
+          },
+          "album_id": {
+            "type": "string",
+            "description": "专辑 ID。"
+          },
+          "songid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "音频 ID。",
+            "format": "int64"
+          },
+          "mixsongid": {
+            "type": "string",
+            "description": "混合歌曲 ID。"
+          },
+          "privilege": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "权限标记。",
+            "format": "int32"
+          },
+          "singerinfo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SingerLite"
+            },
+            "description": "歌手列表。"
+          },
+          "trans_param": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "扩展参数，包含封面等字段。",
+                "$ref": "#/components/schemas/TransParam"
+              }
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "私人 FM 单曲信息。"
+      },
+      "PlaylistInfo": {
+        "type": "object",
+        "properties": {
+          "listid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "用户歌单列表 ID。",
+            "format": "int64"
+          },
+          "global_collection_id": {
+            "type": "string",
+            "description": "歌单 ID。"
+          },
+          "name": {
+            "type": "string",
+            "description": "歌单名称。"
+          },
+          "pic": {
+            "type": "string",
+            "description": "封面图片地址。"
+          },
+          "intro": {
+            "type": "string",
+            "description": "歌单简介。"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌曲总数。",
+            "format": "int32"
+          },
+          "list_create_username": {
+            "type": "string",
+            "description": "创建者昵称。"
+          },
+          "list_create_userid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "创建者用户 ID。",
+            "format": "int64"
+          },
+          "heat": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "播放量。",
+            "format": "int32"
+          },
+          "create_time": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "创建时间戳。",
+            "format": "int64"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "歌单详情。"
+      },
+      "PlaylistSong": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "歌曲名称。"
+          },
+          "hash": {
+            "type": "string",
+            "description": "歌曲 Hash。"
+          },
+          "timelen": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "时长，单位为毫秒。",
+            "format": "int32"
+          },
+          "album_id": {
+            "type": "string",
+            "description": "专辑 ID。"
+          },
+          "privilege": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "权限标记。",
+            "format": "int32"
+          },
+          "fileid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌单内文件 ID。",
+            "format": "int32"
+          },
+          "singerinfo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SingerLite"
+            },
+            "description": "歌手信息列表。"
+          },
+          "albuminfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "专辑信息。",
+                "$ref": "#/components/schemas/AlbumLite"
+              }
+            ]
+          },
+          "cover": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "封面图地址。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "单首歌曲信息"
+      },
+      "PlaylistSongResponse": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌曲总数。",
+            "format": "int32"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaylistSong"
+            },
+            "description": "当前页歌曲列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "对应 data 节点的结构"
+      },
+      "PlaylistTagCategory": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sort": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tag_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tag_name": {
+            "type": "string"
+          },
+          "son": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaylistTagItem"
+            }
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "歌单标签分类大类 (如：场景、主题、语种等)"
+      },
+      "PlaylistTagItem": {
+        "type": "object",
+        "properties": {
+          "parent_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tag_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tag_name": {
+            "type": "string"
+          },
+          "sort": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "具体的歌单标签项 (如：学习、工作、通勤等)"
+      },
+      "PlayUrlData": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "可用播放地址列表。"
+          },
+          "hash": {
+            "type": "string",
+            "description": "歌曲 Hash。"
+          },
+          "priv_status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "权限状态。",
+            "format": "int32"
+          },
+          "err_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "错误码。",
+            "format": "int32"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "歌曲播放地址结果。"
+      },
+      "QRCode": {
+        "type": "object",
+        "properties": {
+          "qrcode": {
+            "type": "string",
+            "description": "二维码文本内容。"
+          },
+          "qrcode_img": {
+            "type": "string",
+            "description": "二维码图片地址。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "登录二维码信息。"
+      },
+      "QrLoginStatusResponse": {
+        "type": "object",
+        "properties": {
+          "userid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "用户ID",
+            "format": "int64"
+          },
+          "nickname": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "用户昵称"
+          },
+          "pic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "用户头像"
+          },
+          "token": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "登录凭证 (仅状态为 4 时返回)"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "二维码状态查询响应 (对应 data 节点)"
+      },
+      "RankAlbum": {
+        "type": "object",
+        "properties": {
+          "sizable_cover": {
+            "type": "string",
+            "description": "专辑封面地址。"
+          },
+          "album_name": {
+            "type": "string",
+            "description": "专辑名称。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "榜单歌曲所属专辑信息。"
+      },
+      "RankListItem": {
+        "type": "object",
+        "properties": {
+          "img_9": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "榜单封面图地址。"
+          },
+          "rankid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "榜单 ID。",
+            "format": "int64"
+          },
+          "rankname": {
+            "type": "string",
+            "description": "榜单名称。"
+          }
+        },
+        "description": "单个榜单信息。"
+      },
+      "RankListResponse": {
+        "type": "object",
+        "properties": {
+          "info": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankListItem"
+            },
+            "description": "榜单列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "榜单列表结果。"
+      },
+      "RankSongAudioInfo": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string",
+            "description": "歌曲 Hash。"
+          },
+          "duration": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "时长，单位为毫秒。",
+            "format": "int32"
+          }
+        },
+        "description": "榜单歌曲的音频基础信息。"
+      },
+      "RankSongAuthor": {
+        "type": "object",
+        "properties": {
+          "author_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "作者 ID。",
+            "format": "int64"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "作者名称。"
+          }
+        },
+        "description": "榜单歌曲作者信息。"
+      },
+      "RankSongItem": {
+        "type": "object",
+        "properties": {
+          "deprecated": {
+            "description": "音频基础信息。",
+            "$ref": "#/components/schemas/RankSongAudioInfo"
+          },
+          "album_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "专辑 ID。",
+            "format": "int64"
+          },
+          "authors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankSongAuthor"
+            },
+            "description": "作者列表。"
+          },
+          "songname": {
+            "type": "string",
+            "description": "歌曲名称。"
+          },
+          "trans_param": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "扩展参数。",
+                "$ref": "#/components/schemas/TransParam"
+              }
+            ]
+          },
+          "album_info": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "专辑信息。",
+                "$ref": "#/components/schemas/RankAlbum"
+              }
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "榜单中的单首歌曲信息。"
+      },
+      "RankSongResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "总歌曲数。",
+            "format": "int32"
+          },
+          "songlist": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankSongItem"
+            },
+            "description": "当前页榜单歌曲列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "榜单歌曲分页结果。"
+      },
+      "RecommendPlaylistItem": {
+        "type": "object",
+        "properties": {
+          "specialid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌单数字 ID",
+            "format": "int64"
+          },
+          "global_collection_id": {
+            "type": "string",
+            "description": "歌单全局 ID (最常用的请求参数)"
+          },
+          "specialname": {
+            "type": "string",
+            "description": "歌单名称"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "创建者昵称"
+          },
+          "suid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "创建者 ID",
+            "format": "int64"
+          },
+          "play_count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "播放量",
+            "format": "int64"
+          },
+          "collectcount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "收藏数",
+            "format": "int64"
+          },
+          "intro": {
+            "type": "string",
+            "description": "简介"
+          },
+          "flexible_cover": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "封面 (自动处理 {size})"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaylistTagItem"
+            },
+            "description": "标签列表"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "推荐歌单信息"
+      },
+      "RecommendPlaylistResponse": {
+        "type": "object",
+        "properties": {
+          "has_next": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否还有下一页。",
+            "format": "int32"
+          },
+          "special_list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecommendPlaylistItem"
+            },
+            "description": "推荐歌单列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "推荐歌单响应数据 (对应 data 节点)"
+      },
+      "RefreshTokenResponse": {
+        "type": "object",
+        "properties": {
+          "userid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "用户 ID。",
+            "format": "int64"
+          },
+          "token": {
+            "type": "string",
+            "description": "刷新后的 Token。"
+          },
+          "is_vip": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否为 VIP。",
+            "format": "int64"
+          },
+          "t1": {
+            "type": "string",
+            "description": "刷新后返回的 `t1` 凭证。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "刷新登录 Token 的结果。"
+      },
+      "RemoveSongResponse": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "删除后歌单内的歌曲总数。",
+            "format": "int32"
+          },
+          "listid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "目标歌单 ID。",
+            "format": "int64"
+          },
+          "last_time": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "最后更新时间戳。",
+            "format": "int64"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "从歌单删除歌曲后的结果。"
+      },
+      "SearchAlbumItem": {
+        "type": "object",
+        "properties": {
+          "albumid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "专辑 ID。",
+            "format": "int64"
+          },
+          "albumname": {
+            "type": "string",
+            "description": "专辑名称。"
+          },
+          "singer": {
+            "type": "string",
+            "description": "歌手名称。"
+          },
+          "songcount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "收录歌曲数。",
+            "format": "int32"
+          },
+          "publish_time": {
+            "type": "string",
+            "description": "发布时间。"
+          },
+          "ostremark": {
+            "type": "string",
+            "description": "备注信息。"
+          },
+          "img": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "封面图地址。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "搜索结果中的专辑信息。"
+      },
+      "SearchHotCategory": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "分类名称。"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchHotKeyword"
+            },
+            "description": "分类下的热搜关键词。"
+          }
+        },
+        "description": "榜单分类（如：热搜榜、飙升榜）"
+      },
+      "SearchHotKeyword": {
+        "type": "object",
+        "properties": {
+          "keyword": {
+            "type": "string",
+            "description": "热搜关键词。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "上榜原因。"
+          },
+          "jumpurl": {
+            "type": "string",
+            "description": "跳转链接。"
+          },
+          "json_url": {
+            "type": "string",
+            "description": "结构化结果链接。"
+          },
+          "is_cover_word": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否为封面词。",
+            "format": "int32"
+          },
+          "type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "热搜类型。",
+            "format": "int32"
+          },
+          "icon": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "图标标记。",
+            "format": "int32"
+          }
+        },
+        "description": "具体的热搜关键词项"
+      },
+      "SearchHotResponse": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "热搜生成时间戳。",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchHotCategory"
+            },
+            "description": "热搜分类列表。"
+          }
+        },
+        "description": "对应 data 节点的数据"
+      },
+      "SearchPlaylistItem": {
+        "type": "object",
+        "properties": {
+          "specialname": {
+            "type": "string",
+            "description": "歌单名称。"
+          },
+          "specialid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌单数字 ID。",
+            "format": "int64"
+          },
+          "gid": {
+            "type": "string",
+            "description": "歌单全局 ID。"
+          },
+          "song_count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌曲数量。",
+            "format": "int32"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "创建者昵称。"
+          },
+          "total_play_count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "播放量。",
+            "format": "int64"
+          },
+          "img": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "封面图地址。"
+          },
+          "publish_time": {
+            "type": "string",
+            "description": "发布时间。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "搜索结果中的歌单信息。"
+      },
+      "SendCodeResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "接口返回状态码。",
+            "format": "int64"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "发送验证码响应"
+      },
+      "SingerAudioResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "总记录数。",
+            "format": "int32"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SingerSongItem"
+            },
+            "description": "当前页歌曲列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "歌手歌曲列表响应"
+      },
+      "SingerDetailResponse": {
+        "type": "object",
+        "properties": {
+          "birthday": {
+            "type": "string",
+            "description": "生日。"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "歌手名称。"
+          },
+          "sizable_avatar": {
+            "type": "string",
+            "description": "歌手头像地址。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "歌手详情。"
+      },
+      "SingerLite": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌手 ID。",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "description": "歌手名称。"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "歌手头像地址。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "简化歌手信息。"
+      },
+      "SingerSongItem": {
+        "type": "object",
+        "properties": {
+          "audio_name": {
+            "type": "string",
+            "description": "歌曲名称。"
+          },
+          "hash": {
+            "type": "string",
+            "description": "歌曲 Hash。"
+          },
+          "album_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "专辑 ID。",
+            "format": "int64"
+          },
+          "album_name": {
+            "type": "string",
+            "description": "专辑名称。"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "歌手名称。"
+          },
+          "timelength": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "时长，单位为毫秒。",
+            "format": "int64"
+          },
+          "trans_param": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "扩展参数，包含封面等字段。",
+                "$ref": "#/components/schemas/TransParam"
+              }
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "单首歌曲信息"
+      },
+      "TransParam": {
+        "type": "object",
+        "properties": {
+          "union_cover": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "联合封面图地址。"
+          }
+        },
+        "description": "扩展参数。"
+      },
+      "UpgradeVipModel": {
+        "type": "object",
+        "properties": {
+          "recharge_hours": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "获得的充值时长。",
+            "format": "int32"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "VIP 升级奖励领取结果。"
+      },
+      "UserDetailModel": {
+        "type": "object",
+        "properties": {
+          "nickname": {
+            "type": "string",
+            "description": "用户昵称。"
+          },
+          "pic": {
+            "type": "string",
+            "description": "用户头像地址。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "当前登录用户详情。"
+      },
+      "UserPlaylistItem": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "歌单名称。"
+          },
+          "listid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌单数字 ID。",
+            "format": "int64"
+          },
+          "global_collection_id": {
+            "type": "string",
+            "description": "歌单全局 ID。"
+          },
+          "list_create_gid": {
+            "type": "string",
+            "description": "创建来源关联 ID。"
+          },
+          "list_create_listid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "创建来源歌单 ID。",
+            "format": "int64"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌曲数量。",
+            "format": "int32"
+          },
+          "pic": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "歌单封面图。"
+          },
+          "is_def": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否默认歌单。`1` 表示默认收藏，`2` 表示我喜欢，`0` 表示自建。",
+            "format": "int32"
+          },
+          "create_time": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "创建时间戳。",
+            "format": "int64"
+          },
+          "type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "歌单类型。",
+            "format": "int32"
+          },
+          "musiclib_id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "媒体库 ID。",
+            "format": "int64"
+          },
+          "list_create_username": {
+            "type": "string",
+            "description": "创建者用户名。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "单个用户歌单信息"
+      },
+      "UserPlaylistResponse": {
+        "type": "object",
+        "properties": {
+          "userid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "当前登录用户 ID。",
+            "format": "int64"
+          },
+          "list_count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "当前用户歌单总数。",
+            "format": "int32"
+          },
+          "info": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserPlaylistItem"
+            },
+            "description": "当前页歌单列表。"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "对应 /v7/get_all_list 接口的 data 节点"
+      },
+      "UserVipResponse": {
+        "type": "object",
+        "properties": {
+          "userid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "is_vip": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "vip_type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "busi_vip": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BusiVipInfo"
+            }
+          },
+          "isSuperVip": {
+            "type": "boolean",
+            "description": "是否为概念版 VIP (SVIP)"
+          },
+          "isConceptVip": {
+            "type": "boolean",
+            "description": "是否为畅听 VIP (TVIP)"
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "用户 VIP 详情响应"
+      },
+      "VipFutureDuration": {
+        "type": "object",
+        "properties": {
+          "up_seconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "duration": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "seconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "month_num": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "时长统计详情"
+      },
+      "VipReceiveHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "当前查询的月份 (格式: yyyy-MM)"
+          },
+          "server_time": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "服务器时间戳",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VipReceiveItem"
+            },
+            "description": "领取详情列表"
+          },
+          "sign_list": {
+            "type": "array",
+            "description": "签到列表 (JSON 中为空，暂时用 object 占位，或定义具体类)"
+          },
+          "future_duration": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "未来/剩余时长统计信息",
+                "$ref": "#/components/schemas/VipFutureDuration"
+              }
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error_code": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "VIP 领取记录响应 (对应 data 节点)"
+      },
+      "VipReceiveItem": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "日期 (格式: yyyy-MM-dd)"
+          },
+          "receive_vip": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "是否领取 (1: 已领取)",
+            "format": "int32"
+          },
+          "vip_type": {
+            "type": "string",
+            "description": "VIP 类型 (tvip: 概念版, svip: 超级会员)"
+          }
+        },
+        "description": "单日 VIP 领取详情"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Album"
+    },
+    {
+      "name": "Artist"
+    },
+    {
+      "name": "Captcha"
+    },
+    {
+      "name": "Comment"
+    },
+    {
+      "name": "Discovery"
+    },
+    {
+      "name": "Fm"
+    },
+    {
+      "name": "Login"
+    },
+    {
+      "name": "Lyric"
+    },
+    {
+      "name": "MediaCatalog"
+    },
+    {
+      "name": "PlayList"
+    },
+    {
+      "name": "Rank"
+    },
+    {
+      "name": "Register"
+    },
+    {
+      "name": "Report"
+    },
+    {
+      "name": "Search"
+    },
+    {
+      "name": "Song"
+    },
+    {
+      "name": "User"
+    },
+    {
+      "name": "Youth"
+    }
+  ]
+}
