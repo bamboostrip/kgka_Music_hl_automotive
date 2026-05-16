@@ -89,6 +89,8 @@ class MusicApi {
               'id': item.id,
               'songCount': item.songCount,
               'isDefault': item.isDefault,
+              'type': item.type,
+              'source': item.source,
               'isLikedPlaylist': item.isLikedPlaylist,
               'isCreatedPlaylist': item.isCreatedPlaylist,
               'creatorName': item.creatorName,
@@ -135,23 +137,52 @@ class MusicApi {
     String id, {
     int page = 1,
     int pageSize = 80,
+    bool fetchAll = false,
   }) async {
-    final json = asMap(
-      await _client.get('/playlist/track/all', {
-        'id': id,
-        'page': page,
-        'pagesize': pageSize,
-      }),
-    );
-    return asList(json['songs'])
-        .whereType<Map<String, dynamic>>()
-        .map(Song.fromPlaylist)
-        .where((song) => song.hash.isNotEmpty)
-        .toList();
+    if (!fetchAll) {
+      final json = asMap(
+        await _client.get('/playlist/track/all', {
+          'id': id,
+          'page': page,
+          'pagesize': pageSize,
+        }),
+      );
+      return asList(json['songs'])
+          .whereType<Map<String, dynamic>>()
+          .map(Song.fromPlaylist)
+          .where((song) => song.hash.isNotEmpty)
+          .toList();
+    }
+
+    final allSongs = <Song>[];
+    var currentPage = 1;
+    const perPage = 200;
+    while (true) {
+      final json = asMap(
+        await _client.get('/playlist/track/all', {
+          'id': id,
+          'page': currentPage,
+          'pagesize': perPage,
+        }),
+      );
+      final songs = asList(json['songs'])
+          .whereType<Map<String, dynamic>>()
+          .map(Song.fromPlaylist)
+          .where((song) => song.hash.isNotEmpty)
+          .toList();
+      if (songs.isEmpty) break;
+      allSongs.addAll(songs);
+      if (songs.length < perPage) break;
+      currentPage++;
+    }
+    return allSongs;
   }
 
   Future<PlaylistDetail> playlistDetail(String id) async {
-    final results = await Future.wait([playlistInfo(id), playlistSongs(id)]);
+    final results = await Future.wait([
+      playlistInfo(id),
+      playlistSongs(id, pageSize: 200, fetchAll: true),
+    ]);
     return PlaylistDetail(
       info: results[0] as PlaylistSummary,
       songs: results[1] as List<Song>,
@@ -169,6 +200,96 @@ class MusicApi {
       }),
     );
     return PlayUrl.fromJson(json);
+  }
+
+  Future<void> addToPlaylist(String playlistId, Song song) async {
+    await _client.post(
+      '/playlist/tracks/add',
+      body: {
+        'listId': playlistId,
+        'songs': [
+          {
+            'name': song.title,
+            'hash': song.hash,
+            'albumId': song.albumId,
+            'mixSongId': song.id,
+          },
+        ],
+      },
+    );
+  }
+
+  Future<void> removeFromPlaylist(String playlistId, Song song) async {
+    await _client.post(
+      '/playlist/tracks/del',
+      query: {'listid': playlistId, 'fileids': song.id},
+    );
+  }
+
+  Future<List<String>> searchHotKeywords() async {
+    final json = asMap(await _client.get('/search/hot'));
+    final categories = asList(json['category']);
+    final keywords = <String>[];
+    for (final category in categories.whereType<Map<String, dynamic>>()) {
+      for (final item
+          in asList(category['keywords']).whereType<Map<String, dynamic>>()) {
+        final keyword = asString(item['keyword']);
+        if (keyword != null) keywords.add(keyword);
+      }
+    }
+    return keywords;
+  }
+
+  Future<List<String>> searchSuggest(String keywords) async {
+    final json = asMap(
+      await _client.get('/search/suggest', {'keywords': keywords}),
+    );
+    final items = asList(json['music']);
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((item) => asString(item['keyword']) ?? '')
+        .where((k) => k.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<Song>> searchSongs(
+    String keywords, {
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    final raw = await _client.get('/search', {
+      'keywords': keywords,
+      'page': page,
+      'pagesize': pageSize,
+      'type': 'song',
+    });
+    if (kDebugMode) {
+      debugPrint('[KA Music][search] keywords="$keywords"');
+      debugPrint(
+        '[KA Music][search] raw type: ${raw.runtimeType}',
+      );
+      if (raw is List) {
+        debugPrint('[KA Music][search] list length: ${raw.length}');
+      } else if (raw is Map) {
+        final map = raw as Map;
+        debugPrint(
+          '[KA Music][search] map keys: ${map.keys.toList()}',
+        );
+      }
+    }
+    // API returns either a plain array or { songs: [...] }
+    final List songs;
+    if (raw is List) {
+      songs = raw;
+    } else {
+      final json = asMap(raw);
+      songs = asList(json['songs'] ?? json['song'] ?? json['lists']);
+    }
+    return songs
+        .whereType<Map<String, dynamic>>()
+        .map(Song.fromSearch)
+        .where((song) => song.hash.isNotEmpty)
+        .toList();
   }
 
   Future<List<LyricLine>> lyrics(Song song) async {

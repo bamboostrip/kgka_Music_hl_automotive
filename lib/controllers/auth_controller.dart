@@ -14,6 +14,7 @@ class AuthController extends ChangeNotifier {
   static const _userIdKey = 'ka_music_user_id';
   static const _playlistCachePrefix = 'ka_music_cached_playlists';
   static const _playlistEmptyCountPrefix = 'ka_music_playlist_empty_count';
+  static const _likedHashesKey = 'ka_music_liked_hashes';
 
   final MusicApi _api;
 
@@ -23,7 +24,45 @@ class AuthController extends ChangeNotifier {
   UserProfile? profile;
   List<PlaylistSummary> playlists = const [];
 
+  final Set<String> _likedHashes = {};
+
   bool get isLoggedIn => session?.isValid == true;
+
+  bool isLiked(Song song) => _likedHashes.contains(song.hash);
+
+  int get likedCount {
+    final playlist = likedPlaylist;
+    if (playlist != null && playlist.songCount != null) {
+      return playlist.songCount!;
+    }
+    return _likedHashes.length;
+  }
+
+  Future<void> toggleLike(Song song) async {
+    final playlist = likedPlaylist;
+    if (playlist == null) return;
+
+    final liked = _likedHashes.contains(song.hash);
+    try {
+      if (liked) {
+        await _api.removeFromPlaylist(playlist.id, song);
+        _likedHashes.remove(song.hash);
+      } else {
+        await _api.addToPlaylist(playlist.id, song);
+        _likedHashes.add(song.hash);
+      }
+      await _persistLikedHashes();
+      notifyListeners();
+    } catch (error) {
+      // Revert on failure
+      if (liked) {
+        _likedHashes.add(song.hash);
+      } else {
+        _likedHashes.remove(song.hash);
+      }
+      rethrow;
+    }
+  }
 
   PlaylistSummary? get likedPlaylist {
     for (final playlist in playlists) {
@@ -36,10 +75,7 @@ class AuthController extends ChangeNotifier {
 
   List<PlaylistSummary> get createdPlaylists {
     return playlists
-        .where(
-          (playlist) =>
-              !playlist.isLikedPlaylist && _isCreatedPlaylist(playlist),
-        )
+        .where((playlist) => playlist.isCreatedPlaylist)
         .toList();
   }
 
@@ -47,27 +83,9 @@ class AuthController extends ChangeNotifier {
     return playlists
         .where(
           (playlist) =>
-              !playlist.isLikedPlaylist && !_isCreatedPlaylist(playlist),
+              !playlist.isLikedPlaylist && !playlist.isCreatedPlaylist,
         )
         .toList();
-  }
-
-  bool _isCreatedPlaylist(PlaylistSummary playlist) {
-    if (playlist.isCreatedPlaylist) {
-      return true;
-    }
-    final nickname = profile?.nickname.trim();
-    if (nickname != null &&
-        nickname.isNotEmpty &&
-        playlist.creatorName?.trim() == nickname) {
-      return true;
-    }
-    if (playlist.isDefault == null &&
-        playlist.creatorUserId == null &&
-        !playlist.hasCollectionSource) {
-      return true;
-    }
-    return false;
   }
 
   Future<void> restore() async {
@@ -85,6 +103,7 @@ class AuthController extends ChangeNotifier {
     session = restored;
     _api.setSession(restored);
     playlists = await _loadCachedPlaylists();
+    await _loadLikedHashes();
     notifyListeners();
     await refreshProfile();
   }
@@ -112,6 +131,7 @@ class AuthController extends ChangeNotifier {
     await _run(() async {
       profile = await _api.userDetail();
       playlists = await _loadUserPlaylistsWithCache();
+      await _syncLikedSongs();
     }, silent: silent);
   }
 
@@ -126,14 +146,52 @@ class AuthController extends ChangeNotifier {
         session = null;
         profile = null;
         playlists = const [];
+        _likedHashes.clear();
         _api.setSession(null);
         await prefs.remove(_tokenKey);
         await prefs.remove(_t1Key);
         await prefs.remove(_userIdKey);
         await prefs.remove(cacheKey);
         await prefs.remove(emptyCountKey);
+        await prefs.remove(_likedHashesKey);
       }
     });
+  }
+
+  Future<void> _syncLikedSongs() async {
+    final playlist = likedPlaylist;
+    if (playlist == null) return;
+
+    try {
+      final songs = await _api.playlistSongs(playlist.id, fetchAll: true);
+      _likedHashes.clear();
+      for (final song in songs) {
+        _likedHashes.add(song.hash);
+      }
+      await _persistLikedHashes();
+    } catch (_) {
+      await _loadLikedHashes();
+    }
+  }
+
+  Future<void> _persistLikedHashes() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _likedHashesKey,
+      jsonEncode(_likedHashes.toList()),
+    );
+  }
+
+  Future<void> _loadLikedHashes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_likedHashesKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final list = jsonDecode(raw);
+      if (list is List) {
+        _likedHashes.addAll(list.whereType<String>());
+      }
+    } catch (_) {}
   }
 
   Future<List<PlaylistSummary>> _loadUserPlaylistsWithCache() async {

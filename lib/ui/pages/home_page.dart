@@ -6,6 +6,7 @@ import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
 import 'playlist_detail_page.dart';
+import 'search_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -110,6 +111,8 @@ class _HomePageState extends State<HomePage> {
                         widget.player.playSong(songs.first, queue: songs);
                       }
                     },
+                    api: widget.api,
+                    player: widget.player,
                   ),
                 ),
                 if (_sectionIndex == 1)
@@ -123,6 +126,9 @@ class _HomePageState extends State<HomePage> {
                       title: '母带音质·精选',
                       songs: data.daily.songs,
                       onPlay: _playSong,
+                      isLiked: (song) => widget.auth.isLiked(song),
+                      onLikeTap: (song) => widget.auth.toggleLike(song),
+                      auth: widget.auth,
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -149,6 +155,8 @@ class _RecommendHeader extends StatelessWidget {
     required this.sectionIndex,
     required this.onSectionChanged,
     required this.onDailyPlay,
+    required this.api,
+    required this.player,
   });
 
   final AuthController auth;
@@ -156,6 +164,8 @@ class _RecommendHeader extends StatelessWidget {
   final int sectionIndex;
   final ValueChanged<int> onSectionChanged;
   final VoidCallback onDailyPlay;
+  final MusicApi api;
+  final PlayerController player;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +184,7 @@ class _RecommendHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 10, 0, 22),
+          padding: const EdgeInsets.fromLTRB(18, 10, 0, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -189,7 +199,7 @@ class _RecommendHeader extends StatelessWidget {
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.only(right: 18),
-                child: _SmartSearch(),
+                child: _SmartSearch(api: api, auth: auth, player: player),
               ),
               const SizedBox(height: 14),
               _FeatureShelf(daily: daily, onDailyPlay: onDailyPlay),
@@ -293,29 +303,50 @@ class _TopTabs extends StatelessWidget {
 }
 
 class _SmartSearch extends StatelessWidget {
+  const _SmartSearch({
+    required this.api,
+    required this.auth,
+    required this.player,
+  });
+
+  final MusicApi api;
+  final AuthController auth;
+  final PlayerController player;
+
+  void _openSearch(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchPage(api: api, auth: auth, player: player),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white.withValues(alpha: .08)
-                  : Colors.white.withValues(alpha: .92),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white.withValues(alpha: .56)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Text(
-                '搜索歌曲，歌手',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
+          child: GestureDetector(
+            onTap: () => _openSearch(context),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: .08)
+                    : Colors.white.withValues(alpha: .92),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: Colors.white.withValues(alpha: .56)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Text(
+                  '搜索歌曲，歌手',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -483,11 +514,17 @@ class _SongSection extends StatelessWidget {
     required this.title,
     required this.songs,
     required this.onPlay,
+    required this.isLiked,
+    required this.onLikeTap,
+    required this.auth,
   });
 
   final String title;
   final List<Song> songs;
   final void Function(Song song, List<Song> queue) onPlay;
+  final bool Function(Song song) isLiked;
+  final void Function(Song song) onLikeTap;
+  final AuthController auth;
 
   @override
   Widget build(BuildContext context) {
@@ -496,27 +533,38 @@ class _SongSection extends StatelessWidget {
     }
 
     final visibleSongs = songs.take(8).toList();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 26, 18, 16),
-      child: Column(
-        children: [
-          _SectionHeader(
-            title: title,
-            action: IconButton.filledTonal(
-              tooltip: '播放',
-              onPressed: () => onPlay(visibleSongs.first, songs),
-              icon: const Icon(Icons.play_arrow_rounded),
-              style: IconButton.styleFrom(
-                fixedSize: const Size.square(42),
-                shape: const CircleBorder(),
+    return AnimatedBuilder(
+      animation: auth,
+      builder: (context, _) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+          child: Column(
+            children: [
+              _SectionHeader(
+                title: title,
+                action: IconButton.filledTonal(
+                  tooltip: '播放',
+                  onPressed: () => onPlay(visibleSongs.first, songs),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size.square(42),
+                    shape: const CircleBorder(),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 12),
+              for (final song in visibleSongs)
+                _HomeSongRow(
+                  song: song,
+                  queue: songs,
+                  onPlay: onPlay,
+                  isLiked: isLiked(song),
+                  onLikeTap: () => onLikeTap(song),
+                ),
+            ],
           ),
-          const SizedBox(height: 12),
-          for (final song in visibleSongs)
-            _HomeSongRow(song: song, queue: songs, onPlay: onPlay),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -526,11 +574,15 @@ class _HomeSongRow extends StatelessWidget {
     required this.song,
     required this.queue,
     required this.onPlay,
+    required this.isLiked,
+    required this.onLikeTap,
   });
 
   final Song song;
   final List<Song> queue;
   final void Function(Song song, List<Song> queue) onPlay;
+  final bool isLiked;
+  final VoidCallback onLikeTap;
 
   @override
   Widget build(BuildContext context) {
@@ -571,10 +623,14 @@ class _HomeSongRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Icon(
-              Icons.favorite_border_rounded,
-              color: colorScheme.outline,
-              size: 27,
+            IconButton(
+              onPressed: onLikeTap,
+              icon: Icon(
+                isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                color: isLiked ? Colors.redAccent : colorScheme.outline,
+                size: 27,
+              ),
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),

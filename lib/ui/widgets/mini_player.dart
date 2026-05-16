@@ -34,14 +34,23 @@ class MiniPlayer extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Material(
-                color: isDark
-                    ? Colors.white.withValues(alpha: .08)
-                    : const Color(0xFFFFF5E7).withValues(alpha: .82),
-                shadowColor: Colors.black.withValues(alpha: .10),
-                elevation: 10,
-                borderRadius: BorderRadius.circular(10),
-                clipBehavior: Clip.antiAlias,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? colorScheme.surfaceContainerHighest.withValues(alpha: .72)
+                      : colorScheme.surfaceContainerHighest.withValues(alpha: .64),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withValues(alpha: .38),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
                 child: InkWell(
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(

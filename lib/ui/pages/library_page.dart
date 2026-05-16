@@ -335,7 +335,7 @@ class _QuickStats extends StatelessWidget {
             child: _StatTile(
               icon: Icons.favorite_rounded,
               label: '我喜欢',
-              value: '${auth.likedPlaylist?.songCount ?? 0}',
+              value: '${auth.likedCount}',
               onTap: onLikedTap,
             ),
           ),

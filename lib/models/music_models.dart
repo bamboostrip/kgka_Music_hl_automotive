@@ -46,6 +46,7 @@ class PlaylistSummary {
     this.sourceListId,
     this.type,
     this.source,
+    this.listId,
   });
 
   final String id;
@@ -66,6 +67,9 @@ class PlaylistSummary {
 
   /// API `source` field: 1 = 自建, 2 = 来自音乐库
   final int? source;
+
+  /// Raw numeric playlist ID for track add/remove operations
+  final String? listId;
 
   bool get isLikedPlaylist => isDefault == 2 || title.trim() == '我喜欢';
 
@@ -125,6 +129,9 @@ class PlaylistSummary {
       currentUserId: currentUserId,
       sourceGlobalId: asString(json['list_create_gid']),
       sourceListId: asString(json['list_create_listid']),
+      type: asInt(json['type']),
+      source: asInt(json['source']),
+      listId: asString(json['listid']),
     );
   }
 
@@ -161,6 +168,9 @@ class PlaylistSummary {
       currentUserId: asString(json['currentUserId']),
       sourceGlobalId: asString(json['sourceGlobalId']),
       sourceListId: asString(json['sourceListId']),
+      type: asInt(json['type']),
+      source: asInt(json['source']),
+      listId: asString(json['listId']),
     );
   }
 
@@ -178,6 +188,9 @@ class PlaylistSummary {
       'currentUserId': currentUserId,
       'sourceGlobalId': sourceGlobalId,
       'sourceListId': sourceListId,
+      'type': type,
+      'source': source,
+      'listId': listId,
     };
   }
 }
@@ -204,6 +217,54 @@ class Song {
   final String? albumName;
   final String? coverUrl;
   final Duration? duration;
+
+  factory Song.fromSearch(Map<String, dynamic> json) {
+    final songId =
+        asString(json['MixSongID']) ??
+        asString(json['mixsongid']) ??
+        asString(json['songid']) ??
+        asString(json['audio_id']) ??
+        asString(json['fileid']);
+
+    final hash =
+        asString(json['FileHash']) ??
+        asString(json['hash']) ??
+        asString(json['hash_320']) ??
+        asString(json['hash_flac']) ??
+        '';
+    final imageUrl =
+        asString(json['Image']) ??
+        asString(json['sizable_cover']) ??
+        asString(json['img']);
+
+    return Song(
+      id: songId ?? hash,
+      title:
+          asString(json['FileName']) ??
+          asString(json['songname']) ??
+          asString(json['name']) ??
+          asString(json['audio_name']) ??
+          '未知歌曲',
+      artist:
+          asString(json['SingerName']) ??
+          asString(json['author_name']) ??
+          asString(json['singername']) ??
+          asString(json['singer_name']) ??
+          '未知艺人',
+      hash: hash,
+      albumId:
+          asString(json['AlbumID']) ?? asString(json['album_id']),
+      albumAudioId: songId,
+      albumName:
+          asString(json['AlbumName']) ?? asString(json['album_name']),
+      coverUrl: normalizeImageUrl(imageUrl),
+      duration:
+          durationFromSeconds(json['Duration']) ??
+          durationFromMilliseconds(json['timelen']) ??
+          durationFromSeconds(json['time_length']) ??
+          durationFromSeconds(json['duration']),
+    );
+  }
 
   factory Song.fromDaily(Map<String, dynamic> json) {
     final songId = asString(json['songid']) ?? asString(json['audio_id']);

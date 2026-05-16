@@ -20,16 +20,6 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
-  final _pageController = PageController();
-  var _page = 0;
-  var _lyricFocusRequest = 0;
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -40,46 +30,11 @@ class _PlayerPageState extends State<PlayerPage> {
           return const Scaffold(body: SizedBox.shrink());
         }
 
-        return Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              _ArtworkBackground(song: song),
-              SafeArea(
-                child: Column(
-                  children: [
-                    _TopBar(
-                      song: song,
-                      onClose: () => Navigator.of(context).pop(),
-                      onQueue: () => _showQueue(context),
-                    ),
-                    Expanded(
-                      child: PageView(
-                        controller: _pageController,
-                        onPageChanged: (value) {
-                          setState(() {
-                            _page = value;
-                            if (value == 1) {
-                              _lyricFocusRequest++;
-                            }
-                          });
-                        },
-                        children: [
-                          _PosterPlayerPage(player: widget.player, song: song),
-                          _LyricPlayerPage(
-                            player: widget.player,
-                            song: song,
-                            focusRequest: _lyricFocusRequest,
-                          ),
-                        ],
-                      ),
-                    ),
-                    _PageDots(page: _page),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        return _PlayerBody(
+          player: widget.player,
+          song: song,
+          onClose: () => Navigator.of(context).pop(),
+          onQueue: () => _showQueue(context),
         );
       },
     );
@@ -122,6 +77,83 @@ class _PlayerPageState extends State<PlayerPage> {
           },
         );
       },
+    );
+  }
+}
+
+class _PlayerBody extends StatefulWidget {
+  const _PlayerBody({
+    required this.player,
+    required this.song,
+    required this.onClose,
+    required this.onQueue,
+  });
+
+  final PlayerController player;
+  final Song song;
+  final VoidCallback onClose;
+  final VoidCallback onQueue;
+
+  @override
+  State<_PlayerBody> createState() => _PlayerBodyState();
+}
+
+class _PlayerBodyState extends State<_PlayerBody> {
+  final _pageController = PageController();
+  var _page = 0;
+  var _lyricFocusRequest = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          _ArtworkBackground(song: widget.song),
+          SafeArea(
+            child: Column(
+              children: [
+                _TopBar(
+                  song: widget.song,
+                  onClose: widget.onClose,
+                  onQueue: widget.onQueue,
+                ),
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: (value) {
+                      setState(() {
+                        _page = value;
+                        if (value == 1) {
+                          _lyricFocusRequest++;
+                        }
+                      });
+                    },
+                    children: [
+                      _PosterPlayerPage(
+                        player: widget.player,
+                        song: widget.song,
+                      ),
+                      _LyricPlayerPage(
+                        player: widget.player,
+                        song: widget.song,
+                        focusRequest: _lyricFocusRequest,
+                      ),
+                    ],
+                  ),
+                ),
+                _PageDots(page: _page),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
