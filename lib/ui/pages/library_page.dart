@@ -21,74 +21,111 @@ class LibraryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void openPlaylist(PlaylistSummary playlist) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              PlaylistDetailPage(api: api, player: player, playlist: playlist),
+        ),
+      );
+    }
+
     return SafeArea(
       bottom: false,
       child: AnimatedBuilder(
         animation: auth,
         builder: (context, _) {
+          final createdPlaylists = auth.createdPlaylists;
+          final collectedPlaylists = auth.collectedPlaylists;
+
           return CustomScrollView(
             slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 10),
-                sliver: SliverToBoxAdapter(
-                  child: Text(
-                    '资料库',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
+              const SliverToBoxAdapter(child: _MyHeader()),
               if (!auth.isLoggedIn)
                 SliverToBoxAdapter(child: _LoginPanel(auth: auth))
               else ...[
-                SliverToBoxAdapter(child: _ProfilePanel(auth: auth)),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-                  sliver: SliverToBoxAdapter(
-                    child: Text(
-                      '我的歌单',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
+                SliverToBoxAdapter(child: _AccountCard(auth: auth)),
+                SliverToBoxAdapter(
+                  child: _QuickStats(
+                    auth: auth,
+                    onLikedTap: auth.likedPlaylist == null
+                        ? null
+                        : () => openPlaylist(auth.likedPlaylist!),
                   ),
                 ),
                 if (auth.playlists.isEmpty)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('登录成功后，这里会显示你收藏和创建的歌单。'),
+                  const SliverToBoxAdapter(child: _EmptyPlaylists())
+                else ...[
+                  SliverToBoxAdapter(
+                    child: _SectionHeader(
+                      title: '创建的歌单',
+                      count: createdPlaylists.length,
                     ),
-                  )
-                else
+                  ),
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 130),
-                    sliver: SliverList.builder(
-                      itemCount: auth.playlists.length,
+                    padding: EdgeInsets.fromLTRB(
+                      18,
+                      0,
+                      18,
+                      collectedPlaylists.isEmpty ? 160 : 20,
+                    ),
+                    sliver: SliverList.separated(
+                      itemCount: createdPlaylists.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
-                        final playlist = auth.playlists[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _PlaylistRow(
-                            playlist: playlist,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => PlaylistDetailPage(
-                                  api: api,
-                                  player: player,
-                                  playlist: playlist,
-                                ),
-                              ),
-                            ),
-                          ),
+                        final playlist = createdPlaylists[index];
+                        return _PlaylistRow(
+                          playlist: playlist,
+                          onTap: () => openPlaylist(playlist),
                         );
                       },
                     ),
                   ),
+                  if (collectedPlaylists.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: _SectionHeader(
+                        title: '收藏的歌单',
+                        count: collectedPlaylists.length,
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 160),
+                      sliver: SliverList.separated(
+                        itemCount: collectedPlaylists.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final playlist = collectedPlaylists[index];
+                          return _PlaylistRow(
+                            playlist: playlist,
+                            onTap: () => openPlaylist(playlist),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
               ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _MyHeader extends StatelessWidget {
+  const _MyHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+      child: Text(
+        '我的',
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.w900,
+          fontSize: 26,
+        ),
       ),
     );
   }
@@ -117,15 +154,16 @@ class _LoginPanelState extends State<_LoginPanel> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 160),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -135,7 +173,14 @@ class _LoginPanelState extends State<_LoginPanel> {
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
+              Text(
+                '同步你的歌单和账号信息。',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _mobileController,
                 keyboardType: TextInputType.phone,
@@ -169,20 +214,19 @@ class _LoginPanelState extends State<_LoginPanel> {
                 ],
               ),
               const SizedBox(height: 14),
-              FilledButton.icon(
+              FilledButton(
                 onPressed: widget.auth.isLoading
                     ? null
                     : () => widget.auth.login(
                         _mobileController.text.trim(),
                         _codeController.text.trim(),
                       ),
-                icon: widget.auth.isLoading
+                child: widget.auth.isLoading
                     ? const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.login_rounded),
-                label: const Text('登录'),
+                    : const Text('登录'),
               ),
               if (widget.auth.errorMessage case final message?) ...[
                 const SizedBox(height: 10),
@@ -201,62 +245,211 @@ class _LoginPanelState extends State<_LoginPanel> {
   }
 }
 
-class _ProfilePanel extends StatelessWidget {
-  const _ProfilePanel({required this.auth});
+class _AccountCard extends StatelessWidget {
+  const _AccountCard({required this.auth});
 
   final AuthController auth;
 
   @override
   Widget build(BuildContext context) {
     final profile = auth.profile;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: DecoratedBox(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+      child: Row(
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: profile?.avatarUrl == null
+                ? Icon(Icons.person_rounded, color: colorScheme.primary)
+                : Image.network(profile!.avatarUrl!, fit: BoxFit.cover),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  profile?.nickname ?? 'KA Music 用户',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '已登录',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '刷新',
+            onPressed: auth.isLoading ? null : auth.refreshProfile,
+            icon: const Icon(Icons.sync_rounded),
+          ),
+          IconButton(
+            tooltip: '退出登录',
+            onPressed: auth.logout,
+            icon: const Icon(Icons.logout_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickStats extends StatelessWidget {
+  const _QuickStats({required this.auth, required this.onLikedTap});
+
+  final AuthController auth;
+  final VoidCallback? onLikedTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatTile(
+              icon: Icons.queue_music_rounded,
+              label: '歌单',
+              value: '${auth.playlists.length}',
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _StatTile(
+              icon: Icons.favorite_rounded,
+              label: '我喜欢',
+              value: '${auth.likedPlaylist?.songCount ?? 0}',
+              onTap: onLikedTap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Ink(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundImage: profile?.avatarUrl == null
-                    ? null
-                    : NetworkImage(profile!.avatarUrl!),
-                child: profile?.avatarUrl == null
-                    ? const Icon(Icons.person_rounded)
-                    : null,
-              ),
-              const SizedBox(width: 14),
+              Icon(icon, color: colorScheme.primary),
+              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      profile?.nickname ?? '已登录',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text('${auth.playlists.length} 个歌单已同步'),
-                  ],
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: auth.refreshProfile,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-              IconButton(
-                tooltip: '退出登录',
-                onPressed: auth.logout,
-                icon: const Icon(Icons.logout_rounded),
+              Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.count});
+
+  final String title;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
+            ),
+          ),
+          Text(
+            '$count 个',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyPlaylists extends StatelessWidget {
+  const _EmptyPlaylists();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 160),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Text(
+            '这里会显示你收藏和创建的歌单。',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -272,17 +465,49 @@ class _PlaylistRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-      leading: Artwork(url: playlist.coverUrl, size: 56),
-      title: Text(playlist.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        playlist.songCount == null ? '歌单' : '${playlist.songCount} 首歌',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+        child: Row(
+          children: [
+            Artwork(url: playlist.coverUrl, size: 58, borderRadius: 10),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    playlist.songCount == null
+                        ? (playlist.subtitle ?? '歌单')
+                        : '${playlist.songCount} 首歌',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right_rounded, color: colorScheme.outline),
+          ],
+        ),
       ),
-      trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
 }

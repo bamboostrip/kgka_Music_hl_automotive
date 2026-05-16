@@ -9,7 +9,9 @@ import '../services/music_api.dart';
 class PlayerController extends ChangeNotifier {
   PlayerController(this._api) {
     _positionSub = audioPlayer.positionStream.listen((value) {
-      position = value;
+      if (!_isSeeking) {
+        _setPositionBase(value, playing: isPlaying);
+      }
       notifyListeners();
     });
     _durationSub = audioPlayer.durationStream.listen((value) {
@@ -21,6 +23,9 @@ class PlayerController extends ChangeNotifier {
       isBuffering =
           value.processingState == ProcessingState.loading ||
           value.processingState == ProcessingState.buffering;
+      if (!_isSeeking) {
+        _setPositionBase(audioPlayer.position, playing: isPlaying);
+      }
       notifyListeners();
     });
   }
@@ -31,6 +36,10 @@ class PlayerController extends ChangeNotifier {
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
   late final StreamSubscription<PlayerState> _stateSub;
+  final Stopwatch _positionClock = Stopwatch();
+  int _seekSerial = 0;
+  bool _isSeeking = false;
+  bool _isScrubbing = false;
 
   Song? currentSong;
   List<Song> queue = const [];
@@ -41,6 +50,22 @@ class PlayerController extends ChangeNotifier {
   bool isBuffering = false;
   bool isPreparing = false;
   String? errorMessage;
+  int seekRevision = 0;
+  bool get isScrubbing => _isScrubbing;
+
+  Duration get smoothPosition {
+    if (_isScrubbing) {
+      return position;
+    }
+    if (!isPlaying) {
+      return position;
+    }
+    final value = position + _positionClock.elapsed;
+    if (duration > Duration.zero && value > duration) {
+      return duration;
+    }
+    return value;
+  }
 
   int get currentIndex {
     final song = currentSong;
@@ -56,7 +81,7 @@ class PlayerController extends ChangeNotifier {
     }
     var index = 0;
     for (var i = 0; i < lyrics.length; i++) {
-      if (position >= lyrics[i].time) {
+      if (smoothPosition >= lyrics[i].time) {
         index = i;
       } else {
         break;
@@ -117,7 +142,36 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  Future<void> seek(Duration position) => audioPlayer.seek(position);
+  void previewSeek(Duration position) {
+    _isScrubbing = true;
+    _isSeeking = true;
+    _setPositionBase(position, playing: false);
+    notifyListeners();
+  }
+
+  Future<void> seek(Duration position) async {
+    final serial = ++_seekSerial;
+    final target = _clampPosition(position);
+    seekRevision++;
+    _isScrubbing = false;
+    _isSeeking = true;
+    _setPositionBase(target, playing: isPlaying);
+    notifyListeners();
+
+    try {
+      await audioPlayer.seek(target);
+      if (serial != _seekSerial) {
+        return;
+      }
+      _setPositionBase(target, playing: isPlaying);
+      notifyListeners();
+    } finally {
+      if (serial == _seekSerial) {
+        _isSeeking = false;
+        _isScrubbing = false;
+      }
+    }
+  }
 
   Future<void> next() async {
     final index = currentIndex;
@@ -142,5 +196,25 @@ class PlayerController extends ChangeNotifier {
     _stateSub.cancel();
     audioPlayer.dispose();
     super.dispose();
+  }
+
+  void _setPositionBase(Duration value, {required bool playing}) {
+    position = _clampPosition(value);
+    _positionClock
+      ..stop()
+      ..reset();
+    if (playing) {
+      _positionClock.start();
+    }
+  }
+
+  Duration _clampPosition(Duration value) {
+    if (value < Duration.zero) {
+      return Duration.zero;
+    }
+    if (duration > Duration.zero && value > duration) {
+      return duration;
+    }
+    return value;
   }
 }

@@ -38,6 +38,14 @@ class PlaylistSummary {
     this.coverUrl,
     this.songCount,
     this.playCount,
+    this.isDefault,
+    this.creatorName,
+    this.creatorUserId,
+    this.currentUserId,
+    this.sourceGlobalId,
+    this.sourceListId,
+    this.type,
+    this.source,
   });
 
   final String id;
@@ -46,6 +54,43 @@ class PlaylistSummary {
   final String? coverUrl;
   final int? songCount;
   final int? playCount;
+  final int? isDefault;
+  final String? creatorName;
+  final String? creatorUserId;
+  final String? currentUserId;
+  final String? sourceGlobalId;
+  final String? sourceListId;
+
+  /// API `type` field: 0 = 用户创建, 1 = 收藏的歌单
+  final int? type;
+
+  /// API `source` field: 1 = 自建, 2 = 来自音乐库
+  final int? source;
+
+  bool get isLikedPlaylist => isDefault == 2 || title.trim() == '我喜欢';
+
+  bool get isCreatedPlaylist {
+    if (isLikedPlaylist) {
+      return false;
+    }
+    if (type == 0) {
+      return true;
+    }
+    if (type == 1) {
+      return false;
+    }
+    if (isDefault == 0 || isDefault == 1) {
+      return true;
+    }
+    return currentUserId != null &&
+        creatorUserId != null &&
+        currentUserId == creatorUserId;
+  }
+
+  bool get hasCollectionSource {
+    return (sourceGlobalId != null && sourceGlobalId!.isNotEmpty) ||
+        (sourceListId != null && sourceListId!.isNotEmpty);
+  }
 
   factory PlaylistSummary.fromRecommend(Map<String, dynamic> json) {
     return PlaylistSummary(
@@ -60,16 +105,26 @@ class PlaylistSummary {
     );
   }
 
-  factory PlaylistSummary.fromUser(Map<String, dynamic> json) {
+  factory PlaylistSummary.fromUser(
+    Map<String, dynamic> json, {
+    String? currentUserId,
+  }) {
+    final creatorName = asString(json['list_create_username']);
     return PlaylistSummary(
       id:
           asString(json['global_collection_id']) ??
           asString(json['listid']) ??
           '',
       title: asString(json['name']) ?? '我的歌单',
-      subtitle: asString(json['list_create_username']),
+      subtitle: creatorName,
       coverUrl: normalizeImageUrl(asString(json['pic'])),
       songCount: asInt(json['count']),
+      isDefault: asInt(json['is_def']) ?? asInt(json['is_default']),
+      creatorName: creatorName,
+      creatorUserId: asString(json['list_create_userid']),
+      currentUserId: currentUserId,
+      sourceGlobalId: asString(json['list_create_gid']),
+      sourceListId: asString(json['list_create_listid']),
     );
   }
 
@@ -85,7 +140,45 @@ class PlaylistSummary {
       coverUrl: normalizeImageUrl(asString(json['pic'])),
       songCount: asInt(json['count']),
       playCount: asInt(json['heat']),
+      creatorName: asString(json['list_create_username']),
+      creatorUserId: asString(json['list_create_userid']),
+      sourceGlobalId: asString(json['list_create_gid']),
+      sourceListId: asString(json['list_create_listid']),
     );
+  }
+
+  factory PlaylistSummary.fromCache(Map<String, dynamic> json) {
+    return PlaylistSummary(
+      id: asString(json['id']) ?? '',
+      title: asString(json['title']) ?? '我的歌单',
+      subtitle: asString(json['subtitle']),
+      coverUrl: asString(json['coverUrl']),
+      songCount: asInt(json['songCount']),
+      playCount: asInt(json['playCount']),
+      isDefault: asInt(json['isDefault']),
+      creatorName: asString(json['creatorName']),
+      creatorUserId: asString(json['creatorUserId']),
+      currentUserId: asString(json['currentUserId']),
+      sourceGlobalId: asString(json['sourceGlobalId']),
+      sourceListId: asString(json['sourceListId']),
+    );
+  }
+
+  Map<String, dynamic> toCache() {
+    return {
+      'id': id,
+      'title': title,
+      'subtitle': subtitle,
+      'coverUrl': coverUrl,
+      'songCount': songCount,
+      'playCount': playCount,
+      'isDefault': isDefault,
+      'creatorName': creatorName,
+      'creatorUserId': creatorUserId,
+      'currentUserId': currentUserId,
+      'sourceGlobalId': sourceGlobalId,
+      'sourceListId': sourceListId,
+    };
   }
 }
 

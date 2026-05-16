@@ -41,15 +41,22 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
           return CustomScrollView(
             slivers: [
-              SliverAppBar.large(
+              SliverAppBar(
                 pinned: true,
-                expandedHeight: 330,
+                stretch: true,
+                expandedHeight: 198,
+                surfaceTintColor: Colors.transparent,
                 title: Text(
                   info.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 flexibleSpace: FlexibleSpaceBar(
+                  stretchModes: const [StretchMode.zoomBackground],
                   background: _HeroHeader(info: info),
                 ),
               ),
@@ -81,9 +88,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 130),
-                  sliver: SliverList.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 34),
+                  sliver: SliverList.separated(
                     itemCount: detail.songs.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 2),
                     itemBuilder: (context, index) {
                       final song = detail.songs[index];
                       return _SongRow(
@@ -112,58 +120,89 @@ class _HeroHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            colorScheme.primaryContainer,
+            colorScheme.primary.withValues(alpha: isDark ? .28 : .18),
+            const Color(0xFFDCEEFF).withValues(alpha: isDark ? .08 : .92),
             Theme.of(context).scaffoldBackgroundColor,
           ],
+          stops: const [0, .58, 1],
         ),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 70, 22, 24),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Artwork(url: info.coverUrl, size: 170, borderRadius: 8),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '歌单',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
+          padding: const EdgeInsets.fromLTRB(18, 28, 18, 12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 380;
+              final artworkSize = compact ? 90.0 : 102.0;
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Artwork(
+                    url: info.coverUrl,
+                    size: artworkSize,
+                    borderRadius: 16,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '歌单',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          info.title,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                height: 1.05,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          info.subtitle ?? _detailMeta(info),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          _detailMeta(info),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      info.title,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      info.subtitle ?? 'KA Music 推荐',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -179,15 +218,28 @@ class _Actions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
       child: Row(
         children: [
-          Expanded(child: Text('$count 首歌曲')),
+          Expanded(
+            child: Text(
+              '$count 首歌曲',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
           FilledButton.icon(
             onPressed: onPlay,
             icon: const Icon(Icons.play_arrow_rounded),
             label: const Text('播放全部'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              shape: const StadiumBorder(),
+            ),
           ),
         ],
       ),
@@ -208,23 +260,62 @@ class _SongRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
-      minLeadingWidth: 34,
-      leading: SizedBox(
-        width: 34,
-        child: Center(
-          child: Text(
-            '$index',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 34,
+              child: Text(
+                '$index',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    song.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              formatDuration(song.duration),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
-      title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: Text(formatDuration(song.duration)),
     );
   }
 }
@@ -262,4 +353,25 @@ class _DetailError extends StatelessWidget {
       ),
     );
   }
+}
+
+String _detailMeta(PlaylistSummary info) {
+  final parts = <String>[];
+  if (info.songCount != null) {
+    parts.add('${info.songCount} 首歌');
+  }
+  if (info.playCount != null) {
+    parts.add(_playCount(info.playCount));
+  }
+  return parts.isEmpty ? '来自 KA Music' : parts.join(' · ');
+}
+
+String _playCount(int? value) {
+  if (value == null) {
+    return '精选歌单';
+  }
+  if (value >= 10000) {
+    return '${(value / 10000).toStringAsFixed(1)} 万次播放';
+  }
+  return '$value 次播放';
 }

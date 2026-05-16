@@ -63,12 +63,13 @@ class _Fallback extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            colorScheme.primaryContainer,
-            colorScheme.secondaryContainer,
+            colorScheme.primary.withValues(alpha: .88),
+            const Color(0xFF70D6FF),
+            colorScheme.secondary.withValues(alpha: .72),
           ],
         ),
       ),
-      child: Icon(icon, color: colorScheme.onPrimaryContainer, size: 28),
+      child: Icon(icon, color: Colors.white, size: 28),
     );
   }
 }

@@ -28,36 +28,45 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final colorScheme = Theme.of(context).colorScheme;
     final pages = [
       HomePage(api: widget.api, auth: widget.auth, player: widget.player),
       LibraryPage(api: widget.api, auth: widget.auth, player: widget.player),
     ];
 
     return Scaffold(
+      extendBody: true,
       body: Stack(
         children: [
           Positioned.fill(child: pages[_index]),
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: bottomInset + kBottomNavigationBarHeight + 10,
             child: MiniPlayer(player: widget.player),
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (value) => setState(() => _index = value),
+        backgroundColor: colorScheme.surface.withValues(alpha: .96),
+        elevation: 0,
+        selectedItemColor: colorScheme.primary,
+        unselectedItemColor: colorScheme.onSurface,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w800),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        items: const [
+          BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: '主页',
+            activeIcon: Icon(Icons.home_rounded),
+            label: '首页',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.library_music_outlined),
-            selectedIcon: Icon(Icons.library_music_rounded),
-            label: '资料库',
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline_rounded),
+            activeIcon: Icon(Icons.person_rounded),
+            label: '我的',
           ),
         ],
       ),

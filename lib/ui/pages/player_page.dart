@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ class PlayerPage extends StatefulWidget {
 class _PlayerPageState extends State<PlayerPage> {
   final _pageController = PageController();
   var _page = 0;
+  var _lyricFocusRequest = 0;
 
   @override
   void dispose() {
@@ -54,10 +56,21 @@ class _PlayerPageState extends State<PlayerPage> {
                     Expanded(
                       child: PageView(
                         controller: _pageController,
-                        onPageChanged: (value) => setState(() => _page = value),
+                        onPageChanged: (value) {
+                          setState(() {
+                            _page = value;
+                            if (value == 1) {
+                              _lyricFocusRequest++;
+                            }
+                          });
+                        },
                         children: [
                           _PosterPlayerPage(player: widget.player, song: song),
-                          _LyricPlayerPage(player: widget.player, song: song),
+                          _LyricPlayerPage(
+                            player: widget.player,
+                            song: song,
+                            focusRequest: _lyricFocusRequest,
+                          ),
                         ],
                       ),
                     ),
@@ -199,8 +212,7 @@ class _TopBar extends StatelessWidget {
             onPressed: onClose,
             icon: const Icon(Icons.keyboard_arrow_down_rounded),
           ),
-          Artwork(url: song.coverUrl, size: 48),
-          const SizedBox(width: 12),
+          const SizedBox(width: 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,27 +285,7 @@ class _PosterPlayerPage extends StatelessWidget {
                 ),
               ),
               SizedBox(height: compact ? 18 : 30),
-              Text(
-                song.title,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                song.artist,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: .72),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              _PosterLyricPreview(player: player),
               const Spacer(),
               _Progress(player: player, bright: true),
               const SizedBox(height: 10),
@@ -306,11 +298,270 @@ class _PosterPlayerPage extends StatelessWidget {
   }
 }
 
+int _activeLyricIndexFor(List<LyricLine> lyrics, Duration position) {
+  if (lyrics.isEmpty) {
+    return -1;
+  }
+  var index = 0;
+  for (var i = 0; i < lyrics.length; i++) {
+    if (position >= lyrics[i].time) {
+      index = i;
+    } else {
+      break;
+    }
+  }
+  return index;
+}
+
+class _PosterLyricPreview extends StatefulWidget {
+  const _PosterLyricPreview({required this.player});
+
+  final PlayerController player;
+
+  @override
+  State<_PosterLyricPreview> createState() => _PosterLyricPreviewState();
+}
+
+class _PosterLyricPreviewState extends State<_PosterLyricPreview> {
+  late final Ticker _ticker;
+  Duration _position = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _position = widget.player.smoothPosition;
+    _ticker = Ticker(_onTick);
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PosterLyricPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.player.isScrubbing) {
+      _position = widget.player.smoothPosition;
+    }
+    _syncTicker();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  void _syncTicker() {
+    final shouldTick =
+        widget.player.isPlaying &&
+        widget.player.lyrics.isNotEmpty &&
+        !widget.player.isScrubbing;
+    if (shouldTick && !_ticker.isActive) {
+      _ticker.start();
+    } else if (!shouldTick && _ticker.isActive) {
+      _ticker.stop();
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    if (!mounted || widget.player.isScrubbing) {
+      return;
+    }
+    setState(() => _position = widget.player.smoothPosition);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lyrics = widget.player.lyrics;
+    if (lyrics.isEmpty) {
+      return SizedBox(
+        height: 104,
+        child: Center(
+          child: Text(
+            widget.player.isPreparing ? '歌词加载中...' : '暂无歌词',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: Colors.white.withValues(alpha: .78),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final index = _activeLyricIndexFor(lyrics, _position);
+    final current = lyrics[index];
+    final next = index + 1 < lyrics.length ? lyrics[index + 1] : null;
+    final currentStyle = Theme.of(context).textTheme.titleLarge!.copyWith(
+      color: Colors.white,
+      fontSize: 23,
+      height: 1.22,
+      fontWeight: FontWeight.w900,
+    );
+    final nextStyle = Theme.of(context).textTheme.titleMedium!.copyWith(
+      color: Colors.white.withValues(alpha: .46),
+      height: 1.18,
+      fontWeight: FontWeight.w700,
+    );
+
+    return SizedBox(
+      height: 96,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeOutCubic,
+        child: Column(
+          key: ValueKey(current.time.inMilliseconds),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              height: 36,
+              child: _MarqueeSingleLine(
+                textKey: current.time.inMilliseconds,
+                child: _LyricText(
+                  line: current,
+                  active: true,
+                  position: _position,
+                  styleOverride: currentStyle,
+                  textAlign: TextAlign.center,
+                  singleLine: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 25,
+              child: _MarqueeSingleLine(
+                textKey: next?.time.inMilliseconds ?? -1,
+                child: Text(
+                  next?.text ?? '',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: nextStyle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarqueeSingleLine extends StatefulWidget {
+  const _MarqueeSingleLine({required this.child, required this.textKey});
+
+  final Widget child;
+  final Object textKey;
+
+  @override
+  State<_MarqueeSingleLine> createState() => _MarqueeSingleLineState();
+}
+
+class _MarqueeSingleLineState extends State<_MarqueeSingleLine>
+    with SingleTickerProviderStateMixin {
+  final _viewportKey = GlobalKey();
+  final _contentKey = GlobalKey();
+  late final AnimationController _controller;
+  double _overflow = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarqueeSingleLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.textKey != widget.textKey) {
+      _controller
+        ..stop()
+        ..reset();
+      _overflow = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _measure() {
+    if (!mounted) {
+      return;
+    }
+    final viewport = _viewportKey.currentContext?.size?.width ?? 0;
+    final content = _contentKey.currentContext?.size?.width ?? 0;
+    final overflow = math.max(0.0, content - viewport);
+    if ((overflow - _overflow).abs() < 1) {
+      return;
+    }
+    setState(() => _overflow = overflow);
+    if (overflow > 0) {
+      _controller
+        ..duration = Duration(milliseconds: (overflow * 42).round() + 2600)
+        ..repeat(reverse: true);
+    } else {
+      _controller
+        ..stop()
+        ..reset();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ClipRect(
+          key: _viewportKey,
+          child: SizedBox(
+            width: constraints.maxWidth,
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                final offset = _overflow <= 0
+                    ? 0.0
+                    : -_overflow * _controller.value;
+                return Align(
+                  alignment: _overflow <= 0
+                      ? Alignment.center
+                      : Alignment.centerLeft,
+                  child: Transform.translate(
+                    offset: Offset(offset, 0),
+                    child: child,
+                  ),
+                );
+              },
+              child: OverflowBox(
+                minWidth: 0,
+                maxWidth: double.infinity,
+                alignment: Alignment.centerLeft,
+                child: RepaintBoundary(key: _contentKey, child: widget.child),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _LyricPlayerPage extends StatefulWidget {
-  const _LyricPlayerPage({required this.player, required this.song});
+  const _LyricPlayerPage({
+    required this.player,
+    required this.song,
+    required this.focusRequest,
+  });
 
   final PlayerController player;
   final Song song;
+  final int focusRequest;
 
   @override
   State<_LyricPlayerPage> createState() => _LyricPlayerPageState();
@@ -321,6 +572,10 @@ class _LyricPlayerPageState extends State<_LyricPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final hasTranslation = widget.player.lyrics.any(
+      (line) => line.translation != null && line.translation!.isNotEmpty,
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
       child: Stack(
@@ -329,22 +584,25 @@ class _LyricPlayerPageState extends State<_LyricPlayerPage> {
             player: widget.player,
             lyrics: widget.player.lyrics,
             activeIndex: widget.player.activeLyricIndex,
+            seekRevision: widget.player.seekRevision,
             isPreparing: widget.player.isPreparing,
             showTranslation: _showTranslation,
+            focusRequest: widget.focusRequest,
           ),
-          Positioned(
-            right: 0,
-            bottom: 16,
-            child: _GlassIconButton(
-              tooltip: _showTranslation ? '关闭翻译' : '显示翻译',
-              onPressed: () {
-                setState(() => _showTranslation = !_showTranslation);
-              },
-              icon: _showTranslation
-                  ? Icons.translate_rounded
-                  : Icons.translate_outlined,
+          if (hasTranslation)
+            Positioned(
+              right: 0,
+              bottom: 16,
+              child: _GlassIconButton(
+                tooltip: _showTranslation ? '关闭翻译' : '显示翻译',
+                onPressed: () {
+                  setState(() => _showTranslation = !_showTranslation);
+                },
+                icon: _showTranslation
+                    ? Icons.translate_rounded
+                    : Icons.translate_outlined,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -356,15 +614,19 @@ class _LyricViewport extends StatefulWidget {
     required this.player,
     required this.lyrics,
     required this.activeIndex,
+    required this.seekRevision,
     required this.isPreparing,
     required this.showTranslation,
+    required this.focusRequest,
   });
 
   final PlayerController player;
   final List<LyricLine> lyrics;
   final int activeIndex;
+  final int seekRevision;
   final bool isPreparing;
   final bool showTranslation;
+  final int focusRequest;
 
   @override
   State<_LyricViewport> createState() => _LyricViewportState();
@@ -378,27 +640,33 @@ class _LyricViewportState extends State<_LyricViewport> {
   Duration _framePosition = Duration.zero;
   int _frameActiveIndex = -1;
   bool _manualScrolling = false;
+  double _scrollStretch = 0;
 
   @override
   void initState() {
     super.initState();
     _syncLineKeys();
-    _framePosition = widget.player.position;
-    _frameActiveIndex = widget.activeIndex;
+    _framePosition = widget.player.smoothPosition;
+    _frameActiveIndex = _activeIndexFor(_framePosition);
     _ticker = Ticker(_onTick);
     _syncTicker();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _forceLockToActive());
   }
 
   @override
   void didUpdateWidget(covariant _LyricViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncLineKeys();
-    _framePosition = widget.player.position;
+    if (!widget.player.isScrubbing) {
+      _framePosition = widget.player.smoothPosition;
+    }
     final nextIndex = _activeIndexFor(_framePosition);
-    if (nextIndex != _frameActiveIndex ||
-        widget.activeIndex != oldWidget.activeIndex) {
+    final lyricsChanged = oldWidget.lyrics != widget.lyrics;
+    final focusRequested = oldWidget.focusRequest != widget.focusRequest;
+    final seekChanged = oldWidget.seekRevision != widget.seekRevision;
+    if (lyricsChanged || focusRequested || seekChanged) {
       _frameActiveIndex = nextIndex;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _forceLockToActive());
     }
     _syncTicker();
   }
@@ -419,7 +687,10 @@ class _LyricViewportState extends State<_LyricViewport> {
   }
 
   void _syncTicker() {
-    final shouldTick = widget.player.isPlaying && widget.lyrics.isNotEmpty;
+    final shouldTick =
+        widget.player.isPlaying &&
+        widget.lyrics.isNotEmpty &&
+        !widget.player.isScrubbing;
     if (shouldTick && !_ticker.isActive) {
       _ticker.start();
     } else if (!shouldTick && _ticker.isActive) {
@@ -428,10 +699,10 @@ class _LyricViewportState extends State<_LyricViewport> {
   }
 
   void _onTick(Duration elapsed) {
-    if (!mounted) {
+    if (!mounted || widget.player.isScrubbing) {
       return;
     }
-    final position = widget.player.audioPlayer.position;
+    final position = widget.player.smoothPosition;
     final activeIndex = _activeIndexFor(position);
     final shouldScroll = activeIndex != _frameActiveIndex;
     setState(() {
@@ -444,18 +715,7 @@ class _LyricViewportState extends State<_LyricViewport> {
   }
 
   int _activeIndexFor(Duration position) {
-    if (widget.lyrics.isEmpty) {
-      return -1;
-    }
-    var index = 0;
-    for (var i = 0; i < widget.lyrics.length; i++) {
-      if (position >= widget.lyrics[i].time) {
-        index = i;
-      } else {
-        break;
-      }
-    }
-    return index;
+    return _activeLyricIndexFor(widget.lyrics, position);
   }
 
   void _scrollToActive() {
@@ -467,6 +727,8 @@ class _LyricViewportState extends State<_LyricViewport> {
     }
     final context = _lineKeys[_frameActiveIndex].currentContext;
     if (context == null) {
+      _jumpToEstimatedPosition();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
       return;
     }
     Scrollable.ensureVisible(
@@ -478,17 +740,75 @@ class _LyricViewportState extends State<_LyricViewport> {
     );
   }
 
+  void _jumpToEstimatedPosition() {
+    if (!_controller.hasClients || _frameActiveIndex < 0) {
+      return;
+    }
+    const topPadding = 180.0;
+    const estimatedLineHeight = 80.0;
+    final viewportHeight = _controller.position.viewportDimension;
+    final maxScroll = _controller.position.maxScrollExtent;
+    if (viewportHeight <= 0) {
+      return;
+    }
+    final offset =
+        topPadding +
+        _frameActiveIndex * estimatedLineHeight -
+        viewportHeight * 0.34;
+    _controller.jumpTo(offset.clamp(0.0, maxScroll));
+  }
+
+  void _forceLockToActive() {
+    if (!mounted) {
+      return;
+    }
+    _resumeAutoScrollTimer?.cancel();
+    _manualScrolling = false;
+    _framePosition = widget.player.smoothPosition;
+    _frameActiveIndex = _activeIndexFor(_framePosition);
+    _jumpToEstimatedPosition();
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
+    Timer(const Duration(milliseconds: 80), () {
+      if (mounted) {
+        _scrollToActive();
+      }
+    });
+    Timer(const Duration(milliseconds: 220), () {
+      if (mounted) {
+        _scrollToActive();
+      }
+    });
+  }
+
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification &&
         notification.dragDetails != null) {
+      _applyStretch(notification.scrollDelta ?? 0);
       _pauseAutoScroll();
     } else if (notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle) {
       _pauseAutoScroll();
     } else if (notification is ScrollEndNotification) {
+      _settleStretch();
       _scheduleAutoScrollResume();
     }
     return false;
+  }
+
+  void _applyStretch(double delta) {
+    final next = (delta * .9).clamp(-18.0, 18.0);
+    if ((_scrollStretch - next).abs() < .4) {
+      return;
+    }
+    setState(() => _scrollStretch = next);
+  }
+
+  void _settleStretch() {
+    if (_scrollStretch == 0) {
+      return;
+    }
+    setState(() => _scrollStretch = 0);
   }
 
   void _pauseAutoScroll() {
@@ -510,51 +830,80 @@ class _LyricViewportState extends State<_LyricViewport> {
   Widget _buildLyricList(List<LyricLine> lyrics) {
     return NotificationListener<ScrollNotification>(
       onNotification: _handleScrollNotification,
-      child: ListView.builder(
+      child: ListView(
         controller: _controller,
         padding: const EdgeInsets.fromLTRB(0, 180, 0, 220),
-        itemCount: lyrics.length,
-        itemBuilder: (context, index) {
-          final active = index == _frameActiveIndex;
-          final nearby = (index - _frameActiveIndex).abs() <= 1;
-          final line = lyrics[index];
-          return KeyedSubtree(
-            key: _lineKeys[index],
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 220),
-              opacity: active ? 1 : (nearby ? .46 : .22),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _LyricText(
-                      line: line,
-                      active: active,
-                      position: _framePosition,
-                    ),
-                    if (widget.showTranslation &&
-                        line.translation != null &&
-                        line.translation!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        line.translation!,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: Colors.white.withValues(
-                                alpha: active ? .62 : .38,
-                              ),
-                              height: 1.28,
-                              fontWeight: FontWeight.w700,
+        children: [
+          for (var index = 0; index < lyrics.length; index++)
+            Builder(
+              builder: (context) {
+                final active = index == _frameActiveIndex;
+                final distance = index - _frameActiveIndex;
+                final nearby = distance.abs() <= 1;
+                final pull = !active
+                    ? (_scrollStretch * (1 / (distance.abs() + 1))).clamp(
+                        -10.0,
+                        10.0,
+                      )
+                    : 0.0;
+                final scale = active
+                    ? 1.0
+                    : (1 - (pull.abs() / 260)).clamp(.96, 1.0);
+                final line = lyrics[index];
+                return KeyedSubtree(
+                  key: _lineKeys[index],
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 220),
+                    opacity: active ? 1 : (nearby ? .46 : .22),
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: pull),
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, animatedPull, child) {
+                        return Transform.translate(
+                          offset: Offset(0, animatedPull),
+                          child: Transform.scale(
+                            scale: scale,
+                            alignment: Alignment.centerLeft,
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _LyricText(
+                              line: line,
+                              active: active,
+                              position: _framePosition,
                             ),
+                            if (widget.showTranslation &&
+                                line.translation != null &&
+                                line.translation!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                line.translation!,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: active ? .62 : .38,
+                                      ),
+                                      height: 1.28,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ],
-                  ],
-                ),
-              ),
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+        ],
       ),
     );
   }
@@ -599,26 +948,68 @@ class _LyricText extends StatelessWidget {
     required this.line,
     required this.active,
     required this.position,
+    this.styleOverride,
+    this.textAlign = TextAlign.start,
+    this.singleLine = false,
   });
 
   final LyricLine line;
   final bool active;
   final Duration position;
+  final TextStyle? styleOverride;
+  final TextAlign textAlign;
+  final bool singleLine;
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.headlineMedium!.copyWith(
-      color: Colors.white,
-      fontSize: active ? 34 : 27,
-      height: 1.24,
-      fontWeight: active ? FontWeight.w900 : FontWeight.w800,
-    );
+    final style =
+        styleOverride ??
+        Theme.of(context).textTheme.headlineMedium!.copyWith(
+          color: Colors.white,
+          fontSize: active ? 34 : 27,
+          height: 1.24,
+          fontWeight: active ? FontWeight.w900 : FontWeight.w800,
+        );
 
     if (!active || line.words.isEmpty) {
+      if (singleLine) {
+        return Text(
+          line.text,
+          textAlign: textAlign,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.visible,
+          style: style,
+        );
+      }
       return AnimatedDefaultTextStyle(
         duration: const Duration(milliseconds: 220),
         style: style,
-        child: Text(line.text),
+        child: Text(
+          line.text,
+          textAlign: textAlign,
+          maxLines: singleLine ? 1 : null,
+          softWrap: !singleLine,
+          overflow: singleLine ? TextOverflow.visible : TextOverflow.clip,
+        ),
+      );
+    }
+
+    if (singleLine) {
+      final painter = _KaraokeLinePainter(
+        line: line,
+        position: position,
+        style: style,
+        baseColor: Colors.white.withValues(alpha: .34),
+        activeColor: Colors.white,
+        textDirection: Directionality.of(context),
+        textAlign: textAlign,
+        maxLines: 1,
+        maxWidth: double.infinity,
+      );
+      return CustomPaint(
+        size: Size(painter.width, painter.height),
+        painter: painter,
       );
     }
 
@@ -631,6 +1022,8 @@ class _LyricText extends StatelessWidget {
           baseColor: Colors.white.withValues(alpha: .34),
           activeColor: Colors.white,
           textDirection: Directionality.of(context),
+          textAlign: textAlign,
+          maxLines: singleLine ? 1 : null,
           maxWidth: constraints.maxWidth,
         );
 
@@ -651,6 +1044,8 @@ class _KaraokeLinePainter extends CustomPainter {
     required this.baseColor,
     required this.activeColor,
     required this.textDirection,
+    required this.textAlign,
+    required this.maxLines,
     required this.maxWidth,
   }) {
     _textPainter = TextPainter(
@@ -659,7 +1054,9 @@ class _KaraokeLinePainter extends CustomPainter {
         style: style.copyWith(color: baseColor),
       ),
       textDirection: textDirection,
-    )..layout(maxWidth: maxWidth);
+      textAlign: textAlign,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
   }
 
   final LyricLine line;
@@ -668,8 +1065,12 @@ class _KaraokeLinePainter extends CustomPainter {
   final Color baseColor;
   final Color activeColor;
   final TextDirection textDirection;
+  final TextAlign textAlign;
+  final int? maxLines;
   final double maxWidth;
   late final TextPainter _textPainter;
+
+  double get width => _textPainter.width;
 
   double get height => _textPainter.height;
 
@@ -713,7 +1114,9 @@ class _KaraokeLinePainter extends CustomPainter {
         style: style.copyWith(color: activeColor),
       ),
       textDirection: textDirection,
-    )..layout(maxWidth: maxWidth);
+      textAlign: textAlign,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
 
     for (final box in boxes) {
       final rect = box.toRect();
@@ -749,7 +1152,7 @@ class _Progress extends StatelessWidget {
     final max = player.duration.inMilliseconds <= 0
         ? 1.0
         : player.duration.inMilliseconds.toDouble();
-    final value = player.position.inMilliseconds
+    final value = player.smoothPosition.inMilliseconds
         .clamp(0, max.toInt())
         .toDouble();
     final textColor = bright
@@ -775,6 +1178,8 @@ class _Progress extends StatelessWidget {
             value: value,
             max: max,
             onChanged: (value) =>
+                player.previewSeek(Duration(milliseconds: value.round())),
+            onChangeEnd: (value) =>
                 player.seek(Duration(milliseconds: value.round())),
           ),
         ),
@@ -783,7 +1188,7 @@ class _Progress extends StatelessWidget {
           child: Row(
             children: [
               Text(
-                formatDuration(player.position),
+                formatDuration(player.smoothPosition),
                 style: TextStyle(color: textColor),
               ),
               const Spacer(),

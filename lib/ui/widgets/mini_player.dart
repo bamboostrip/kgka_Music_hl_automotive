@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../controllers/player_controller.dart';
@@ -23,91 +25,148 @@ class MiniPlayer extends StatelessWidget {
             ? 0.0
             : (player.position.inMilliseconds / player.duration.inMilliseconds)
                   .clamp(0.0, 1.0);
+        final colorScheme = Theme.of(context).colorScheme;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Material(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: .94),
-              elevation: 8,
-              shadowColor: Colors.black.withValues(alpha: .16),
-              borderRadius: BorderRadius.circular(8),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => PlayerPage(player: player)),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LinearProgressIndicator(value: progress, minHeight: 2),
-                    Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          Artwork(url: song.coverUrl, size: 42),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  song.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                ),
-                                Text(
-                                  song.artist,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: '上一首',
-                            onPressed: player.previous,
-                            icon: const Icon(Icons.skip_previous_rounded),
-                          ),
-                          IconButton.filled(
-                            tooltip: player.isPlaying ? '暂停' : '播放',
-                            onPressed: player.isPreparing
-                                ? null
-                                : player.togglePlay,
-                            icon: Icon(
-                              player.isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: '下一首',
-                            onPressed: player.next,
-                            icon: const Icon(Icons.skip_next_rounded),
-                          ),
-                        ],
-                      ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Material(
+                color: isDark
+                    ? Colors.white.withValues(alpha: .08)
+                    : const Color(0xFFFFF5E7).withValues(alpha: .82),
+                shadowColor: Colors.black.withValues(alpha: .10),
+                elevation: 10,
+                borderRadius: BorderRadius.circular(10),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PlayerPage(player: player),
                     ),
-                    if (player.errorMessage case final message?)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                        child: Text(
-                          message,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                            fontSize: 12,
+                  ),
+                  child: SizedBox(
+                    height: 64,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    8,
+                                    7,
+                                    8,
+                                    8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Artwork(
+                                        url: song.coverUrl,
+                                        size: 48,
+                                        borderRadius: 6,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              song.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 15,
+                                                  ),
+                                            ),
+                                            Text(
+                                              song.artist,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleSmall
+                                                  ?.copyWith(
+                                                    color: colorScheme
+                                                        .onSurfaceVariant,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: player.isPlaying ? '暂停' : '播放',
+                                        onPressed: player.isPreparing
+                                            ? null
+                                            : player.togglePlay,
+                                        icon: Icon(
+                                          player.isPlaying
+                                              ? Icons.pause_rounded
+                                              : Icons.play_arrow_rounded,
+                                          color: colorScheme.onSurface,
+                                          size: 30,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: '播放页',
+                                        onPressed: () =>
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    PlayerPage(player: player),
+                                              ),
+                                            ),
+                                        icon: Icon(
+                                          Icons.queue_music_rounded,
+                                          color: colorScheme.onSurface,
+                                          size: 29,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 2,
+                                color: colorScheme.primary,
+                                backgroundColor: colorScheme.primary.withValues(
+                                  alpha: .12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                  ],
+                        if (player.errorMessage case final message?)
+                          Positioned(
+                            left: 74,
+                            right: 88,
+                            bottom: 4,
+                            child: Text(
+                              message,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: colorScheme.error,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
