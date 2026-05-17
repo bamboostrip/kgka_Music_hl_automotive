@@ -146,6 +146,10 @@ class MusicApi {
     return DailyRecommend.fromJson(json);
   }
 
+  Future<void> dailyVip() async {
+    await _client.get('/youth/day/vip');
+  }
+
   Future<PlaylistSummary> playlistInfo(String id) async {
     final json = asMap(await _client.get('/playlist/detail', {'ids': id}));
     return PlaylistSummary.fromDetail(json);

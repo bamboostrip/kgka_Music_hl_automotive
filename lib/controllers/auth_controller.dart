@@ -16,6 +16,7 @@ class AuthController extends ChangeNotifier {
   static const _playlistCachePrefix = 'ka_music_cached_playlists';
   static const _playlistEmptyCountPrefix = 'ka_music_playlist_empty_count';
   static const _likedHashesKey = 'ka_music_liked_hashes';
+  static const _lastDailyVipDateKey = 'ka_music_last_daily_vip_date';
 
   final MusicApi _api;
 
@@ -129,6 +130,7 @@ class AuthController extends ChangeNotifier {
       playlists = await _loadCachedPlaylists();
       await _loadLikedHashes();
       await refreshProfile(silent: true);
+      _maybeClaimDailyVip();
     } catch (error) {
       errorMessage = error.toString();
     } finally {
@@ -157,6 +159,17 @@ class AuthController extends ChangeNotifier {
     } catch (_) {
       // Refresh failed, continue with existing session
     }
+  }
+
+  Future<void> _maybeClaimDailyVip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final lastDate = prefs.getString(_lastDailyVipDateKey);
+    if (lastDate == today) return;
+    try {
+      await _api.dailyVip();
+      await prefs.setString(_lastDailyVipDateKey, today);
+    } catch (_) {}
   }
 
   Future<void> sendCode(String mobile) async {

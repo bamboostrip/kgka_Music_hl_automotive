@@ -240,7 +240,7 @@ class _HeroHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 28, 18, 12),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 380;
@@ -260,15 +260,6 @@ class _HeroHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text(
-                          '歌单',
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: colorScheme.primary,
-                                fontWeight: FontWeight.w900,
-                              ),
-                        ),
-                        const SizedBox(height: 5),
                         Text(
                           info.title,
                           maxLines: 3,
