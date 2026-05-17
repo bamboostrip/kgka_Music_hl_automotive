@@ -5,6 +5,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
+import '../widgets/now_playing_badge.dart';
 import 'playlist_detail_page.dart';
 import 'search_page.dart';
 
@@ -129,6 +130,7 @@ class _HomePageState extends State<HomePage> {
                       isLiked: (song) => widget.auth.isLiked(song),
                       onLikeTap: (song) => widget.auth.toggleLike(song),
                       auth: widget.auth,
+                      player: widget.player,
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -338,7 +340,10 @@ class _SmartSearch extends StatelessWidget {
                 border: Border.all(color: Colors.white.withValues(alpha: .56)),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 child: Text(
                   '搜索歌曲，歌手',
                   maxLines: 1,
@@ -517,6 +522,7 @@ class _SongSection extends StatelessWidget {
     required this.isLiked,
     required this.onLikeTap,
     required this.auth,
+    required this.player,
   });
 
   final String title;
@@ -525,6 +531,7 @@ class _SongSection extends StatelessWidget {
   final bool Function(Song song) isLiked;
   final void Function(Song song) onLikeTap;
   final AuthController auth;
+  final PlayerController player;
 
   @override
   Widget build(BuildContext context) {
@@ -560,6 +567,7 @@ class _SongSection extends StatelessWidget {
                   onPlay: onPlay,
                   isLiked: isLiked(song),
                   onLikeTap: () => onLikeTap(song),
+                  player: player,
                 ),
             ],
           ),
@@ -576,6 +584,7 @@ class _HomeSongRow extends StatelessWidget {
     required this.onPlay,
     required this.isLiked,
     required this.onLikeTap,
+    required this.player,
   });
 
   final Song song;
@@ -583,58 +592,105 @@ class _HomeSongRow extends StatelessWidget {
   final void Function(Song song, List<Song> queue) onPlay;
   final bool isLiked;
   final VoidCallback onLikeTap;
+  final PlayerController player;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => onPlay(song, queue),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          children: [
-            Artwork(url: song.coverUrl, size: 58, borderRadius: 8),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    song.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    song.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+
+    return AnimatedBuilder(
+      animation: player,
+      builder: (context, _) {
+        final active = player.currentSong?.hash == song.hash;
+        final activeColor = colorScheme.primary;
+        return InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => onPlay(song, queue),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+            decoration: BoxDecoration(
+              color: active
+                  ? activeColor.withValues(alpha: .08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(width: 10),
-            IconButton(
-              onPressed: onLikeTap,
-              icon: Icon(
-                isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                color: isLiked ? Colors.redAccent : colorScheme.outline,
-                size: 27,
-              ),
-              visualDensity: VisualDensity.compact,
+            child: Row(
+              children: [
+                Stack(
+                  children: [
+                    Artwork(url: song.coverUrl, size: 58, borderRadius: 8),
+                    if (active)
+                      Positioned(
+                        right: 5,
+                        bottom: 5,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surface.withValues(alpha: .88),
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(3),
+                            child: NowPlayingBadge(
+                              active: active,
+                              playing: player.isPlaying,
+                              color: activeColor,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: active ? activeColor : null,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: active
+                              ? activeColor.withValues(alpha: .72)
+                              : colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  onPressed: onLikeTap,
+                  icon: Icon(
+                    isLiked
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: isLiked ? Colors.redAccent : colorScheme.outline,
+                    size: 27,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

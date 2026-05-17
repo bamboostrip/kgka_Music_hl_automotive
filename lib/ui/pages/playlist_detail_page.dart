@@ -4,6 +4,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
+import '../widgets/now_playing_badge.dart';
 
 class PlaylistDetailPage extends StatefulWidget {
   const PlaylistDetailPage({
@@ -191,6 +192,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                   return _SongRow(
                     song: song,
                     index: index + 1,
+                    player: widget.player,
                     onTap: () => widget.player.playSong(
                       song,
                       queue: List<Song>.of(_songs),
@@ -408,71 +410,101 @@ class _SongRow extends StatelessWidget {
   const _SongRow({
     required this.song,
     required this.index,
+    required this.player,
     required this.onTap,
   });
 
   final Song song;
   final int index;
+  final PlayerController player;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 34,
-              child: Text(
-                '$index',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
+    return AnimatedBuilder(
+      animation: player,
+      builder: (context, _) {
+        final active = player.currentSong?.hash == song.hash;
+        final activeColor = colorScheme.primary;
+        return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+            decoration: BoxDecoration(
+              color: active
+                  ? activeColor.withValues(alpha: .09)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  child: Center(
+                    child: active
+                        ? NowPlayingBadge(
+                            active: active,
+                            playing: player.isPlaying,
+                            color: activeColor,
+                          )
+                        : Text(
+                            '$index',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    song.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: active ? activeColor : null,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: active
+                              ? activeColor.withValues(alpha: .72)
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    song.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  formatDuration(song.duration),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: active
+                        ? activeColor.withValues(alpha: .72)
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Text(
-              formatDuration(song.duration),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

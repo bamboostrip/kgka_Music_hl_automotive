@@ -7,6 +7,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
+import '../widgets/now_playing_badge.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({
@@ -55,10 +56,12 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _loadHotKeywords() async {
     try {
       final categories = await widget.api.searchHotKeywords();
-      if (mounted) setState(() {
-        _hotCategories = categories;
-        _hotLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _hotCategories = categories;
+          _hotLoading = false;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _hotLoading = false);
@@ -202,6 +205,7 @@ class _SearchPageState extends State<SearchPage> {
               isLiked: (song) => widget.auth.isLiked(song),
               onLikeTap: (song) => widget.auth.toggleLike(song),
               auth: widget.auth,
+              player: widget.player,
             );
     }
 
@@ -212,17 +216,11 @@ class _SearchPageState extends State<SearchPage> {
       if (_hotCategories.isEmpty) {
         return const SizedBox.shrink();
       }
-      return _HotSearchPanel(
-        categories: _hotCategories,
-        onTap: _onKeywordTap,
-      );
+      return _HotSearchPanel(categories: _hotCategories, onTap: _onKeywordTap);
     }
 
     if (_suggestions.isNotEmpty) {
-      return _SuggestionList(
-        suggestions: _suggestions,
-        onTap: _onKeywordTap,
-      );
+      return _SuggestionList(suggestions: _suggestions, onTap: _onKeywordTap);
     }
 
     return const SizedBox.shrink();
@@ -245,7 +243,8 @@ class _HotSearchSkeleton extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             itemCount: 6,
             separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (_, _) => const _SkeletonBlock(height: 32, width: 72, radius: 16),
+            itemBuilder: (_, _) =>
+                const _SkeletonBlock(height: 32, width: 72, radius: 16),
           ),
         ),
         const SizedBox(height: 22),
@@ -313,10 +312,9 @@ class _SkeletonBlockState extends State<_SkeletonBlock>
           height: widget.height,
           width: widget.width,
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: alpha),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: alpha),
             borderRadius: BorderRadius.circular(widget.radius),
           ),
         );
@@ -354,7 +352,6 @@ class _HotSearchPanelState extends State<_HotSearchPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final categories = widget.categories;
     if (categories.isEmpty) return const SizedBox.shrink();
 
@@ -516,9 +513,14 @@ class _CategoryKeywordList extends StatelessWidget {
                 if (rank <= 3 && item.reason != null && item.reason!.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
-                      color: _rankColor(rank, colorScheme).withValues(alpha: .14),
+                      color: _rankColor(
+                        rank,
+                        colorScheme,
+                      ).withValues(alpha: .14),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -579,9 +581,9 @@ class _SuggestionList extends StatelessWidget {
             keyword,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
           ),
           onTap: () => onTap(keyword),
         );
@@ -597,6 +599,7 @@ class _SearchResults extends StatelessWidget {
     required this.isLiked,
     required this.onLikeTap,
     required this.auth,
+    required this.player,
   });
 
   final List<Song> songs;
@@ -604,6 +607,7 @@ class _SearchResults extends StatelessWidget {
   final bool Function(Song song) isLiked;
   final void Function(Song song) onLikeTap;
   final AuthController auth;
+  final PlayerController player;
 
   @override
   Widget build(BuildContext context) {
@@ -618,62 +622,109 @@ class _SearchResults extends StatelessWidget {
           itemBuilder: (context, index) {
             final song = songs[index];
             final liked = isLiked(song);
-            return InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => onPlay(song),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                child: Row(
-                  children: [
-                    Artwork(url: song.coverUrl, size: 58, borderRadius: 8),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            song.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            song.artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ],
-                      ),
+            return AnimatedBuilder(
+              animation: player,
+              builder: (context, _) {
+                final active = player.currentSong?.hash == song.hash;
+                final activeColor = colorScheme.primary;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => onPlay(song),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 9,
+                      horizontal: 8,
                     ),
-                    const SizedBox(width: 10),
-                    IconButton(
-                      onPressed: () => onLikeTap(song),
-                      icon: Icon(
-                        liked
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        color: liked ? Colors.redAccent : colorScheme.outline,
-                        size: 27,
-                      ),
-                      visualDensity: VisualDensity.compact,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? activeColor.withValues(alpha: .08)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                  ],
-                ),
-              ),
+                    child: Row(
+                      children: [
+                        Stack(
+                          children: [
+                            Artwork(
+                              url: song.coverUrl,
+                              size: 58,
+                              borderRadius: 8,
+                            ),
+                            if (active)
+                              Positioned(
+                                right: 5,
+                                bottom: 5,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.surface
+                                        .withValues(alpha: .88),
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(3),
+                                    child: NowPlayingBadge(
+                                      active: active,
+                                      playing: player.isPlaying,
+                                      color: activeColor,
+                                      size: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                song.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      color: active ? activeColor : null,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                song.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: active
+                                          ? activeColor.withValues(alpha: .72)
+                                          : colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          onPressed: () => onLikeTap(song),
+                          icon: Icon(
+                            liked
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: liked
+                                ? Colors.redAccent
+                                : colorScheme.outline,
+                            size: 27,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -703,9 +754,9 @@ class _EmptyResults extends StatelessWidget {
           Text(
             '没有找到「$keyword」相关歌曲',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
