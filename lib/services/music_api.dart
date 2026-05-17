@@ -40,6 +40,17 @@ class MusicApi {
     );
   }
 
+  Future<LoginSession> refreshToken() async {
+    final json = asMap(await _client.post('/login/token'));
+    final session = LoginSession.fromJson(json);
+    return LoginSession(
+      userId: session.userId,
+      token: session.token,
+      t1: session.t1,
+      sessionId: _client.sessionId,
+    );
+  }
+
   Future<void> logout() async {
     await _client.post('/login/logout');
   }
