@@ -48,8 +48,8 @@ class ApiClient {
     };
 
     if (token case final value?) {
-      headers['Authorization'] = 'Bearer $value';
-      headers['token'] = value;
+      //headers['Authorization'] = 'Bearer $value';
+      headers['X-Kg-Session-Id'] = value;
     }
     if (t1 case final value?) {
       headers['t1'] = value;

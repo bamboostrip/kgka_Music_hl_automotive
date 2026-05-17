@@ -93,9 +93,8 @@ class AuthController extends ChangeNotifier {
   Future<void> restore() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final storedUserId = prefs.getString(_userIdKey);
       final restored = LoginSession(
-        userId: storedUserId,
+        userId: prefs.getString(_userIdKey),
         token: prefs.getString(_tokenKey),
         t1: prefs.getString(_t1Key),
       );
@@ -106,24 +105,6 @@ class AuthController extends ChangeNotifier {
 
       session = restored;
       _api.setSession(restored);
-
-      try {
-        final refreshed = await _api.refreshToken();
-        if (storedUserId != null &&
-            refreshed.userId != null &&
-            storedUserId != refreshed.userId) {
-          await _clearSession();
-          return;
-        }
-        session = refreshed;
-        _api.setSession(refreshed);
-        await prefs.setString(_tokenKey, refreshed.token ?? '');
-        await prefs.setString(_t1Key, refreshed.t1 ?? '');
-        await prefs.setString(_userIdKey, refreshed.userId ?? '');
-      } catch (_) {
-        // /login/token failed, continue with stored token
-      }
-
       playlists = await _loadCachedPlaylists();
       await _loadLikedHashes();
       await refreshProfile(silent: true);
@@ -135,35 +116,12 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshSession() async {
-    if (session == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final storedUserId = prefs.getString(_userIdKey);
-    try {
-      final refreshed = await _api.refreshToken();
-      if (storedUserId != null &&
-          refreshed.userId != null &&
-          storedUserId != refreshed.userId) {
-        await _clearSession();
-        return;
-      }
-      session = refreshed;
-      _api.setSession(refreshed);
-      await prefs.setString(_tokenKey, refreshed.token ?? '');
-      await prefs.setString(_t1Key, refreshed.t1 ?? '');
-      await prefs.setString(_userIdKey, refreshed.userId ?? '');
-    } catch (_) {
-      // Refresh failed, continue with existing session
-    }
-  }
-
   Future<void> sendCode(String mobile) async {
     await _run(() => _api.sendLoginCode(mobile));
   }
 
   Future<void> login(String mobile, String code) async {
     await _run(() async {
-      _api.setSession(null);
       final nextSession = await _api.loginWithPhone(mobile: mobile, code: code);
       session = nextSession;
       _api.setSession(nextSession);
@@ -190,7 +148,20 @@ class AuthController extends ChangeNotifier {
       try {
         await _api.logout();
       } finally {
-        await _clearSession();
+        final prefs = await SharedPreferences.getInstance();
+        final cacheKey = _playlistCacheKey;
+        final emptyCountKey = _playlistEmptyCountKey;
+        session = null;
+        profile = null;
+        playlists = const [];
+        _likedHashes.clear();
+        _api.setSession(null);
+        await prefs.remove(_tokenKey);
+        await prefs.remove(_t1Key);
+        await prefs.remove(_userIdKey);
+        await prefs.remove(cacheKey);
+        await prefs.remove(emptyCountKey);
+        await prefs.remove(_likedHashesKey);
       }
     });
   }
@@ -285,22 +256,6 @@ class AuthController extends ChangeNotifier {
 
   String get _playlistEmptyCountKey {
     return '${_playlistEmptyCountPrefix}_${session?.userId ?? 'default'}';
-  }
-
-  Future<void> _clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    session = null;
-    profile = null;
-    playlists = const [];
-    _likedHashes.clear();
-    _api.setSession(null);
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_t1Key);
-    await prefs.remove(_userIdKey);
-    await prefs.remove(_playlistCacheKey);
-    await prefs.remove(_playlistEmptyCountKey);
-    await prefs.remove(_likedHashesKey);
-    notifyListeners();
   }
 
   Future<void> _run(
