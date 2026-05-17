@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
@@ -21,6 +22,37 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
+  static const _screenChannel = MethodChannel('kgka_music_hl/screen');
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_setKeepScreenOn(true));
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_setKeepScreenOn(false));
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
+
+  Future<void> _setKeepScreenOn(bool enabled) async {
+    try {
+      await _screenChannel.invokeMethod<void>('setKeepScreenOn', enabled);
+    } on MissingPluginException {
+      // Non-Android targets can ignore this page-level screen setting.
+    } on PlatformException {
+      // Keeping playback usable is more important than failing the page open.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -107,61 +139,94 @@ class _PlayerBodyState extends State<_PlayerBody> {
   var _page = 0;
   var _pageScrolling = false;
   var _lyricFocusRequest = 0;
+  bool? _lastSystemUiLandscape;
 
   bool get _lyricPageActive => _page == 1 && !_pageScrolling;
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _pageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final landscape = size.width > size.height;
+    _syncSystemUi(landscape);
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           _ArtworkBackground(song: widget.song),
           SafeArea(
+            top: !landscape,
+            bottom: !landscape,
             child: Column(
               children: [
-                _TopBar(
-                  auth: widget.auth,
-                  song: widget.song,
-                  onClose: widget.onClose,
-                ),
-                Expanded(
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: _handlePageScrollNotification,
-                    child: PageView(
-                      controller: _pageController,
-                      onPageChanged: (value) => _setPageState(page: value),
-                      children: [
-                        _PosterPlayerPage(
-                          key: const PageStorageKey('poster-player-page'),
-                          player: widget.player,
-                          song: widget.song,
-                          onQueue: widget.onQueue,
-                        ),
-                        _LyricPlayerPage(
-                          key: const PageStorageKey('lyric-player-page'),
-                          player: widget.player,
-                          song: widget.song,
-                          focusRequest: _lyricFocusRequest,
-                          isPageActive: _lyricPageActive,
-                        ),
-                      ],
-                    ),
+                if (!landscape)
+                  _TopBar(
+                    auth: widget.auth,
+                    song: widget.song,
+                    onClose: widget.onClose,
                   ),
+                Expanded(
+                  child: landscape
+                      ? _LandscapePlayerContent(
+                          player: widget.player,
+                          auth: widget.auth,
+                          song: widget.song,
+                          onClose: widget.onClose,
+                          onQueue: widget.onQueue,
+                        )
+                      : NotificationListener<ScrollNotification>(
+                          onNotification: _handlePageScrollNotification,
+                          child: PageView(
+                            controller: _pageController,
+                            onPageChanged: (value) =>
+                                _setPageState(page: value),
+                            children: [
+                              _PosterPlayerPage(
+                                key: const PageStorageKey('poster-player-page'),
+                                player: widget.player,
+                                song: widget.song,
+                                onQueue: widget.onQueue,
+                              ),
+                              _LyricPlayerPage(
+                                key: const PageStorageKey('lyric-player-page'),
+                                player: widget.player,
+                                song: widget.song,
+                                focusRequest: _lyricFocusRequest,
+                                isPageActive: _lyricPageActive,
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
-                _PageDots(page: _page),
+                if (!landscape) _PageDots(page: _page),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _syncSystemUi(bool landscape) {
+    if (_lastSystemUiLandscape == landscape) {
+      return;
+    }
+    _lastSystemUiLandscape = landscape;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      SystemChrome.setEnabledSystemUIMode(
+        landscape ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    });
   }
 
   bool _handlePageScrollNotification(ScrollNotification notification) {
@@ -264,6 +329,552 @@ class _FallbackBackground extends StatelessWidget {
   }
 }
 
+class _LandscapePlayerContent extends StatelessWidget {
+  const _LandscapePlayerContent({
+    required this.player,
+    required this.auth,
+    required this.song,
+    required this.onClose,
+    required this.onQueue,
+  });
+
+  final PlayerController player;
+  final AuthController auth;
+  final Song song;
+  final VoidCallback onClose;
+  final VoidCallback onQueue;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 350;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 14 : 24,
+            compact ? 4 : 10,
+            compact ? 16 : 30,
+            compact ? 8 : 14,
+          ),
+          child: Column(
+            children: [
+              _LandscapeHeader(
+                auth: auth,
+                song: song,
+                onClose: onClose,
+                compact: compact,
+              ),
+              SizedBox(height: compact ? 2 : 10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 9,
+                      child: _LandscapeArtworkShowcase(
+                        player: player,
+                        song: song,
+                        compact: compact,
+                      ),
+                    ),
+                    SizedBox(width: compact ? 18 : 34),
+                    Expanded(
+                      flex: 12,
+                      child: _LandscapeRightPanel(
+                        player: player,
+                        onQueue: onQueue,
+                        compact: compact,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LandscapeHeader extends StatelessWidget {
+  const _LandscapeHeader({
+    required this.auth,
+    required this.song,
+    required this.onClose,
+    required this.compact,
+  });
+
+  final AuthController auth;
+  final Song song;
+  final VoidCallback onClose;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: auth,
+      builder: (context, _) {
+        final liked = auth.isLiked(song);
+        return SizedBox(
+          height: compact ? 40 : 48,
+          child: Row(
+            children: [
+              _LandscapeHeaderButton(
+                tooltip: '返回',
+                size: compact ? 38 : 44,
+                iconSize: compact ? 30 : 34,
+                onPressed: onClose,
+                icon: Icons.keyboard_arrow_left_rounded,
+              ),
+              SizedBox(width: compact ? 10 : 18),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: .92),
+                        fontSize: compact ? 15 : 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (!compact)
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: .56),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              _LandscapeHeaderButton(
+                tooltip: liked ? '取消喜欢' : '喜欢',
+                size: compact ? 38 : 44,
+                iconSize: compact ? 22 : 24,
+                onPressed: () => auth.toggleLike(song),
+                icon: liked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LandscapeHeaderButton extends StatelessWidget {
+  const _LandscapeHeaderButton({
+    required this.tooltip,
+    required this.size,
+    required this.iconSize,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final double size;
+  final double iconSize;
+  final VoidCallback onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: .12),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox.square(
+          dimension: size,
+          child: IconButton(
+            color: Colors.white,
+            iconSize: iconSize,
+            padding: EdgeInsets.zero,
+            constraints: BoxConstraints.tightFor(width: size, height: size),
+            onPressed: onPressed,
+            icon: Icon(icon),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LandscapeArtworkShowcase extends StatefulWidget {
+  const _LandscapeArtworkShowcase({
+    required this.player,
+    required this.song,
+    required this.compact,
+  });
+
+  final PlayerController player;
+  final Song song;
+  final bool compact;
+
+  @override
+  State<_LandscapeArtworkShowcase> createState() =>
+      _LandscapeArtworkShowcaseState();
+}
+
+class _LandscapeArtworkShowcaseState extends State<_LandscapeArtworkShowcase>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 32),
+    );
+    _syncRotation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LandscapeArtworkShowcase oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song.hash != widget.song.hash) {
+      _rotationController.value = 0;
+    }
+    _syncRotation();
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  void _syncRotation() {
+    if (widget.player.isPlaying) {
+      if (!_rotationController.isAnimating) {
+        _rotationController.repeat();
+      }
+    } else if (_rotationController.isAnimating) {
+      _rotationController.stop(canceled: false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = math.min(constraints.maxWidth, constraints.maxHeight);
+        final discSize = (available * (widget.compact ? .84 : .9))
+            .clamp(150.0, 330.0)
+            .toDouble();
+        final coverSize = discSize * (widget.compact ? .58 : .70);
+
+        return Center(
+          child: SizedBox.square(
+            dimension: discSize,
+            child: AnimatedBuilder(
+              animation: _rotationController,
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: _rotationController.value * math.pi * 2,
+                  child: child,
+                );
+              },
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: .88),
+                          Colors.white.withValues(alpha: .58),
+                          Colors.white.withValues(alpha: .22),
+                        ],
+                        stops: const [0, .62, 1],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: .26),
+                          blurRadius: 30,
+                          offset: const Offset(0, 18),
+                        ),
+                      ],
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                  for (final ratio in const [.36, .52, .68, .82])
+                    SizedBox.square(
+                      dimension: discSize * ratio,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: .16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ClipOval(
+                    child: Artwork(
+                      url: widget.song.coverUrl,
+                      size: coverSize,
+                      borderRadius: coverSize,
+                    ),
+                  ),
+                  SizedBox.square(
+                    dimension: discSize * .08,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: .82),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LandscapeRightPanel extends StatelessWidget {
+  const _LandscapeRightPanel({
+    required this.player,
+    required this.onQueue,
+    required this.compact,
+  });
+
+  final PlayerController player;
+  final VoidCallback onQueue;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final veryTight = constraints.maxHeight < 250;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _LandscapeLyricPanel(
+                player: player,
+                compact: compact || veryTight,
+              ),
+            ),
+            SizedBox(height: veryTight ? 2 : 6),
+            _Progress(player: player, bright: true, compact: true),
+            SizedBox(height: veryTight ? 0 : 4),
+            _Controls(
+              player: player,
+              bright: true,
+              onQueue: onQueue,
+              compactOverride: true,
+              denseOverride: veryTight,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LandscapeLyricPanel extends StatefulWidget {
+  const _LandscapeLyricPanel({required this.player, required this.compact});
+
+  final PlayerController player;
+  final bool compact;
+
+  @override
+  State<_LandscapeLyricPanel> createState() => _LandscapeLyricPanelState();
+}
+
+class _LandscapeLyricPanelState extends State<_LandscapeLyricPanel> {
+  late final Ticker _ticker;
+  Duration _position = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _position = widget.player.smoothPosition;
+    _ticker = Ticker(_onTick);
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LandscapeLyricPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.player.isScrubbing) {
+      _position = widget.player.smoothPosition;
+    }
+    _syncTicker();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  void _syncTicker() {
+    final shouldTick =
+        widget.player.isPlaying &&
+        widget.player.lyrics.isNotEmpty &&
+        !widget.player.isScrubbing;
+    if (shouldTick && !_ticker.isActive) {
+      _ticker.start();
+    } else if (!shouldTick && _ticker.isActive) {
+      _ticker.stop();
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    if (!mounted || widget.player.isScrubbing) {
+      return;
+    }
+    setState(() => _position = widget.player.smoothPosition);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final player = widget.player;
+    final lyrics = widget.player.lyrics;
+    if (lyrics.isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          player.isPreparing ? '正在准备音乐...' : '暂无歌词',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: Colors.white.withValues(alpha: .82),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      );
+    }
+
+    final activeIndex = _activeLyricIndexFor(
+      lyrics,
+      _position,
+    ).clamp(0, lyrics.length - 1);
+    final offsets = widget.compact ? const [-1, 0, 1] : const [-2, -1, 0, 1, 2];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final offset in offsets)
+                      if (activeIndex + offset >= 0 &&
+                          activeIndex + offset < lyrics.length)
+                        _LandscapeLyricLine(
+                          line: lyrics[activeIndex + offset],
+                          position: _position,
+                          active: offset == 0,
+                          compact: widget.compact,
+                        ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LandscapeLyricLine extends StatelessWidget {
+  const _LandscapeLyricLine({
+    required this.line,
+    required this.position,
+    required this.active,
+    required this.compact,
+  });
+
+  final LyricLine line;
+  final Duration position;
+  final bool active;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeStyle = Theme.of(context).textTheme.headlineMedium!.copyWith(
+      color: Colors.white,
+      fontSize: compact ? 26 : 34,
+      height: 1.18,
+      fontWeight: FontWeight.w900,
+    );
+    final inactiveStyle = Theme.of(context).textTheme.titleLarge!.copyWith(
+      color: Colors.white.withValues(alpha: .34),
+      fontSize: compact ? 18 : 24,
+      height: 1.18,
+      fontWeight: FontWeight.w800,
+    );
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: compact ? 5 : 8),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 220),
+        opacity: active ? 1 : .72,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            active
+                ? _LyricText(
+                    line: line,
+                    active: true,
+                    position: position,
+                    styleOverride: activeStyle,
+                  )
+                : Text(
+                    line.text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: inactiveStyle,
+                  ),
+            if (active &&
+                !compact &&
+                line.translation != null &&
+                line.translation!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                line.translation!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: .54),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.auth,
@@ -360,6 +971,7 @@ class _PosterPlayerPageState extends State<_PosterPlayerPage>
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxHeight < 620;
+        final artworkMaxWidth = compact ? 250.0 : 330.0;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(28, 12, 28, 18),
@@ -367,7 +979,7 @@ class _PosterPlayerPageState extends State<_PosterPlayerPage>
             children: [
               const Spacer(),
               ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: compact ? 250 : 330),
+                constraints: BoxConstraints(maxWidth: artworkMaxWidth),
                 child: AspectRatio(
                   aspectRatio: 1,
                   child: Artwork(
@@ -377,7 +989,7 @@ class _PosterPlayerPageState extends State<_PosterPlayerPage>
                   ),
                 ),
               ),
-              SizedBox(height: compact ? 18 : 30),
+              SizedBox(height: compact ? 14 : 26),
               _PosterLyricPreview(player: widget.player),
               const Spacer(),
               _Progress(player: widget.player, bright: true),
@@ -1265,10 +1877,15 @@ class _KaraokeLinePainter extends CustomPainter {
 }
 
 class _Progress extends StatelessWidget {
-  const _Progress({required this.player, this.bright = false});
+  const _Progress({
+    required this.player,
+    this.bright = false,
+    this.compact = false,
+  });
 
   final PlayerController player;
   final bool bright;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1286,9 +1903,13 @@ class _Progress extends StatelessWidget {
       children: [
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            trackHeight: 5,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            trackHeight: compact ? 3 : 5,
+            thumbShape: RoundSliderThumbShape(
+              enabledThumbRadius: compact ? 4 : 5,
+            ),
+            overlayShape: RoundSliderOverlayShape(
+              overlayRadius: compact ? 10 : 14,
+            ),
             activeTrackColor: bright
                 ? Colors.white.withValues(alpha: .86)
                 : Theme.of(context).colorScheme.primary,
@@ -1307,17 +1928,23 @@ class _Progress extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
           child: Row(
             children: [
               Text(
                 formatDuration(player.smoothPosition),
-                style: TextStyle(color: textColor),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: compact ? 12 : null,
+                ),
               ),
               const Spacer(),
               Text(
                 formatDuration(player.duration),
-                style: TextStyle(color: textColor),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: compact ? 12 : null,
+                ),
               ),
             ],
           ),
@@ -1332,11 +1959,15 @@ class _Controls extends StatelessWidget {
     required this.player,
     required this.onQueue,
     this.bright = false,
+    this.compactOverride = false,
+    this.denseOverride = false,
   });
 
   final PlayerController player;
   final VoidCallback onQueue;
   final bool bright;
+  final bool compactOverride;
+  final bool denseOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -1346,14 +1977,15 @@ class _Controls extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 360;
-        final edgeButtonSize = compact ? 40.0 : 44.0;
-        final edgeIconSize = compact ? 24.0 : 27.0;
-        final skipButtonSize = compact ? 50.0 : 56.0;
-        final skipIconSize = compact ? 40.0 : 46.0;
-        final playButtonSize = compact ? 72.0 : 82.0;
-        final playIconSize = compact ? 56.0 : 64.0;
-        final gap = compact ? 5.0 : 9.0;
+        final compact = compactOverride || constraints.maxWidth < 360;
+        final dense = denseOverride;
+        final edgeButtonSize = dense ? 34.0 : (compact ? 40.0 : 44.0);
+        final edgeIconSize = dense ? 21.0 : (compact ? 24.0 : 27.0);
+        final skipButtonSize = dense ? 42.0 : (compact ? 50.0 : 56.0);
+        final skipIconSize = dense ? 33.0 : (compact ? 40.0 : 46.0);
+        final playButtonSize = dense ? 58.0 : (compact ? 72.0 : 82.0);
+        final playIconSize = dense ? 46.0 : (compact ? 56.0 : 64.0);
+        final gap = dense ? 3.0 : (compact ? 5.0 : 9.0);
 
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
