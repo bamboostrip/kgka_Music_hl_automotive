@@ -10,6 +10,7 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../widgets/artwork.dart';
+import '../widgets/song_action_sheets.dart';
 import 'comment_page.dart';
 
 class PlayerPage extends StatefulWidget {
@@ -195,13 +196,17 @@ class _PlayerBodyState extends State<_PlayerBody> {
                                   _setPageState(page: value),
                               children: [
                                 _PosterPlayerPage(
-                                  key: const PageStorageKey('poster-player-page'),
+                                  key: const PageStorageKey(
+                                    'poster-player-page',
+                                  ),
                                   player: widget.player,
                                   song: widget.song,
                                   onQueue: widget.onQueue,
                                 ),
                                 _LyricPlayerPage(
-                                  key: const PageStorageKey('lyric-player-page'),
+                                  key: const PageStorageKey(
+                                    'lyric-player-page',
+                                  ),
                                   player: widget.player,
                                   song: widget.song,
                                   focusRequest: _lyricFocusRequest,
@@ -471,10 +476,33 @@ class _LandscapeHeader extends StatelessWidget {
                     ? Icons.favorite_rounded
                     : Icons.favorite_border_rounded,
               ),
+              SizedBox(width: compact ? 6 : 8),
+              _LandscapeHeaderButton(
+                tooltip: '更多',
+                size: compact ? 38 : 44,
+                iconSize: compact ? 22 : 24,
+                onPressed: () => _showMoreSheet(context),
+                icon: Icons.more_horiz_rounded,
+              ),
             ],
           ),
         );
       },
+    );
+  }
+
+  void _showMoreSheet(BuildContext context) {
+    showSongActionSheet(
+      context: context,
+      song: song,
+      actions: [
+        SongSheetAction(
+          icon: Icons.playlist_add_rounded,
+          title: '添加到歌单',
+          onTap: () =>
+              showAddToPlaylistSheet(context: context, auth: auth, song: song),
+        ),
+      ],
     );
   }
 }
@@ -943,10 +971,31 @@ class _TopBar extends StatelessWidget {
                     ? Icons.favorite_rounded
                     : Icons.favorite_border_rounded,
               ),
+              const SizedBox(width: 8),
+              _GlassIconButton(
+                tooltip: '更多',
+                onPressed: () => _showMoreSheet(context),
+                icon: Icons.more_horiz_rounded,
+              ),
             ],
           ),
         );
       },
+    );
+  }
+
+  void _showMoreSheet(BuildContext context) {
+    showSongActionSheet(
+      context: context,
+      song: song,
+      actions: [
+        SongSheetAction(
+          icon: Icons.playlist_add_rounded,
+          title: '添加到歌单',
+          onTap: () =>
+              showAddToPlaylistSheet(context: context, auth: auth, song: song),
+        ),
+      ],
     );
   }
 }
@@ -998,8 +1047,7 @@ class _PosterPlayerPageState extends State<_PosterPlayerPage>
               ),
               SizedBox(height: compact ? 14 : 26),
               _PosterLyricPreview(player: widget.player),
-              if (!compact)
-                const SizedBox(height: 4),
+              if (!compact) const SizedBox(height: 4),
               _CommentEntry(player: widget.player, song: widget.song),
               const Spacer(),
               _Progress(player: widget.player, bright: true),
@@ -2145,10 +2193,8 @@ class _CommentEntry extends StatelessWidget {
             if (mixsongid.isEmpty) return;
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => CommentPage(
-                  api: player.api,
-                  mixsongid: mixsongid,
-                ),
+                builder: (_) =>
+                    CommentPage(api: player.api, mixsongid: mixsongid),
               ),
             );
           },

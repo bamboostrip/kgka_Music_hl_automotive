@@ -64,6 +64,7 @@ class _HomePageState extends State<HomePage> {
       MaterialPageRoute(
         builder: (_) => PlaylistDetailPage(
           api: widget.api,
+          auth: widget.auth,
           player: widget.player,
           playlist: playlist,
         ),

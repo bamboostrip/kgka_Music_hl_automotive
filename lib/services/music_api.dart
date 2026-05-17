@@ -243,28 +243,62 @@ class MusicApi {
     return PlayUrl.fromJson(json);
   }
 
+  Future<void> createPlaylist(String name, {bool private = false}) async {
+    await _client.post(
+      '/playlist/create',
+      query: {'name': name, 'type': private ? 1 : 0},
+    );
+  }
+
+  Future<void> collectPlaylist({
+    required String name,
+    required String globalCollectionId,
+  }) async {
+    await _client.post(
+      '/playlist/add',
+      query: {'name': name, 'list_create_gid': globalCollectionId},
+    );
+  }
+
+  Future<void> deletePlaylist(String listId) async {
+    await _client.post('/playlist/del', query: {'listid': listId});
+  }
+
   Future<void> addToPlaylist(String listId, Song song) async {
+    await addSongsToPlaylist(listId, [song]);
+  }
+
+  Future<void> addSongsToPlaylist(String listId, List<Song> songs) async {
+    if (songs.isEmpty) return;
     await _client.post(
       '/playlist/tracks/add',
-      body: {
-        'listId': listId,
-        'songs': [
-          {
-            'name': song.title,
-            'hash': song.hash,
-            'albumId': song.albumId,
-            'mixSongId': song.id,
-          },
-        ],
-      },
+      body: {'listId': listId, 'songs': songs.map(_songAddPayload).toList()},
     );
   }
 
   Future<void> removeFromPlaylist(String listId, Song song) async {
+    await removeSongsFromPlaylist(listId, [song]);
+  }
+
+  Future<void> removeSongsFromPlaylist(String listId, List<Song> songs) async {
+    final fileIds = songs
+        .map((song) => song.id)
+        .where((id) => id.isNotEmpty)
+        .join(',');
+    if (fileIds.isEmpty) return;
     await _client.post(
       '/playlist/tracks/del',
-      query: {'listid': listId, 'fileids': song.id},
+      query: {'listid': listId, 'fileids': fileIds},
     );
+  }
+
+  Map<String, Object?> _songAddPayload(Song song) {
+    return {
+      'name': song.title,
+      'hash': song.hash,
+      'albumId': song.albumId,
+      'mixSongId': song.albumAudioId ?? song.id,
+    };
   }
 
   Future<List<SearchHotCategory>> searchHotKeywords() async {

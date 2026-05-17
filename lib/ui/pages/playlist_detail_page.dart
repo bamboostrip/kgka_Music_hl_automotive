@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
+import '../widgets/song_action_sheets.dart';
+
+enum _PlaylistAction { collect, deleteOrUncollect }
 
 class PlaylistDetailPage extends StatefulWidget {
   const PlaylistDetailPage({
     super.key,
     required this.api,
+    required this.auth,
     required this.player,
     required this.playlist,
   });
 
   final MusicApi api;
+  final AuthController auth;
   final PlayerController player;
   final PlaylistSummary playlist;
 
@@ -35,6 +41,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   var _isLoadingMore = false;
   String? _errorMessage;
   String? _loadMoreError;
+  bool _isMutating = false;
 
   @override
   void initState() {
@@ -137,6 +144,100 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     }
   }
 
+  PlaylistSummary get _currentPlaylist => _info ?? widget.playlist;
+
+  PlaylistSummary get _libraryPlaylist {
+    return widget.auth.findUserPlaylist(_currentPlaylist) ?? _currentPlaylist;
+  }
+
+  bool get _isInLibrary => widget.auth.isPlaylistInLibrary(_currentPlaylist);
+
+  bool get _canEdit => widget.auth.canEditPlaylist(_currentPlaylist);
+
+  Future<void> _collectPlaylist() async {
+    await _runMutation(() => widget.auth.collectPlaylist(_currentPlaylist));
+  }
+
+  Future<void> _deleteOrUncollectPlaylist() async {
+    final target = _libraryPlaylist;
+    final title = target.isCreatedPlaylist ? '删除歌单' : '取消收藏';
+    final message = target.isCreatedPlaylist ? '确定要删除这个歌单吗？' : '确定要取消收藏这个歌单吗？';
+    final confirmed = await _confirm(title: title, message: message);
+    if (confirmed != true) return;
+
+    await _runMutation(() => widget.auth.deleteOrUncollectPlaylist(target));
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _removeSong(Song song) async {
+    final confirmed = await _confirm(title: '删除歌曲', message: '从当前歌单删除这首歌？');
+    if (confirmed != true) return;
+    await _runMutation(() async {
+      await widget.auth.removeSongFromPlaylist(_libraryPlaylist, song);
+      if (mounted) {
+        setState(() => _songs.removeWhere((item) => item.id == song.id));
+      }
+    });
+  }
+
+  Future<void> _addSongToPlaylist(Song song) async {
+    await showAddToPlaylistSheet(
+      context: context,
+      auth: widget.auth,
+      song: song,
+    );
+  }
+
+  Future<void> _runMutation(Future<void> Function() action) async {
+    if (_isMutating) return;
+    setState(() => _isMutating = true);
+    try {
+      await action();
+      if (widget.auth.errorMessage != null) {
+        throw Exception(widget.auth.errorMessage);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('操作完成')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isMutating = false);
+      }
+    }
+  }
+
+  Future<bool?> _confirm({required String title, required String message}) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('确定'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -154,6 +255,43 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
+            actions: [
+              if (_isMutating)
+                const Padding(
+                  padding: EdgeInsets.only(right: 16),
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  ),
+                )
+              else if (!_isInLibrary || !_libraryPlaylist.isLikedPlaylist)
+                PopupMenuButton<_PlaylistAction>(
+                  onSelected: (action) {
+                    switch (action) {
+                      case _PlaylistAction.collect:
+                        _collectPlaylist();
+                      case _PlaylistAction.deleteOrUncollect:
+                        _deleteOrUncollectPlaylist();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (!_isInLibrary)
+                      const PopupMenuItem(
+                        value: _PlaylistAction.collect,
+                        child: Text('收藏歌单'),
+                      ),
+                    if (_isInLibrary && !_libraryPlaylist.isLikedPlaylist)
+                      PopupMenuItem(
+                        value: _PlaylistAction.deleteOrUncollect,
+                        child: Text(
+                          _libraryPlaylist.isCreatedPlaylist ? '删除歌单' : '取消收藏',
+                        ),
+                      ),
+                  ],
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               stretchModes: const [StretchMode.zoomBackground],
               background: _HeroHeader(info: _info ?? widget.playlist),
@@ -193,10 +331,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                     song: song,
                     index: index + 1,
                     player: widget.player,
+                    canDelete: _canEdit,
                     onTap: () => widget.player.playSong(
                       song,
                       queue: List<Song>.of(_songs),
                     ),
+                    onAddToPlaylist: () => _addSongToPlaylist(song),
+                    onDelete: () => _removeSong(song),
                   );
                 },
               ),
@@ -411,13 +552,19 @@ class _SongRow extends StatelessWidget {
     required this.song,
     required this.index,
     required this.player,
+    required this.canDelete,
     required this.onTap,
+    required this.onAddToPlaylist,
+    required this.onDelete,
   });
 
   final Song song;
   final int index;
   final PlayerController player;
+  final bool canDelete;
   final VoidCallback onTap;
+  final VoidCallback onAddToPlaylist;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -442,27 +589,60 @@ class _SongRow extends StatelessWidget {
             ),
             child: Row(
               children: [
-                SizedBox(
-                  width: 34,
-                  child: Center(
-                    child: active
-                        ? NowPlayingBadge(
-                            active: active,
-                            playing: player.isPlaying,
-                            color: activeColor,
-                          )
-                        : Text(
-                            '$index',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                SizedBox.square(
+                  dimension: 50,
+                  child: Stack(
+                    children: [
+                      Artwork(url: song.coverUrl, size: 50, borderRadius: 9),
+                      Positioned(
+                        left: 4,
+                        top: 4,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: .42),
+                            borderRadius: BorderRadius.circular(6),
                           ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            child: Text(
+                              '$index',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: Colors.white.withValues(alpha: .78),
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.1,
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (active)
+                        Positioned(
+                          right: 4,
+                          bottom: 4,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface.withValues(alpha: .9),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(3),
+                              child: NowPlayingBadge(
+                                active: active,
+                                playing: player.isPlaying,
+                                color: activeColor,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -499,6 +679,30 @@ class _SongRow extends StatelessWidget {
                         : colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
+                ),
+                IconButton(
+                  tooltip: '更多',
+                  onPressed: () {
+                    showSongActionSheet(
+                      context: context,
+                      song: song,
+                      actions: [
+                        SongSheetAction(
+                          icon: Icons.playlist_add_rounded,
+                          title: '添加到歌单',
+                          onTap: onAddToPlaylist,
+                        ),
+                        if (canDelete)
+                          SongSheetAction(
+                            icon: Icons.delete_outline_rounded,
+                            title: '从歌单删除',
+                            danger: true,
+                            onTap: onDelete,
+                          ),
+                      ],
+                    );
+                  },
+                  icon: const Icon(Icons.more_horiz_rounded),
                 ),
               ],
             ),

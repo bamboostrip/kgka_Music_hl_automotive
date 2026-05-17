@@ -25,8 +25,12 @@ class LibraryPage extends StatelessWidget {
     void openPlaylist(PlaylistSummary playlist) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              PlaylistDetailPage(api: api, player: player, playlist: playlist),
+          builder: (_) => PlaylistDetailPage(
+            api: api,
+            auth: auth,
+            player: player,
+            playlist: playlist,
+          ),
         ),
       );
     }
@@ -39,6 +43,31 @@ class LibraryPage extends StatelessWidget {
       );
     }
 
+    Future<void> createPlaylist() async {
+      final result = await showDialog<_CreatePlaylistResult>(
+        context: context,
+        builder: (context) => const _CreatePlaylistDialog(),
+      );
+      if (result == null || result.name.trim().isEmpty) return;
+      try {
+        await auth.createPlaylist(result.name, private: result.private);
+        if (auth.errorMessage != null) {
+          throw Exception(auth.errorMessage);
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('歌单已创建')));
+        }
+      } catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('创建失败：$error')));
+        }
+      }
+    }
+
     return SafeArea(
       bottom: false,
       child: AnimatedBuilder(
@@ -49,7 +78,12 @@ class LibraryPage extends StatelessWidget {
 
           return CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(child: _MyHeader(onSettingsTap: openSettings)),
+              SliverToBoxAdapter(
+                child: _MyHeader(
+                  onCreateTap: createPlaylist,
+                  onSettingsTap: openSettings,
+                ),
+              ),
               SliverToBoxAdapter(child: _AccountCard(auth: auth)),
               SliverToBoxAdapter(
                 child: _QuickStats(
@@ -119,8 +153,9 @@ class LibraryPage extends StatelessWidget {
 }
 
 class _MyHeader extends StatelessWidget {
-  const _MyHeader({required this.onSettingsTap});
+  const _MyHeader({required this.onCreateTap, required this.onSettingsTap});
 
+  final VoidCallback onCreateTap;
   final VoidCallback onSettingsTap;
 
   @override
@@ -139,12 +174,83 @@ class _MyHeader extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: '新建歌单',
+            onPressed: onCreateTap,
+            icon: const Icon(Icons.add_rounded),
+          ),
+          IconButton(
             tooltip: '设置',
             onPressed: onSettingsTap,
             icon: const Icon(Icons.settings_rounded),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CreatePlaylistResult {
+  const _CreatePlaylistResult({required this.name, required this.private});
+
+  final String name;
+  final bool private;
+}
+
+class _CreatePlaylistDialog extends StatefulWidget {
+  const _CreatePlaylistDialog();
+
+  @override
+  State<_CreatePlaylistDialog> createState() => _CreatePlaylistDialogState();
+}
+
+class _CreatePlaylistDialogState extends State<_CreatePlaylistDialog> {
+  final _controller = TextEditingController();
+  var _private = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('新建歌单'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: '歌单名称'),
+          ),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            value: _private,
+            onChanged: (value) => setState(() => _private = value),
+            title: const Text('设为隐私'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.of(context).pop(
+              _CreatePlaylistResult(
+                name: _controller.text.trim(),
+                private: _private,
+              ),
+            );
+          },
+          child: const Text('创建'),
+        ),
+      ],
     );
   }
 }

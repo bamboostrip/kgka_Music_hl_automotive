@@ -92,6 +92,88 @@ class AuthController extends ChangeNotifier {
         .toList();
   }
 
+  PlaylistSummary? findUserPlaylist(PlaylistSummary playlist) {
+    for (final item in playlists) {
+      if (item.id == playlist.id ||
+          (playlist.listId != null && item.listId == playlist.listId) ||
+          (item.sourceGlobalId != null && item.sourceGlobalId == playlist.id) ||
+          (playlist.sourceGlobalId != null &&
+              item.sourceGlobalId == playlist.sourceGlobalId)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  bool isPlaylistInLibrary(PlaylistSummary playlist) {
+    return findUserPlaylist(playlist) != null;
+  }
+
+  bool canEditPlaylist(PlaylistSummary playlist) {
+    final item = findUserPlaylist(playlist) ?? playlist;
+    return item.isCreatedPlaylist;
+  }
+
+  Future<void> createPlaylist(String name, {bool private = false}) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    await _run(() async {
+      await _api.createPlaylist(trimmed, private: private);
+      playlists = await _loadUserPlaylistsWithCache();
+    });
+  }
+
+  Future<void> collectPlaylist(PlaylistSummary playlist) async {
+    await _run(() async {
+      await _api.collectPlaylist(
+        name: playlist.title,
+        globalCollectionId: playlist.id,
+      );
+      playlists = await _loadUserPlaylistsWithCache();
+    });
+  }
+
+  Future<void> deleteOrUncollectPlaylist(PlaylistSummary playlist) async {
+    final target = findUserPlaylist(playlist) ?? playlist;
+    final listId = _playlistListId(target);
+    if (listId == null) return;
+    await _run(() async {
+      await _api.deletePlaylist(listId);
+      playlists = await _loadUserPlaylistsWithCache();
+      await _syncLikedSongs();
+    });
+  }
+
+  Future<void> addSongToPlaylist(PlaylistSummary playlist, Song song) async {
+    final listId = _playlistListId(playlist);
+    if (listId == null) return;
+    await _run(() async {
+      await _api.addToPlaylist(listId, song);
+      playlists = await _loadUserPlaylistsWithCache();
+      if (playlist.isLikedPlaylist) {
+        _likedHashes.add(song.hash);
+        await _persistLikedHashes();
+      }
+    });
+  }
+
+  Future<void> removeSongFromPlaylist(
+    PlaylistSummary playlist,
+    Song song,
+  ) async {
+    final target = findUserPlaylist(playlist) ?? playlist;
+    final listId = _playlistListId(target);
+    if (listId == null) return;
+    await _run(() async {
+      await _api.removeFromPlaylist(listId, song);
+      playlists = await _loadUserPlaylistsWithCache();
+      if (target.isLikedPlaylist) {
+        _likedHashes.remove(song.hash);
+        await _persistLikedHashes();
+      }
+    });
+  }
+
   Future<void> restore() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -137,6 +219,16 @@ class AuthController extends ChangeNotifier {
       isRestoring = false;
       notifyListeners();
     }
+  }
+
+  String? _playlistListId(PlaylistSummary playlist) {
+    if (playlist.listId?.isNotEmpty == true) {
+      return playlist.listId;
+    }
+    if (playlist.id.isNotEmpty) {
+      return playlist.id;
+    }
+    return null;
   }
 
   Future<void> refreshSession() async {
