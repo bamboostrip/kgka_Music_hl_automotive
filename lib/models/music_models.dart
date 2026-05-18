@@ -527,6 +527,7 @@ class LyricLine {
     required this.text,
     this.duration,
     this.translation,
+    this.romanization,
     this.words = const [],
   });
 
@@ -534,14 +535,16 @@ class LyricLine {
   final String text;
   final Duration? duration;
   final String? translation;
+  final String? romanization;
   final List<LyricWord> words;
 
-  LyricLine copyWith({String? translation}) {
+  LyricLine copyWith({String? translation, String? romanization}) {
     return LyricLine(
       time: time,
       text: text,
       duration: duration,
       translation: translation ?? this.translation,
+      romanization: romanization ?? this.romanization,
       words: words,
     );
   }

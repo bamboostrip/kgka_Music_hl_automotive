@@ -343,6 +343,51 @@ class _PlayerBodyState extends State<_PlayerBody> {
   }
 }
 
+enum _LyricDisplayMode {
+  lyricsWithTranslation,
+  lyricsOnly,
+  lyricsWithRomanization,
+}
+
+List<_LyricDisplayMode> _availableLyricDisplayModes(List<LyricLine> lyrics) {
+  if (lyrics.isEmpty) {
+    return const [];
+  }
+
+  final modes = <_LyricDisplayMode>[];
+  final hasTranslation = lyrics.any(
+    (line) => line.translation != null && line.translation!.isNotEmpty,
+  );
+  final hasRomanization = lyrics.any(
+    (line) => line.romanization != null && line.romanization!.isNotEmpty,
+  );
+
+  if (hasTranslation) {
+    modes.add(_LyricDisplayMode.lyricsWithTranslation);
+  }
+  modes.add(_LyricDisplayMode.lyricsOnly);
+  if (hasRomanization) {
+    modes.add(_LyricDisplayMode.lyricsWithRomanization);
+  }
+  return modes;
+}
+
+String? _secondaryLyricText(LyricLine line, _LyricDisplayMode mode) {
+  return switch (mode) {
+    _LyricDisplayMode.lyricsWithTranslation => line.translation,
+    _LyricDisplayMode.lyricsWithRomanization => line.romanization,
+    _LyricDisplayMode.lyricsOnly => null,
+  };
+}
+
+String _lyricDisplayModeLabel(_LyricDisplayMode mode) {
+  return switch (mode) {
+    _LyricDisplayMode.lyricsWithTranslation => '歌词 + 翻译',
+    _LyricDisplayMode.lyricsWithRomanization => '歌词 + 音译',
+    _LyricDisplayMode.lyricsOnly => '仅歌词',
+  };
+}
+
 class _ArtworkBackground extends StatelessWidget {
   const _ArtworkBackground({required this.song});
 
@@ -1422,16 +1467,70 @@ class _LyricPlayerPage extends StatefulWidget {
 
 class _LyricPlayerPageState extends State<_LyricPlayerPage>
     with AutomaticKeepAliveClientMixin {
-  var _showTranslation = true;
+  late _LyricDisplayMode _displayMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayMode = _initialLyricDisplayMode(widget.player.lyrics);
+  }
 
   @override
   bool get wantKeepAlive => true;
 
   @override
+  void didUpdateWidget(covariant _LyricPlayerPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song.hash != widget.song.hash ||
+        oldWidget.player.lyrics != widget.player.lyrics) {
+      _displayMode = _normalizeLyricDisplayMode(
+        widget.player.lyrics,
+        _displayMode,
+      );
+    }
+  }
+
+  _LyricDisplayMode _initialLyricDisplayMode(List<LyricLine> lyrics) {
+    final availableModes = _availableLyricDisplayModes(lyrics);
+    return availableModes.isNotEmpty
+        ? availableModes.first
+        : _LyricDisplayMode.lyricsOnly;
+  }
+
+  _LyricDisplayMode _normalizeLyricDisplayMode(
+    List<LyricLine> lyrics,
+    _LyricDisplayMode currentMode,
+  ) {
+    final availableModes = _availableLyricDisplayModes(lyrics);
+    if (availableModes.contains(currentMode)) {
+      return currentMode;
+    }
+    return availableModes.isNotEmpty
+        ? availableModes.first
+        : _LyricDisplayMode.lyricsOnly;
+  }
+
+  void _toggleLyricDisplayMode() {
+    final availableModes = _availableLyricDisplayModes(widget.player.lyrics);
+    if (availableModes.length <= 1) {
+      return;
+    }
+
+    final currentIndex = availableModes.indexOf(_displayMode);
+    final nextIndex = currentIndex >= 0
+        ? (currentIndex + 1) % availableModes.length
+        : 0;
+    setState(() => _displayMode = availableModes[nextIndex]);
+  }
+
+  @override
   Widget build(BuildContext context) {
     super.build(context);
-    final hasTranslation = widget.player.lyrics.any(
-      (line) => line.translation != null && line.translation!.isNotEmpty,
+    final availableModes = _availableLyricDisplayModes(widget.player.lyrics);
+    final canToggleLyricDisplayMode = availableModes.length > 1;
+    final displayMode = _normalizeLyricDisplayMode(
+      widget.player.lyrics,
+      _displayMode,
     );
 
     return Padding(
@@ -1445,23 +1544,25 @@ class _LyricPlayerPageState extends State<_LyricPlayerPage>
             activeIndex: widget.player.activeLyricIndex,
             seekRevision: widget.player.seekRevision,
             isPreparing: widget.player.isPreparing,
-            showTranslation: _showTranslation,
+            displayMode: displayMode,
             focusRequest: widget.focusRequest,
             isPageActive: widget.isPageActive,
             isPageTransitioning: widget.isPageTransitioning,
           ),
-          if (hasTranslation)
+          if (canToggleLyricDisplayMode)
             Positioned(
               right: 0,
               bottom: 16,
               child: _GlassIconButton(
-                tooltip: _showTranslation ? '关闭翻译' : '显示翻译',
-                onPressed: () {
-                  setState(() => _showTranslation = !_showTranslation);
+                tooltip: '切换歌词模式（当前：${_lyricDisplayModeLabel(displayMode)}）',
+                onPressed: _toggleLyricDisplayMode,
+                icon: switch (displayMode) {
+                  _LyricDisplayMode.lyricsWithTranslation =>
+                    Icons.translate_rounded,
+                  _LyricDisplayMode.lyricsWithRomanization =>
+                    Icons.record_voice_over_rounded,
+                  _LyricDisplayMode.lyricsOnly => Icons.lyrics_rounded,
                 },
-                icon: _showTranslation
-                    ? Icons.translate_rounded
-                    : Icons.translate_outlined,
               ),
             ),
         ],
@@ -1478,7 +1579,7 @@ class _LyricViewport extends StatefulWidget {
     required this.activeIndex,
     required this.seekRevision,
     required this.isPreparing,
-    required this.showTranslation,
+    required this.displayMode,
     required this.focusRequest,
     required this.isPageActive,
     required this.isPageTransitioning,
@@ -1490,7 +1591,7 @@ class _LyricViewport extends StatefulWidget {
   final int activeIndex;
   final int seekRevision;
   final bool isPreparing;
-  final bool showTranslation;
+  final _LyricDisplayMode displayMode;
   final int focusRequest;
   final bool isPageActive;
   final bool isPageTransitioning;
@@ -1779,6 +1880,10 @@ class _LyricViewportState extends State<_LyricViewport> {
                     ? 1.0
                     : (1 - (pull.abs() / 260)).clamp(.96, 1.0);
                 final line = lyrics[index];
+                final secondaryText = _secondaryLyricText(
+                  line,
+                  widget.displayMode,
+                );
                 return KeyedSubtree(
                   key: _lineKeys[index],
                   child: AnimatedOpacity(
@@ -1808,12 +1913,11 @@ class _LyricViewportState extends State<_LyricViewport> {
                               active: active,
                               position: _framePosition,
                             ),
-                            if (widget.showTranslation &&
-                                line.translation != null &&
-                                line.translation!.isNotEmpty) ...[
+                            if (secondaryText != null &&
+                                secondaryText.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Text(
-                                line.translation!,
+                                secondaryText,
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
                                       color: Colors.white.withValues(
