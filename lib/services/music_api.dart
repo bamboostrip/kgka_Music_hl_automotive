@@ -572,11 +572,11 @@ List<LyricLine> parseLyrics(String? content, {String? translationContent}) {
     return const [];
   }
 
-  final translations = _parseTranslations(
+  final variants = _parseLyricVariants(
     translationContent: translationContent,
     originalContent: normalized,
   );
-  return _mergeTranslations(parsed, translations);
+  return _mergeLyricVariants(parsed, variants);
 }
 
 List<LyricLine> _parseKrc(String content) {
@@ -757,55 +757,85 @@ int _lyricContentScore(String content) {
   return score;
 }
 
-_ParsedTranslations _parseTranslations({
+_ParsedLyricVariants _parseLyricVariants({
   required String? translationContent,
   required String originalContent,
 }) {
-  final fromDecoded = _parseTimedTranslation(translationContent);
-  if (fromDecoded.isNotEmpty) {
-    return _ParsedTranslations.byTime(fromDecoded);
-  }
-  return _parseKrcLanguageTranslations(originalContent);
+  final decodedTranslation = _parseTimedVariant(translationContent);
+  final krcVariants = _parseKrcLanguageVariants(originalContent);
+  return _ParsedLyricVariants(
+    translation: !decodedTranslation.isEmpty
+        ? decodedTranslation
+        : krcVariants.translation,
+    romanization: krcVariants.romanization,
+  );
 }
 
-Map<int, String> _parseTimedTranslation(String? content) {
+_TimedLyricVariant _parseTimedVariant(String? content) {
   final lines = parseLyrics(content);
-  return {
-    for (final line in lines)
-      if (line.text.isNotEmpty) line.time.inMilliseconds: line.text,
-  };
+  return _TimedLyricVariant(
+    byTime: {
+      for (final line in lines)
+        if (line.text.isNotEmpty) line.time.inMilliseconds: line.text,
+    },
+  );
 }
 
-_ParsedTranslations _parseKrcLanguageTranslations(String content) {
+_ParsedLyricVariants _parseKrcLanguageVariants(String content) {
   final match = RegExp(
     r'^\[language:([A-Za-z0-9+/=]+)\]',
     multiLine: true,
   ).firstMatch(content);
   final encoded = match?.group(1);
   if (encoded == null || encoded.isEmpty) {
-    return const _ParsedTranslations();
+    return const _ParsedLyricVariants();
   }
 
   try {
     final decoded = utf8.decode(base64.decode(encoded));
     final json = jsonDecode(decoded);
-    final byTime = <int, String>{};
-    final byIndex = <String>[];
-    _collectTranslationRows(json, byTime, byIndex);
-    return _ParsedTranslations(byTime: byTime, byIndex: byIndex);
+    final translationByTime = <int, String>{};
+    final translationByIndex = <String>[];
+    final romanizationByTime = <int, String>{};
+    final romanizationByIndex = <String>[];
+    _collectKrcLanguageRows(
+      json,
+      translationByTime: translationByTime,
+      translationByIndex: translationByIndex,
+      romanizationByTime: romanizationByTime,
+      romanizationByIndex: romanizationByIndex,
+    );
+    return _ParsedLyricVariants(
+      translation: _TimedLyricVariant(
+        byTime: translationByTime,
+        byIndex: translationByIndex,
+      ),
+      romanization: _TimedLyricVariant(
+        byTime: romanizationByTime,
+        byIndex: romanizationByIndex,
+      ),
+    );
   } catch (_) {
-    return const _ParsedTranslations();
+    return const _ParsedLyricVariants();
   }
 }
 
-void _collectTranslationRows(
-  Object? value,
-  Map<int, String> byTime,
-  List<String> byIndex,
-) {
+void _collectKrcLanguageRows(
+  Object? value, {
+  required Map<int, String> translationByTime,
+  required List<String> translationByIndex,
+  required Map<int, String> romanizationByTime,
+  required List<String> romanizationByIndex,
+}) {
   if (value is List) {
     for (final item in value) {
-      _collectTranslationRows(item, byTime, byIndex);
+      _collectKrcLanguageRows(
+        item,
+        translationByTime: translationByTime,
+        translationByIndex: translationByIndex,
+        romanizationByTime: romanizationByTime,
+        romanizationByIndex: romanizationByIndex,
+      );
     }
     return;
   }
@@ -814,36 +844,69 @@ void _collectTranslationRows(
   }
 
   final map = asMap(value);
+  final sectionType = asInt(map['type']);
   final lyricContent = map['lyricContent'];
   if (lyricContent is List) {
     for (final row in lyricContent) {
-      if (row is! List || row.isEmpty) {
+      final parsedRow = _parseKrcLanguageRow(row, sectionType);
+      if (parsedRow == null) {
         continue;
       }
-      final time = row.length > 1 ? asInt(row[0]) : null;
-      final text = row.length > 1 && time != null
-          ? asString(row[1])
-          : row.map(asString).whereType<String>().join(' ').trim();
-      if (time != null && text != null) {
-        byTime[time] = text;
-      } else if (text != null && text.isNotEmpty) {
-        byIndex.add(text);
+
+      final byTime = sectionType == 0 ? romanizationByTime : translationByTime;
+      final byIndex = sectionType == 0
+          ? romanizationByIndex
+          : translationByIndex;
+
+      if (parsedRow.time != null) {
+        byTime[parsedRow.time!] = parsedRow.text;
+      } else {
+        byIndex.add(parsedRow.text);
       }
     }
   }
 
   for (final child in map.values) {
     if (child is List || child is Map) {
-      _collectTranslationRows(child, byTime, byIndex);
+      _collectKrcLanguageRows(
+        child,
+        translationByTime: translationByTime,
+        translationByIndex: translationByIndex,
+        romanizationByTime: romanizationByTime,
+        romanizationByIndex: romanizationByIndex,
+      );
     }
   }
 }
 
-List<LyricLine> _mergeTranslations(
-  List<LyricLine> lines,
-  _ParsedTranslations translations,
+({int? time, String text})? _parseKrcLanguageRow(
+  Object? row,
+  int? sectionType,
 ) {
-  if (translations.isEmpty) {
+  if (row is! List || row.isEmpty) {
+    return null;
+  }
+
+  final time = row.length > 1 ? asInt(row[0]) : null;
+  final values = row.map(asString).whereType<String>().toList();
+  if (values.isEmpty) {
+    return null;
+  }
+
+  final text = time != null && row.length > 1
+      ? asString(row[1])
+      : (sectionType == 0 ? values.join('') : values.join(' ').trim());
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+  return (time: time, text: text);
+}
+
+List<LyricLine> _mergeLyricVariants(
+  List<LyricLine> lines,
+  _ParsedLyricVariants variants,
+) {
+  if (variants.isEmpty) {
     return lines;
   }
 
@@ -853,13 +916,22 @@ List<LyricLine> _mergeTranslations(
     merged.add(
       line.copyWith(
         translation:
-            translations.byTime[line.time.inMilliseconds] ??
-            _nearestTranslation(
+            variants.translation.byTime[line.time.inMilliseconds] ??
+            _nearestLyricVariant(
               line.time.inMilliseconds,
-              translations.byTime,
+              variants.translation.byTime,
             ) ??
-            (index < translations.byIndex.length
-                ? translations.byIndex[index]
+            (index < variants.translation.byIndex.length
+                ? variants.translation.byIndex[index]
+                : null),
+        romanization:
+            variants.romanization.byTime[line.time.inMilliseconds] ??
+            _nearestLyricVariant(
+              line.time.inMilliseconds,
+              variants.romanization.byTime,
+            ) ??
+            (index < variants.romanization.byIndex.length
+                ? variants.romanization.byIndex[index]
                 : null),
       ),
     );
@@ -867,10 +939,10 @@ List<LyricLine> _mergeTranslations(
   return merged;
 }
 
-String? _nearestTranslation(int time, Map<int, String> translations) {
+String? _nearestLyricVariant(int time, Map<int, String> variants) {
   var bestDistance = 1 << 31;
   String? bestText;
-  for (final entry in translations.entries) {
+  for (final entry in variants.entries) {
     final distance = (entry.key - time).abs();
     if (distance < bestDistance && distance <= 250) {
       bestDistance = distance;
@@ -880,11 +952,20 @@ String? _nearestTranslation(int time, Map<int, String> translations) {
   return bestText;
 }
 
-class _ParsedTranslations {
-  const _ParsedTranslations({this.byTime = const {}, this.byIndex = const []});
+class _ParsedLyricVariants {
+  const _ParsedLyricVariants({
+    this.translation = const _TimedLyricVariant(),
+    this.romanization = const _TimedLyricVariant(),
+  });
 
-  const _ParsedTranslations.byTime(Map<int, String> byTime)
-    : this(byTime: byTime);
+  final _TimedLyricVariant translation;
+  final _TimedLyricVariant romanization;
+
+  bool get isEmpty => translation.isEmpty && romanization.isEmpty;
+}
+
+class _TimedLyricVariant {
+  const _TimedLyricVariant({this.byTime = const {}, this.byIndex = const []});
 
   final Map<int, String> byTime;
   final List<String> byIndex;
