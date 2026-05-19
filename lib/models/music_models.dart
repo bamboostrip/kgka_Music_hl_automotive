@@ -33,6 +33,79 @@ class UserProfile {
   }
 }
 
+class VipReceiveItem {
+  const VipReceiveItem({this.day, this.receiveVip, this.vipType});
+
+  final String? day;
+  final int? receiveVip;
+  final String? vipType;
+
+  factory VipReceiveItem.fromJson(Map<String, dynamic> json) {
+    return VipReceiveItem(
+      day: asString(json['day']),
+      receiveVip: asInt(json['receive_vip']),
+      vipType: asString(json['vip_type']),
+    );
+  }
+}
+
+class VipReceiveHistory {
+  const VipReceiveHistory({
+    this.month,
+    this.serverTime,
+    this.items = const [],
+    this.status,
+    this.errorCode,
+  });
+
+  final String? month;
+  final int? serverTime;
+  final List<VipReceiveItem> items;
+  final int? status;
+  final int? errorCode;
+
+  factory VipReceiveHistory.fromJson(Map<String, dynamic> json) {
+    return VipReceiveHistory(
+      month: asString(json['month']),
+      serverTime: asInt(json['server_time']),
+      items: asList(json['list'])
+          .whereType<Map>()
+          .map((item) => VipReceiveItem.fromJson(asMap(item)))
+          .toList(),
+      status: asInt(json['status']),
+      errorCode: asInt(json['error_code']),
+    );
+  }
+}
+
+class OneDayVipResult {
+  const OneDayVipResult({this.status, this.errorCode});
+
+  final int? status;
+  final int? errorCode;
+
+  factory OneDayVipResult.fromJson(Map<String, dynamic> json) {
+    return OneDayVipResult(
+      status: asInt(json['status']),
+      errorCode: asInt(json['error_code']),
+    );
+  }
+}
+
+class UpgradeVipResult {
+  const UpgradeVipResult({this.status, this.errorCode});
+
+  final int? status;
+  final int? errorCode;
+
+  factory UpgradeVipResult.fromJson(Map<String, dynamic> json) {
+    return UpgradeVipResult(
+      status: asInt(json['status']),
+      errorCode: asInt(json['error_code']),
+    );
+  }
+}
+
 class PlaylistSummary {
   const PlaylistSummary({
     required this.id,

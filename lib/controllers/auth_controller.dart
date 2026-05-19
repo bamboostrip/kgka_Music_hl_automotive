@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/api_client.dart';
 import '../models/music_models.dart';
 import '../services/music_api.dart';
+import '../services/vip_background_task.dart';
 
 class AuthController extends ChangeNotifier {
   AuthController(this._api);
@@ -16,9 +18,8 @@ class AuthController extends ChangeNotifier {
   static const _playlistCachePrefix = 'ka_music_cached_playlists';
   static const _playlistEmptyCountPrefix = 'ka_music_playlist_empty_count';
   static const _likedHashesKey = 'ka_music_liked_hashes';
-  static const _lastDailyVipDateKey = 'ka_music_last_daily_vip_date';
-
   final MusicApi _api;
+  late final VipBackgroundTask _vipBackgroundTask = VipBackgroundTask(_api);
 
   bool isRestoring = true;
   bool isLoading = false;
@@ -212,7 +213,7 @@ class AuthController extends ChangeNotifier {
       playlists = await _loadCachedPlaylists();
       await _loadLikedHashes();
       await refreshProfile(silent: true);
-      _maybeClaimDailyVip();
+      _vipBackgroundTask.schedule(session);
     } catch (error) {
       errorMessage = error.toString();
     } finally {
@@ -253,17 +254,6 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> _maybeClaimDailyVip() async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now().toIso8601String().split('T').first;
-    final lastDate = prefs.getString(_lastDailyVipDateKey);
-    if (lastDate == today) return;
-    try {
-      await _api.dailyVip();
-      await prefs.setString(_lastDailyVipDateKey, today);
-    } catch (_) {}
-  }
-
   Future<void> sendCode(String mobile) async {
     await _run(() => _api.sendLoginCode(mobile));
   }
@@ -282,6 +272,7 @@ class AuthController extends ChangeNotifier {
       await prefs.setString(_userIdKey, nextSession.userId ?? '');
 
       await refreshProfile(silent: true);
+      _vipBackgroundTask.schedule(session);
     });
   }
 
@@ -440,10 +431,17 @@ class AuthController extends ChangeNotifier {
       await action();
       errorMessage = null;
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = _errorText(error);
     } finally {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  String _errorText(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+    return error.toString();
   }
 }
