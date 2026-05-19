@@ -9,6 +9,8 @@ import '../models/music_models.dart';
 class MusicApi {
   MusicApi(this._client);
 
+  static const _registerHint = '若没有账号请先在酷狗音乐概念版App注册';
+
   final ApiClient _client;
 
   void setSession(LoginSession? session) {
@@ -18,7 +20,12 @@ class MusicApi {
   }
 
   Future<void> sendLoginCode(String mobile) async {
-    await _client.post('/captcha/sent', query: {'mobile': mobile});
+    final json = asMap(
+      await _client.post('/captcha/sent', query: {'mobile': mobile}),
+    );
+    if (!_isSuccess(json)) {
+      throw ApiException('发送验证码失败，$_registerHint${_failureSuffix(json)}');
+    }
   }
 
   Future<LoginSession> loginWithPhone({
@@ -31,6 +38,9 @@ class MusicApi {
         body: {'mobile': mobile, 'code': code},
       ),
     );
+    if (!_isSuccess(json)) {
+      throw ApiException('登录失败，$_registerHint${_failureSuffix(json)}');
+    }
     final session = LoginSession.fromJson(json);
     return LoginSession(
       userId: session.userId,
@@ -352,6 +362,32 @@ class MusicApi {
       'albumId': song.albumId,
       'mixSongId': song.albumAudioId ?? song.id,
     };
+  }
+
+  bool _isSuccess(Map<String, dynamic> json) {
+    return asInt(json['status']) == 1;
+  }
+
+  String _failureSuffix(Map<String, dynamic> json) {
+    final message =
+        asString(json['msg']) ??
+        asString(json['message']) ??
+        asString(json['errmsg']) ??
+        asString(json['error']) ??
+        asString(json['error_msg']);
+    if (message != null) {
+      return '：$message';
+    }
+
+    final errorCode =
+        asString(json['error_code']) ??
+        asString(json['errcode']) ??
+        asString(json['code']);
+    if (errorCode != null) {
+      return '（错误码：$errorCode）';
+    }
+
+    return '';
   }
 
   Future<List<SearchHotCategory>> searchHotKeywords() async {

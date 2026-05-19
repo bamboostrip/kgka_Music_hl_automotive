@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/api_client.dart';
 import '../models/music_models.dart';
 import '../services/music_api.dart';
 
@@ -440,10 +441,17 @@ class AuthController extends ChangeNotifier {
       await action();
       errorMessage = null;
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = _errorText(error);
     } finally {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  String _errorText(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+    return error.toString();
   }
 }
