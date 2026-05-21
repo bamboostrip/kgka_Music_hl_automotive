@@ -444,6 +444,243 @@ class Song {
           durationFromMilliseconds(json['timelen']),
     );
   }
+
+  factory Song.fromFm(Map<String, dynamic> json) {
+    final displayName =
+        asString(json['audio_name']) ??
+        asString(json['songname']) ??
+        asString(json['name']);
+    final splitName = _splitSongDisplayName(displayName);
+    final artists = parseArtists(
+      json,
+      fallbackName:
+          asString(json['author_name']) ??
+          asString(json['SingerName']) ??
+          splitName.artist,
+    );
+    final artistName = artists.map((artist) => artist.name).join(' / ');
+    final transParam = asMap(json['trans_param']);
+
+    return Song(
+      id:
+          asString(json['album_audio_id']) ??
+          asString(json['audio_id']) ??
+          asString(json['sid']) ??
+          asString(json['hash']) ??
+          '',
+      title: splitName.title ?? displayName ?? '未知歌曲',
+      artist: artistName.isNotEmpty ? artistName : splitName.artist ?? '未知艺人',
+      hash:
+          asString(json['hash']) ??
+          asString(json['FileHash']) ??
+          asString(json['320hash']) ??
+          asString(json['hash_320']) ??
+          asString(json['hash_flac']) ??
+          '',
+      albumId: asString(json['album_id']),
+      albumAudioId:
+          asString(json['album_audio_id']) ??
+          asString(json['audio_id']) ??
+          asString(json['sid']),
+      albumName: asString(json['album_name']),
+      coverUrl: normalizeImageUrl(
+        asString(transParam['union_cover']) ??
+            asString(json['sizable_cover']) ??
+            asString(json['cover']) ??
+            asString(json['imgurl']),
+      ),
+      artists: artists,
+      duration:
+          durationFromMilliseconds(json['time']) ??
+          durationFromMilliseconds(json['320time']) ??
+          durationFromMilliseconds(json['timelen']) ??
+          durationFromMilliseconds(json['timelength']),
+    );
+  }
+}
+
+class FmStation {
+  const FmStation({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.classId,
+    this.className,
+    this.description,
+    this.bannerUrl,
+    this.imageUrl,
+    this.previewSongs = const [],
+  });
+
+  final String id;
+  final String name;
+  final int type;
+  final String? classId;
+  final String? className;
+  final String? description;
+  final String? bannerUrl;
+  final String? imageUrl;
+  final List<Song> previewSongs;
+
+  String get subtitle {
+    if (description != null && description!.isNotEmpty) {
+      return description!;
+    }
+    if (className != null && className!.isNotEmpty) {
+      return className!;
+    }
+    if (previewSongs.isNotEmpty) {
+      return previewSongs.first.title;
+    }
+    return '电台';
+  }
+
+  String? get artworkUrl =>
+      imageUrl ?? bannerUrl ?? previewSongs.firstOrNull?.coverUrl;
+
+  factory FmStation.fromJson(Map<String, dynamic> json, {String? classId}) {
+    final songs = asList(json['rcmdlist'] ?? json['songlist'])
+        .whereType<Map>()
+        .map((item) => Song.fromFm(asMap(item)))
+        .where((song) => song.hash.isNotEmpty)
+        .toList();
+    return FmStation(
+      id: asString(json['fmid']) ?? '',
+      name: asString(json['fmname']) ?? '未命名电台',
+      type: asInt(json['fmtype']) ?? asInt(json['type']) ?? 2,
+      classId: asString(json['classid']) ?? classId,
+      className: asString(json['classname']),
+      description: asString(json['description']),
+      bannerUrl: normalizeImageUrl(asString(json['banner'])),
+      imageUrl: normalizeImageUrl(asString(json['imgurl'])),
+      previewSongs: songs,
+    );
+  }
+
+  FmStation mergeImage(FmImage image) {
+    return FmStation(
+      id: id,
+      name: name,
+      type: type,
+      classId: classId,
+      className: className,
+      description: description,
+      bannerUrl: image.bannerUrl ?? bannerUrl,
+      imageUrl: image.imageUrl ?? imageUrl,
+      previewSongs: previewSongs,
+    );
+  }
+}
+
+class FmClassGroup {
+  const FmClassGroup({
+    required this.id,
+    required this.name,
+    required this.stations,
+  });
+
+  final String id;
+  final String name;
+  final List<FmStation> stations;
+
+  factory FmClassGroup.fromJson(Map<String, dynamic> json) {
+    final id = asString(json['classid']) ?? '';
+    final stations = asList(json['fmlist'])
+        .whereType<Map>()
+        .map((item) => FmStation.fromJson(asMap(item), classId: id))
+        .where((station) => station.id.isNotEmpty)
+        .toList();
+    final firstClassName = stations
+        .map((station) => station.className)
+        .whereType<String>()
+        .where((name) => name.isNotEmpty)
+        .firstOrNull;
+
+    return FmClassGroup(
+      id: id,
+      name: asString(json['classname']) ?? firstClassName ?? '分类 $id',
+      stations: stations,
+    );
+  }
+}
+
+class FmSongPage {
+  const FmSongPage({
+    required this.fmid,
+    required this.type,
+    required this.offset,
+    required this.size,
+    required this.songs,
+  });
+
+  final String fmid;
+  final int type;
+  final int offset;
+  final int size;
+  final List<Song> songs;
+
+  factory FmSongPage.fromJson(Map<String, dynamic> json) {
+    return FmSongPage(
+      fmid: asString(json['fmid']) ?? '',
+      type: asInt(json['fmtype']) ?? 2,
+      offset: asInt(json['offset']) ?? -1,
+      size: asInt(json['size']) ?? 0,
+      songs: asList(json['songs'])
+          .whereType<Map>()
+          .map((item) => Song.fromFm(asMap(item)))
+          .where((song) => song.hash.isNotEmpty)
+          .toList(),
+    );
+  }
+}
+
+class FmImage {
+  const FmImage({
+    required this.fmid,
+    this.fmtype,
+    this.imageUrl,
+    this.bannerUrl,
+  });
+
+  final String fmid;
+  final int? fmtype;
+  final String? imageUrl;
+  final String? bannerUrl;
+
+  factory FmImage.fromJson(Map<String, dynamic> json) {
+    return FmImage(
+      fmid: asString(json['fmid']) ?? '',
+      fmtype: asInt(json['fmtype']),
+      imageUrl: normalizeImageUrl(asString(json['imgurl'])),
+      bannerUrl: normalizeImageUrl(asString(json['banner'])),
+    );
+  }
+}
+
+class _SongDisplayName {
+  const _SongDisplayName({this.artist, this.title});
+
+  final String? artist;
+  final String? title;
+}
+
+_SongDisplayName _splitSongDisplayName(String? value) {
+  if (value == null) {
+    return const _SongDisplayName();
+  }
+
+  final separator = RegExp(r'\s[-–—]\s');
+  final match = separator.firstMatch(value);
+  if (match == null) {
+    return _SongDisplayName(title: value);
+  }
+
+  final artist = value.substring(0, match.start).trim();
+  final title = value.substring(match.end).trim();
+  return _SongDisplayName(
+    artist: artist.isEmpty ? null : artist,
+    title: title.isEmpty ? value : title,
+  );
 }
 
 class PlaylistDetail {

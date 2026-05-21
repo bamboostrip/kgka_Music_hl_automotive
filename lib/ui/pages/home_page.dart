@@ -179,30 +179,41 @@ class _HomePageState extends State<HomePage> {
                     },
                   ),
                 ),
-                if (_sectionIndex == 1)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _RadioUnsupported(),
-                  )
-                else ...[
-                  SliverToBoxAdapter(
-                    child: _SongSection(
-                      title: '母带音质·精选',
-                      songs: data.daily.songs,
-                      onPlay: _playSong,
-                      isLiked: (song) => widget.auth.isLiked(song),
-                      onLikeTap: (song) => widget.auth.toggleLike(song),
-                      auth: widget.auth,
+                SliverVisibility(
+                  visible: _sectionIndex == 1,
+                  maintainState: true,
+                  sliver: SliverToBoxAdapter(
+                    child: _RadioSection(
+                      api: widget.api,
                       player: widget.player,
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _PlaylistRail(
-                      playlists: data.playlists,
-                      onTap: _openPlaylist,
-                    ),
+                ),
+                SliverVisibility(
+                  visible: _sectionIndex == 0,
+                  maintainState: true,
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: _SongSection(
+                          title: '母带音质·精选',
+                          songs: data.daily.songs,
+                          onPlay: _playSong,
+                          isLiked: (song) => widget.auth.isLiked(song),
+                          onLikeTap: (song) => widget.auth.toggleLike(song),
+                          auth: widget.auth,
+                          player: widget.player,
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _PlaylistRail(
+                          playlists: data.playlists,
+                          onTap: _openPlaylist,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
                 const SliverToBoxAdapter(child: SizedBox(height: 166)),
               ],
             ],
@@ -283,8 +294,10 @@ class _RecommendHeader extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 14),
-              _FeatureShelf(daily: daily, onDailyPlay: onDailyPlay),
+              if (sectionIndex == 0) ...[
+                const SizedBox(height: 14),
+                _FeatureShelf(daily: daily, onDailyPlay: onDailyPlay),
+              ],
             ],
           ),
         ),
@@ -358,20 +371,6 @@ class _TopTabs extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Container(
-              width: 38,
-              height: 38,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: colorScheme.primary,
-                shape: BoxShape.circle,
-              ),
-              child: auth.profile?.avatarUrl == null
-                  ? const Icon(Icons.group_rounded, color: Colors.white)
-                  : Image.network(auth.profile!.avatarUrl!, fit: BoxFit.cover),
-            ),
-            const SizedBox(width: 8),
             IconButton(
               tooltip: '菜单',
               onPressed: () {},
@@ -895,6 +894,482 @@ class _PlaylistCard extends StatelessWidget {
   }
 }
 
+class _RadioSection extends StatefulWidget {
+  const _RadioSection({required this.api, required this.player});
+
+  final MusicApi api;
+  final PlayerController player;
+
+  @override
+  State<_RadioSection> createState() => _RadioSectionState();
+}
+
+class _RadioSectionState extends State<_RadioSection> {
+  static Future<_RadioData>? _cachedFuture;
+
+  late Future<_RadioData> _future;
+  String? _loadingStationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _cachedFuture ??= _load();
+  }
+
+  Future<_RadioData> _load() async {
+    final results = await Future.wait([
+      widget.api.fmRecommendedStations(),
+      widget.api.fmClassGroups(),
+    ]);
+    final recommended = results[0] as List<FmStation>;
+    final groups = results[1] as List<FmClassGroup>;
+    final imageIds =
+        [...recommended, ...groups.expand((group) => group.stations.take(4))]
+            .where((station) => station.artworkUrl == null)
+            .map((station) => station.id)
+            .toList();
+    final images = await widget.api.fmImages(imageIds);
+
+    FmStation applyImage(FmStation station) {
+      final image = images[station.id];
+      return image == null ? station : station.mergeImage(image);
+    }
+
+    return _RadioData(
+      recommended: recommended.map(applyImage).toList(),
+      groups: groups
+          .map(
+            (group) => FmClassGroup(
+              id: group.id,
+              name: group.name,
+              stations: group.stations.map(applyImage).toList(),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> _refresh() async {
+    final future = _load();
+    _cachedFuture = future;
+    setState(() => _future = future);
+    await future;
+  }
+
+  Future<void> _playStation(FmStation station) async {
+    if (_loadingStationId != null) {
+      return;
+    }
+
+    setState(() => _loadingStationId = station.id);
+    try {
+      final songs = await widget.api.fmSongs(station);
+      final queue = songs.isEmpty ? station.previewSongs : songs;
+      if (!mounted) {
+        return;
+      }
+      if (queue.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('这个电台暂时没有可播放歌曲')));
+        return;
+      }
+      widget.player.playSong(queue.first, queue: queue);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('电台加载失败：$error')));
+    } finally {
+      if (mounted) {
+        setState(() => _loadingStationId = null);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_RadioData>(
+      future: _future,
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            data == null) {
+          return const _RadioSkeleton();
+        }
+        if (data == null && snapshot.hasError) {
+          return _ErrorView(
+            message: snapshot.error.toString(),
+            onRetry: _refresh,
+          );
+        }
+        final radio = data ?? _RadioData.empty;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionHeader(
+                title: '推荐电台',
+                action: IconButton.filledTonal(
+                  tooltip: '刷新',
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size.square(42),
+                    shape: const CircleBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (radio.recommended.isNotEmpty)
+                _RadioHeroCard(
+                  station: radio.recommended.first,
+                  loading: _loadingStationId == radio.recommended.first.id,
+                  onTap: () => _playStation(radio.recommended.first),
+                ),
+              if (radio.recommended.length > 1) ...[
+                const SizedBox(height: 14),
+                _RadioStationRail(
+                  stations: radio.recommended.skip(1).toList(),
+                  loadingStationId: _loadingStationId,
+                  onTap: _playStation,
+                ),
+              ],
+              for (final group in radio.groups) ...[
+                const SizedBox(height: 24),
+                _SectionHeader(
+                  title: group.name,
+                  action: Icon(
+                    Icons.radio_rounded,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _RadioStationRail(
+                  stations: group.stations,
+                  loadingStationId: _loadingStationId,
+                  onTap: _playStation,
+                ),
+              ],
+              if (radio.recommended.isEmpty && radio.groups.isEmpty)
+                const _RadioEmpty(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RadioHeroCard extends StatelessWidget {
+  const _RadioHeroCard({
+    required this.station,
+    required this.loading,
+    required this.onTap,
+  });
+
+  final FmStation station;
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 2.08,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: loading ? null : onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (station.bannerUrl ?? station.artworkUrl case final url?)
+                  Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: .08),
+                        Colors.black.withValues(alpha: .72),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Spacer(),
+                      Text(
+                        station.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        station.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: .82),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  right: 14,
+                  bottom: 14,
+                  child: _RadioPlayBadge(loading: loading),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RadioStationRail extends StatelessWidget {
+  const _RadioStationRail({
+    required this.stations,
+    required this.loadingStationId,
+    required this.onTap,
+  });
+
+  final List<FmStation> stations;
+  final String? loadingStationId;
+  final ValueChanged<FmStation> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (stations.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return SizedBox(
+      height: 182,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: stations.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 13),
+        itemBuilder: (context, index) {
+          final station = stations[index];
+          return _RadioStationCard(
+            station: station,
+            loading: loadingStationId == station.id,
+            onTap: () => onTap(station),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RadioStationCard extends StatelessWidget {
+  const _RadioStationCard({
+    required this.station,
+    required this.loading,
+    required this.onTap,
+  });
+
+  final FmStation station;
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 128,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: loading ? null : onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                Artwork(url: station.artworkUrl, size: 128, borderRadius: 10),
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: .42),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: _RadioPlayBadge(loading: loading, compact: true),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            Text(
+              station.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                height: 1.16,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              station.subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RadioPlayBadge extends StatelessWidget {
+  const _RadioPlayBadge({required this.loading, this.compact = false});
+
+  final bool loading;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = compact ? 30.0 : 42.0;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: loading
+          ? Center(
+              child: SizedBox.square(
+                dimension: compact ? 16 : 20,
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          : Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: compact ? 22 : 30,
+              shadows: const [
+                Shadow(
+                  color: Color(0x99000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _RadioSkeleton extends StatelessWidget {
+  const _RadioSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SkeletonBox(width: 112, height: 24, radius: 8),
+          const SizedBox(height: 14),
+          const _SkeletonBox(width: double.infinity, height: 170, radius: 14),
+          const SizedBox(height: 22),
+          const _SkeletonBox(width: 90, height: 22, radius: 8),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 164,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 3,
+              separatorBuilder: (_, _) => const SizedBox(width: 13),
+              itemBuilder: (context, index) {
+                return _SkeletonBox(
+                  width: index == 2 ? 76 : 128,
+                  height: 164,
+                  radius: 10,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RadioEmpty extends StatelessWidget {
+  const _RadioEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 46, 10, 70),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              Icons.radio_rounded,
+              size: 42,
+              color: colorScheme.primary.withValues(alpha: .72),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '暂无电台内容',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ignore: unused_element
 class _RadioUnsupported extends StatelessWidget {
   const _RadioUnsupported();
 
@@ -1076,6 +1551,15 @@ class _HomeData {
 
   final DailyRecommend daily;
   final List<PlaylistSummary> playlists;
+}
+
+class _RadioData {
+  const _RadioData({required this.recommended, required this.groups});
+
+  static const empty = _RadioData(recommended: [], groups: []);
+
+  final List<FmStation> recommended;
+  final List<FmClassGroup> groups;
 }
 
 String _playCount(int? value) {

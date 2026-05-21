@@ -158,6 +158,65 @@ class MusicApi {
     return DailyRecommend.fromJson(json);
   }
 
+  Future<List<FmStation>> fmRecommendedStations() async {
+    final raw = await _client.get('/fm/recommend');
+    final items = raw is List ? raw : asList(asMap(raw)['data']);
+    return items
+        .whereType<Map>()
+        .map((item) => FmStation.fromJson(asMap(item)))
+        .where((station) => station.id.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<FmClassGroup>> fmClassGroups() async {
+    final raw = await _client.get('/fm/class');
+    final json = asMap(raw);
+    return asList(json['class_list'] ?? json['data'])
+        .whereType<Map>()
+        .map((item) => FmClassGroup.fromJson(asMap(item)))
+        .where((group) => group.stations.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<Song>> fmSongs(
+    FmStation station, {
+    int offset = -1,
+    int size = 20,
+  }) async {
+    final raw = await _client.get('/fm/songs', {
+      'fmid': station.id,
+      'type': station.type,
+      'offset': offset,
+      'size': size,
+    });
+    final items = raw is List ? raw : asList(asMap(raw)['data']);
+    final pages = items
+        .whereType<Map>()
+        .map((item) => FmSongPage.fromJson(asMap(item)))
+        .toList();
+    if (pages.isEmpty) {
+      return const [];
+    }
+    return pages.expand((page) => page.songs).toList();
+  }
+
+  Future<Map<String, FmImage>> fmImages(List<String> fmids) async {
+    final ids = fmids.where((id) => id.isNotEmpty).toSet().join(',');
+    if (ids.isEmpty) {
+      return const {};
+    }
+    final raw = await _client.get('/fm/image', {'fmid': ids});
+    final items = raw is List ? raw : asList(asMap(raw)['data']);
+    return {
+      for (final image
+          in items
+              .whereType<Map>()
+              .map((item) => FmImage.fromJson(asMap(item)))
+              .where((image) => image.fmid.isNotEmpty))
+        image.fmid: image,
+    };
+  }
+
   Future<VipReceiveHistory> vipReceiveHistory() async {
     final json = asMap(await _client.get('/youth/month/vip/record'));
     return VipReceiveHistory.fromJson(json);
