@@ -19,6 +19,74 @@ class LoginSession {
   }
 }
 
+class PhoneLoginResult {
+  const PhoneLoginResult._({
+    this.session,
+    this.accounts = const [],
+    this.message,
+    this.errorCode,
+  });
+
+  const PhoneLoginResult.success(LoginSession session)
+    : this._(session: session);
+
+  const PhoneLoginResult.accountSelection({
+    required List<MobileLoginAccount> accounts,
+    String? message,
+    int? errorCode,
+  }) : this._(accounts: accounts, message: message, errorCode: errorCode);
+
+  final LoginSession? session;
+  final List<MobileLoginAccount> accounts;
+  final String? message;
+  final int? errorCode;
+
+  bool get requiresUserSelection => accounts.isNotEmpty;
+}
+
+class MobileLoginAccount {
+  const MobileLoginAccount({
+    required this.userId,
+    this.nickname,
+    this.avatarUrl,
+    this.appId,
+    this.username,
+  });
+
+  final String userId;
+  final String? nickname;
+  final String? avatarUrl;
+  final int? appId;
+  final String? username;
+
+  String get displayName => nickname?.trim().isNotEmpty == true
+      ? nickname!.trim()
+      : username?.trim().isNotEmpty == true
+      ? username!.trim()
+      : '账号 $userId';
+
+  String? get subtitle {
+    final values = [
+      username?.trim(),
+      if (appId != null) 'AppID $appId',
+    ].whereType<String>().where((value) => value.isNotEmpty).toList();
+    if (values.isEmpty) {
+      return null;
+    }
+    return values.join(' · ');
+  }
+
+  factory MobileLoginAccount.fromJson(Map<String, dynamic> json) {
+    return MobileLoginAccount(
+      userId: asString(json['userId'] ?? json['userid']) ?? '',
+      nickname: asString(json['nickname']),
+      avatarUrl: normalizeImageUrl(asString(json['pic'] ?? json['avatar'])),
+      appId: asInt(json['appId'] ?? json['appid']),
+      username: asString(json['username']),
+    );
+  }
+}
+
 enum AudioQuality {
   standard('128', '标准音质', '128K'),
   high('320', '高品音质', '320K'),
@@ -867,7 +935,7 @@ List<ArtistRef> parseArtists(
 
   if (artists.isEmpty && fallbackName != null && fallbackName.isNotEmpty) {
     final names = fallbackName
-        .split(RegExp(r'\s*(?:/|、|,|，|&)\s*'))
+        .split(RegExp(r'\s*[/、,，&]\s*'))
         .where((name) => name.trim().isNotEmpty);
     for (final name in names) {
       artists.add(ArtistRef(id: '', name: name.trim()));
