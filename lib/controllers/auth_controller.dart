@@ -269,10 +269,23 @@ class AuthController extends ChangeNotifier {
     await _run(() => _api.sendLoginCode(mobile));
   }
 
-  Future<void> login(String mobile, String code) async {
+  Future<PhoneLoginResult?> login(
+    String mobile,
+    String code, {
+    String? userId,
+  }) async {
+    PhoneLoginResult? result;
     await _run(() async {
       _api.setSession(null);
-      final nextSession = await _api.loginWithPhone(mobile: mobile, code: code);
+      result = await _api.loginWithPhone(
+        mobile: mobile,
+        code: code,
+        userId: userId,
+      );
+      if (result?.requiresUserSelection == true) {
+        return;
+      }
+      final nextSession = result!.session!;
       session = nextSession;
       _api.setSession(nextSession);
 
@@ -285,6 +298,7 @@ class AuthController extends ChangeNotifier {
       await refreshProfile(silent: true);
       _vipBackgroundTask.schedule(session);
     });
+    return result;
   }
 
   Future<void> refreshProfile({bool silent = false}) async {

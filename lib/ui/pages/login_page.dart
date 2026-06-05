@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../controllers/auth_controller.dart';
+import '../../models/music_models.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.auth});
@@ -90,7 +91,34 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     setState(() => _localError = null);
-    await widget.auth.login(mobile, code);
+    final result = await widget.auth.login(mobile, code);
+    if (!mounted || result?.requiresUserSelection != true) {
+      return;
+    }
+    await _showAccountSelection(result!.accounts, mobile, code, result.message);
+  }
+
+  Future<void> _showAccountSelection(
+    List<MobileLoginAccount> accounts,
+    String mobile,
+    String code,
+    String? message,
+  ) async {
+    if (accounts.isEmpty) {
+      return;
+    }
+
+    final selected = await showModalBottomSheet<MobileLoginAccount>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) =>
+          _AccountSelectionSheet(accounts: accounts, message: message),
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    await widget.auth.login(mobile, code, userId: selected.userId);
   }
 
   @override
@@ -324,6 +352,145 @@ class _LoginForm extends StatelessWidget {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountSelectionSheet extends StatelessWidget {
+  const _AccountSelectionSheet({required this.accounts, this.message});
+
+  final List<MobileLoginAccount> accounts;
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '选择登录账号',
+              style: textTheme.titleLarge?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message ?? '该手机号绑定了多个账号，请选择要登录的账号',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: accounts.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final account = accounts[index];
+                  return _AccountOptionTile(account: account);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountOptionTile extends StatelessWidget {
+  const _AccountOptionTile({required this.account});
+
+  final MobileLoginAccount account;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Material(
+      color: colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.of(context).pop(account),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: colorScheme.primary.withValues(alpha: .12),
+                backgroundImage: account.avatarUrl != null
+                    ? NetworkImage(account.avatarUrl!)
+                    : null,
+                child: account.avatarUrl == null
+                    ? Text(
+                        account.displayName.substring(0, 1),
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      account.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium?.copyWith(
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (account.subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        account.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'UID ${account.userId}',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

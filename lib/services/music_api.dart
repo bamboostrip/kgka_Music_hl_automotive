@@ -29,25 +29,45 @@ class MusicApi {
     }
   }
 
-  Future<LoginSession> loginWithPhone({
+  Future<PhoneLoginResult> loginWithPhone({
     required String mobile,
     required String code,
+    String? userId,
   }) async {
     final json = asMap(
       await _client.post(
         '/login/cellphone',
-        body: {'mobile': mobile, 'code': code},
+        body: {
+          'mobile': mobile,
+          'code': code,
+          if (userId != null && userId.isNotEmpty) 'userId': userId,
+        },
       ),
     );
+    if (_requiresUserSelection(json)) {
+      final accounts = asList(json['accounts'])
+          .whereType<Map>()
+          .map((item) => MobileLoginAccount.fromJson(asMap(item)))
+          .where((item) => item.userId.isNotEmpty)
+          .toList();
+      return PhoneLoginResult.accountSelection(
+        accounts: accounts,
+        message:
+            asString(json['message']) ?? asString(json['msg']) ?? '请选择需要登录的账号',
+        errorCode: asInt(json['errorCode'] ?? json['error_code']),
+      );
+    }
     if (!_isSuccess(json)) {
       throw ApiException('登录失败，$_registerHint${_failureSuffix(json)}');
     }
     final session = LoginSession.fromJson(json);
-    return LoginSession(
-      userId: session.userId,
-      token: session.token,
-      t1: session.t1,
-      sessionId: _client.sessionId,
+    return PhoneLoginResult.success(
+      LoginSession(
+        userId: session.userId,
+        token: session.token,
+        t1: session.t1,
+        sessionId: _client.sessionId,
+      ),
     );
   }
 
@@ -475,6 +495,16 @@ class MusicApi {
 
   bool _isSuccess(Map<String, dynamic> json) {
     return asInt(json['status']) == 1;
+  }
+
+  bool _requiresUserSelection(Map<String, dynamic> json) {
+    final requiresUserSelection = json['requiresUserSelection'];
+    if (requiresUserSelection is bool) {
+      return requiresUserSelection;
+    }
+    final errorCode = asInt(json['errorCode'] ?? json['error_code']);
+    final accounts = asList(json['accounts']);
+    return errorCode == 34175 && accounts.isNotEmpty;
   }
 
   String _failureSuffix(Map<String, dynamic> json) {
