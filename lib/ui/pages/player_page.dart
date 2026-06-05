@@ -313,9 +313,7 @@ class _PlayerBodyState extends State<_PlayerBody> {
   }
 
   Future<void> _openArtist(Song song) async {
-    final artists = song.artists
-        .where((artist) => artist.id.isNotEmpty)
-        .toList();
+    final artists = song.artists;
     if (artists.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -603,19 +601,15 @@ class _LandscapeHeader extends StatelessWidget {
                       ),
                     ),
                     if (!compact)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onArtistTap(song),
-                        child: Text(
-                          song.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Colors.white.withValues(alpha: .7),
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(
+                              color: Colors.white.withValues(alpha: .7),
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
                   ],
                 ),
@@ -1131,17 +1125,13 @@ class _TopBar extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onArtistTap(song),
-                      child: Text(
-                        song.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: .82),
-                          fontWeight: FontWeight.w600,
-                        ),
+                    Text(
+                      song.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: .82),
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],

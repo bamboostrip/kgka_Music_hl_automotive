@@ -10,6 +10,7 @@ import '../widgets/app_update_widgets.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
+import 'album_shop_page.dart';
 import 'playlist_detail_page.dart';
 import 'search_page.dart';
 
@@ -75,10 +76,12 @@ class _HomePageState extends State<HomePage> {
     final results = await Future.wait([
       widget.api.dailyRecommend(),
       widget.api.recommendedPlaylists(),
+      widget.api.albumShop(),
     ]);
     final data = _HomeData(
       daily: results[0] as DailyRecommend,
       playlists: results[1] as List<PlaylistSummary>,
+      albums: results[2] as List<AlbumShopItem>,
     );
     _cachedData = data;
     return data;
@@ -151,6 +154,19 @@ class _HomePageState extends State<HomePage> {
     widget.player.playSong(song, queue: queue);
   }
 
+  void _openAlbumShop() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AlbumShopPage(
+          api: widget.api,
+          auth: widget.auth,
+          player: widget.player,
+          initialAlbums: _cachedData?.albums ?? [],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_HomeData>(
@@ -179,6 +195,7 @@ class _HomePageState extends State<HomePage> {
                   child: _RecommendHeader(
                     auth: widget.auth,
                     daily: data!.daily,
+                    albums: data.albums,
                     sectionIndex: _sectionIndex,
                     onSectionChanged: (value) {
                       setState(() => _sectionIndex = value);
@@ -189,6 +206,7 @@ class _HomePageState extends State<HomePage> {
                         widget.player.playSong(songs.first, queue: songs);
                       }
                     },
+                    onAlbumTap: _openAlbumShop,
                     api: widget.api,
                     player: widget.player,
                     updateVersion: _updateBannerDismissed
@@ -249,9 +267,11 @@ class _RecommendHeader extends StatelessWidget {
   const _RecommendHeader({
     required this.auth,
     required this.daily,
+    required this.albums,
     required this.sectionIndex,
     required this.onSectionChanged,
     required this.onDailyPlay,
+    required this.onAlbumTap,
     required this.api,
     required this.player,
     required this.updateVersion,
@@ -261,9 +281,11 @@ class _RecommendHeader extends StatelessWidget {
 
   final AuthController auth;
   final DailyRecommend daily;
+  final List<AlbumShopItem> albums;
   final int sectionIndex;
   final ValueChanged<int> onSectionChanged;
   final VoidCallback onDailyPlay;
+  final VoidCallback onAlbumTap;
   final MusicApi api;
   final PlayerController player;
   final AppVersionInfo? updateVersion;
@@ -317,7 +339,12 @@ class _RecommendHeader extends StatelessWidget {
               ],
               if (sectionIndex == 0) ...[
                 const SizedBox(height: 14),
-                _FeatureShelf(daily: daily, onDailyPlay: onDailyPlay),
+                _FeatureShelf(
+                  daily: daily,
+                  albums: albums,
+                  onDailyPlay: onDailyPlay,
+                  onAlbumTap: onAlbumTap,
+                ),
               ],
             ],
           ),
@@ -478,10 +505,17 @@ class _SmartSearch extends StatelessWidget {
 }
 
 class _FeatureShelf extends StatelessWidget {
-  const _FeatureShelf({required this.daily, required this.onDailyPlay});
+  const _FeatureShelf({
+    required this.daily,
+    required this.albums,
+    required this.onDailyPlay,
+    required this.onAlbumTap,
+  });
 
   final DailyRecommend daily;
+  final List<AlbumShopItem> albums;
   final VoidCallback onDailyPlay;
+  final VoidCallback onAlbumTap;
 
   @override
   Widget build(BuildContext context) {
@@ -509,19 +543,21 @@ class _FeatureShelf extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _FeatureCard(
-                    title: '每日推荐',
-                    subtitle: daily.songs.length > 1
-                        ? daily.songs[1].title
-                        : daily.title,
-                    imageUrl: daily.songs.length > 1
-                        ? daily.songs[1].coverUrl
-                        : (daily.songs.isEmpty
-                              ? daily.coverUrl
-                              : daily.songs.first.coverUrl),
-                    gradient: const [Color(0xFF454A92), Color(0xFF78CAFF)],
-                    onTap: onDailyPlay,
-                  ),
+                  child: albums.isNotEmpty
+                      ? _FeatureCard(
+                          title: '新碟上架',
+                          subtitle: '${albums.first.singerName} · ${albums.first.albumName}',
+                          imageUrl: albums.first.coverUrl,
+                          gradient: const [Color(0xFF454A92), Color(0xFF78CAFF)],
+                          onTap: onAlbumTap,
+                        )
+                      : _FeatureCard(
+                          title: '新碟上架',
+                          subtitle: '暂无新专辑',
+                          imageUrl: null,
+                          gradient: const [Color(0xFF454A92), Color(0xFF78CAFF)],
+                          onTap: () {},
+                        ),
                 ),
               ],
             ),
@@ -629,7 +665,7 @@ class _FeatureCard extends StatelessWidget {
   }
 }
 
-class _SongSection extends StatelessWidget {
+class _SongSection extends StatefulWidget {
   const _SongSection({
     required this.title,
     required this.songs,
@@ -649,24 +685,47 @@ class _SongSection extends StatelessWidget {
   final PlayerController player;
 
   @override
+  State<_SongSection> createState() => _SongSectionState();
+}
+
+class _SongSectionState extends State<_SongSection> {
+  static const _perPage = 5;
+  late final PageController _pageController;
+  int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  int get _pageCount => (widget.songs.length / _perPage).ceil();
+
+  @override
   Widget build(BuildContext context) {
-    if (songs.isEmpty) {
+    if (widget.songs.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final visibleSongs = songs.take(8).toList();
     return AnimatedBuilder(
-      animation: auth,
+      animation: widget.auth,
       builder: (context, _) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
           child: Column(
             children: [
               _SectionHeader(
-                title: title,
+                title: widget.title,
                 action: IconButton.filledTonal(
                   tooltip: '播放',
-                  onPressed: () => onPlay(visibleSongs.first, songs),
+                  onPressed: () =>
+                      widget.onPlay(widget.songs.first, widget.songs),
                   icon: const Icon(Icons.play_arrow_rounded),
                   style: IconButton.styleFrom(
                     fixedSize: const Size.square(42),
@@ -674,17 +733,58 @@ class _SongSection extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              for (final song in visibleSongs)
-                _HomeSongRow(
-                  song: song,
-                  queue: songs,
-                  onPlay: onPlay,
-                  isLiked: isLiked(song),
-                  onLikeTap: () => onLikeTap(song),
-                  auth: auth,
-                  player: player,
+              const SizedBox(height: 8),
+              SizedBox(
+                height: _perPage * 76.0,
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: _pageCount,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (context, pageIndex) {
+                    final start = pageIndex * _perPage;
+                    final end = (start + _perPage).clamp(0, widget.songs.length);
+                    final pageSongs = widget.songs.sublist(start, end);
+                    return Column(
+                      children: [
+                        for (final song in pageSongs)
+                          _HomeSongRow(
+                            song: song,
+                            queue: widget.songs,
+                            onPlay: widget.onPlay,
+                            isLiked: widget.isLiked(song),
+                            onLikeTap: () => widget.onLikeTap(song),
+                            auth: widget.auth,
+                            player: widget.player,
+                          ),
+                      ],
+                    );
+                  },
                 ),
+              ),
+              if (_pageCount > 1) ...[
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_pageCount, (i) {
+                    final active = i == _page;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: active ? 16 : 6,
+                      height: 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: active
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context)
+                                .colorScheme
+                                .outline
+                                .withValues(alpha: .3),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    );
+                  }),
+                ),
+              ],
             ],
           ),
         );
@@ -1616,10 +1716,15 @@ class _ErrorView extends StatelessWidget {
 }
 
 class _HomeData {
-  const _HomeData({required this.daily, required this.playlists});
+  const _HomeData({
+    required this.daily,
+    required this.playlists,
+    required this.albums,
+  });
 
   final DailyRecommend daily;
   final List<PlaylistSummary> playlists;
+  final List<AlbumShopItem> albums;
 }
 
 class _RadioData {

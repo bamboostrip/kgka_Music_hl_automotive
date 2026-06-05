@@ -8,6 +8,7 @@ import '../widgets/artwork.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
+import 'artist_detail_page.dart';
 
 enum _PlaylistAction { collect, deleteOrUncollect }
 
@@ -280,6 +281,24 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     );
   }
 
+  void _openArtist(Song song) {
+    final artist = song.artists.firstWhere(
+      (a) => a.name.isNotEmpty,
+      orElse: () => const ArtistRef(id: '', name: ''),
+    );
+    if (artist.name.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArtistDetailPage(
+          api: widget.api,
+          auth: widget.auth,
+          artist: artist,
+          player: widget.player,
+        ),
+      ),
+    );
+  }
+
   Future<void> _runMutation(Future<void> Function() action) async {
     if (_isMutating) return;
     setState(() => _isMutating = true);
@@ -356,9 +375,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                               : '搜索歌曲名或歌手名',
                           border: InputBorder.none,
                           hintStyle: TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                         style: const TextStyle(
@@ -409,8 +428,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                               value: _PlaylistAction.collect,
                               child: Text('收藏歌单'),
                             ),
-                          if (_isInLibrary &&
-                              !_libraryPlaylist.isLikedPlaylist)
+                          if (_isInLibrary && !_libraryPlaylist.isLikedPlaylist)
                             PopupMenuItem(
                               value: _PlaylistAction.deleteOrUncollect,
                               child: Text(
@@ -434,8 +452,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                     ? null
                     : FlexibleSpaceBar(
                         stretchModes: const [StretchMode.zoomBackground],
-                        background:
-                            _HeroHeader(info: _info ?? widget.playlist),
+                        background: _HeroHeader(info: _info ?? widget.playlist),
                       ),
               ),
               if (_isInitialLoading)
@@ -482,9 +499,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                     ),
                   )
                 else if (_searchQuery.isNotEmpty && _filteredSongs.isEmpty)
-                  const SliverToBoxAdapter(
-                    child: _SearchEmpty(),
-                  )
+                  const SliverToBoxAdapter(child: _SearchEmpty())
                 else ...[
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
@@ -504,6 +519,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                           ),
                           onAddToPlaylist: () => _addSongToPlaylist(song),
                           onDelete: () => _removeSong(song),
+                          onViewArtist: () => _openArtist(song),
                         );
                       },
                     ),
@@ -860,6 +876,7 @@ class _SongRow extends StatelessWidget {
     required this.onTap,
     required this.onAddToPlaylist,
     required this.onDelete,
+    required this.onViewArtist,
   });
 
   final Song song;
@@ -869,6 +886,7 @@ class _SongRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onAddToPlaylist;
   final VoidCallback onDelete;
+  final VoidCallback onViewArtist;
 
   @override
   Widget build(BuildContext context) {
@@ -1005,6 +1023,11 @@ class _SongRow extends StatelessWidget {
                           title: '添加到歌单',
                           onTap: onAddToPlaylist,
                         ),
+                        SongSheetAction(
+                          icon: Icons.person_rounded,
+                          title: '查看歌手',
+                          onTap: onViewArtist,
+                        ),
                         if (canDelete)
                           SongSheetAction(
                             icon: Icons.delete_outline_rounded,
@@ -1071,7 +1094,7 @@ String _detailMeta(PlaylistSummary info) {
     if (info.songCount != null) {
       return '${info.songCount} 首歌';
     }
-    return '收藏的专辑';
+    return '新专辑';
   }
   final parts = <String>[];
   if (info.songCount != null) {

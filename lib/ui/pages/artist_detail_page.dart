@@ -33,6 +33,7 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
   final _songs = <Song>[];
 
   ArtistDetail? _detail;
+  String? _resolvedArtistId;
   var _nextPage = 1;
   var _hasMore = true;
   var _isInitialLoading = true;
@@ -68,10 +69,45 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
     });
 
     try {
+      var artistId = widget.artist.id;
+
+      // If no ID (e.g. from search results), try to find it by name
+      if (artistId.isEmpty && widget.artist.name.isNotEmpty) {
+        final targetName = widget.artist.name.toLowerCase();
+
+        // Try 1: search songs and match artist name
+        final searchResults = await widget.api.searchSongs(
+          widget.artist.name,
+          pageSize: 10,
+        );
+        for (final song in searchResults) {
+          for (final a in song.artists) {
+            if (a.id.isNotEmpty &&
+                a.name.toLowerCase().contains(targetName)) {
+              artistId = a.id;
+              break;
+            }
+          }
+          if (artistId.isNotEmpty) break;
+        }
+
+      }
+
+      if (artistId.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = '未找到该歌手';
+          _isInitialLoading = false;
+        });
+        return;
+      }
+
+      _resolvedArtistId = artistId;
+
       final results = await Future.wait([
-        widget.api.artistDetail(widget.artist.id),
+        widget.api.artistDetail(artistId),
         widget.api.artistAudios(
-          widget.artist.id,
+          artistId,
           page: 1,
           pageSize: _pageSize,
           sort: 'hot',
@@ -118,7 +154,7 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
 
     try {
       final songs = await widget.api.artistAudios(
-        widget.artist.id,
+        _resolvedArtistId ?? widget.artist.id,
         page: _nextPage,
         pageSize: _pageSize,
         sort: 'hot',

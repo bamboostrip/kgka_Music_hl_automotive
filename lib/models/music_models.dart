@@ -896,13 +896,19 @@ List<ArtistRef> parseArtists(
         asString(item['singerid']) ??
         asString(item['singer_id']) ??
         asString(item['SingerId']) ??
-        asString(item['SingerID']);
+        asString(item['SingerID']) ??
+        asString(item['singer_id_new']) ??
+        asString(item['encode_singer_id']) ??
+        asString(item['singerId']) ??
+        asString(item['authorId']);
     final name =
         asString(item['name']) ??
         asString(item['author_name']) ??
         asString(item['SingerName']) ??
         asString(item['singername']) ??
-        asString(item['singer_name']);
+        asString(item['singer_name']) ??
+        asString(item['singerName']) ??
+        asString(item['authorName']);
     if (id == null || id.isEmpty || name == null || name.isEmpty) {
       return;
     }
@@ -968,6 +974,48 @@ class DailyRecommend {
           .map(Song.fromDaily)
           .where((song) => song.hash.isNotEmpty)
           .toList(),
+    );
+  }
+}
+
+class AlbumShopItem {
+  const AlbumShopItem({
+    required this.albumName,
+    required this.singerName,
+    required this.mediaId,
+    required this.topicId,
+    this.pic,
+    this.price,
+    this.buyNum,
+  });
+
+  final String albumName;
+  final String singerName;
+  final int mediaId;
+  final int topicId;
+  final String? pic;
+  final int? price; // 分为单位
+  final int? buyNum;
+
+  String? get coverUrl => normalizeImageUrl(pic);
+
+  String get priceText {
+    if (price == null) return '';
+    final yuan = price! / 100;
+    return yuan == yuan.roundToDouble()
+        ? '¥${yuan.round()}'
+        : '¥${yuan.toStringAsFixed(2)}';
+  }
+
+  factory AlbumShopItem.fromJson(Map<String, dynamic> json) {
+    return AlbumShopItem(
+      albumName: asString(json['album_name']) ?? '未知专辑',
+      singerName: asString(json['singer_name']) ?? '未知歌手',
+      mediaId: asInt(json['media_id']) ?? 0,
+      topicId: asInt(json['topic_id']) ?? 0,
+      pic: asString(json['pic']),
+      price: asInt(json['price']),
+      buyNum: asInt(json['buy_num']),
     );
   }
 }
