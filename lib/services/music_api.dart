@@ -318,6 +318,15 @@ class MusicApi {
     int page = 1,
     int pageSize = 30,
   }) async {
+    final songPage = await albumSongPage(id, page: page, pageSize: pageSize);
+    return songPage.songs;
+  }
+
+  Future<SongPage> albumSongPage(
+    String id, {
+    int page = 1,
+    int pageSize = 30,
+  }) async {
     final raw = await _client.get('/album/songs', {
       'id': id,
       'page': page,
@@ -332,11 +341,12 @@ class MusicApi {
                 json['info'] ??
                 _firstListValue(json),
           );
-    return items
+    final songs = items
         .whereType<Map<String, dynamic>>()
         .map(Song.fromAlbum)
         .where((song) => song.hash.isNotEmpty)
         .toList();
+    return SongPage(songs: songs, rawItemCount: items.length);
   }
 
   Object? _firstListValue(Map<String, dynamic> json) {
@@ -381,42 +391,47 @@ class MusicApi {
     bool fetchAll = false,
   }) async {
     if (!fetchAll) {
-      final json = asMap(
-        await _client.get('/playlist/track/all', {
-          'id': id,
-          'page': page,
-          'pagesize': pageSize,
-        }),
-      );
-      return asList(json['songs'])
-          .whereType<Map<String, dynamic>>()
-          .map(Song.fromPlaylist)
-          .where((song) => song.hash.isNotEmpty)
-          .toList();
+      final songPage = await playlistSongPage(id, page: page, pageSize: pageSize);
+      return songPage.songs;
     }
 
     final allSongs = <Song>[];
     var currentPage = 1;
     const perPage = 200;
     while (true) {
-      final json = asMap(
-        await _client.get('/playlist/track/all', {
-          'id': id,
-          'page': currentPage,
-          'pagesize': perPage,
-        }),
+      final songPage = await playlistSongPage(
+        id,
+        page: currentPage,
+        pageSize: perPage,
       );
-      final songs = asList(json['songs'])
-          .whereType<Map<String, dynamic>>()
-          .map(Song.fromPlaylist)
-          .where((song) => song.hash.isNotEmpty)
-          .toList();
+      final songs = songPage.songs;
       if (songs.isEmpty) break;
       allSongs.addAll(songs);
-      if (songs.length < perPage) break;
+      if (songPage.rawItemCount < perPage) break;
       currentPage++;
     }
     return allSongs;
+  }
+
+  Future<SongPage> playlistSongPage(
+    String id, {
+    int page = 1,
+    int pageSize = 80,
+  }) async {
+    final json = asMap(
+      await _client.get('/playlist/track/all', {
+        'id': id,
+        'page': page,
+        'pagesize': pageSize,
+      }),
+    );
+    final items = asList(json['songs']);
+    final songs = items
+        .whereType<Map<String, dynamic>>()
+        .map(Song.fromPlaylist)
+        .where((song) => song.hash.isNotEmpty)
+        .toList();
+    return SongPage(songs: songs, rawItemCount: items.length);
   }
 
   Future<PlaylistDetail> playlistDetail(String id) async {

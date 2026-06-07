@@ -129,7 +129,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
     try {
       if (_isAlbum) {
-        final songs = await widget.api.albumSongs(
+        final songPage = await widget.api.albumSongPage(
           widget.playlist.albumId ?? widget.playlist.id,
           page: 1,
           pageSize: _pageSize,
@@ -137,17 +137,18 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         if (!mounted) return;
 
         setState(() {
+          final songs = songPage.songs;
           _songs.addAll(songs);
           _nextPage = 2;
           _hasMore =
               _songs.length < (widget.playlist.songCount ?? 1 << 31) &&
-              songs.length == _pageSize;
+              songPage.rawItemCount == _pageSize;
           _isInitialLoading = false;
         });
       } else {
         final results = await Future.wait([
           widget.api.playlistInfo(widget.playlist.id),
-          widget.api.playlistSongs(
+          widget.api.playlistSongPage(
             widget.playlist.id,
             page: 1,
             pageSize: _pageSize,
@@ -156,14 +157,15 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         if (!mounted) return;
 
         final info = results[0] as PlaylistSummary;
-        final songs = results[1] as List<Song>;
+        final songPage = results[1] as SongPage;
+        final songs = songPage.songs;
         setState(() {
           _info = info;
           _songs.addAll(songs);
           _nextPage = 2;
           _hasMore =
               _songs.length < (info.songCount ?? 1 << 31) &&
-              songs.length == _pageSize;
+              songPage.rawItemCount == _pageSize;
           _isInitialLoading = false;
         });
       }
@@ -196,13 +198,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     });
 
     try {
-      final songs = _isAlbum
-          ? await widget.api.albumSongs(
+      final songPage = _isAlbum
+          ? await widget.api.albumSongPage(
               widget.playlist.albumId ?? widget.playlist.id,
               page: _nextPage,
               pageSize: _pageSize,
             )
-          : await widget.api.playlistSongs(
+          : await widget.api.playlistSongPage(
               widget.playlist.id,
               page: _nextPage,
               pageSize: _pageSize,
@@ -210,10 +212,11 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       if (!mounted) return;
 
       setState(() {
+        final songs = songPage.songs;
         _songs.addAll(songs);
         _nextPage++;
         _hasMore =
-            songs.length == _pageSize &&
+            songPage.rawItemCount == _pageSize &&
             _songs.length < (_currentPlaylist.songCount ?? 1 << 31);
         _isLoadingMore = false;
       });

@@ -846,6 +846,13 @@ class PlaylistDetail {
   final List<Song> songs;
 }
 
+class SongPage {
+  const SongPage({required this.songs, required this.rawItemCount});
+
+  final List<Song> songs;
+  final int rawItemCount;
+}
+
 class ArtistRef {
   const ArtistRef({required this.id, required this.name, this.avatarUrl});
 
