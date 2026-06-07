@@ -124,6 +124,21 @@ class LibraryPage extends StatelessWidget {
                   ),
                 ),
               ],
+              // Collected albums
+              if (auth.collectedAlbums.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: _PlaylistSectionHeader(
+                    title: '收藏的专辑',
+                    count: auth.collectedAlbums.length,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: _PlaylistGroup(
+                    playlists: auth.collectedAlbums,
+                    onOpen: openPlaylist,
+                  ),
+                ),
+              ],
               const SliverToBoxAdapter(child: SizedBox(height: 160)),
             ],
           );
