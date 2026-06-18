@@ -21,6 +21,17 @@ class _DesktopLyricsSettingsPageState
   void initState() {
     super.initState();
     _settings = widget.player.desktopLyricsSettings;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.player.setDesktopLyricsPreviewVisible(true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.player.setDesktopLyricsPreviewVisible(false);
+    super.dispose();
   }
 
   void _update(DesktopLyricsSettings Function(DesktopLyricsSettings s) fn) {

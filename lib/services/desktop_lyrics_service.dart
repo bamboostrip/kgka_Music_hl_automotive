@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+typedef DesktopLyricsVisibilityChanged =
+    void Function({required bool visible, required bool userClosed});
+
 class DesktopLyricsSettings {
   const DesktopLyricsSettings({
     this.opacity = 0.8,
@@ -53,9 +56,37 @@ class DesktopLyricsSettings {
 
 class DesktopLyricsService {
   static const _channel = MethodChannel('kgka_music_hl/desktop_lyrics');
+  static bool _handlerAttached = false;
+  static DesktopLyricsVisibilityChanged? _visibilityChanged;
+
+  DesktopLyricsService() {
+    _attachHandler();
+  }
 
   static bool get isSupportedPlatform {
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  }
+
+  void setVisibilityChangedHandler(DesktopLyricsVisibilityChanged? handler) {
+    _visibilityChanged = handler;
+  }
+
+  static void _attachHandler() {
+    if (_handlerAttached) return;
+    _handlerAttached = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method != 'onVisibilityChanged') {
+        return;
+      }
+      final args = call.arguments;
+      if (args is! Map) {
+        return;
+      }
+      _visibilityChanged?.call(
+        visible: args['visible'] as bool? ?? false,
+        userClosed: args['userClosed'] as bool? ?? false,
+      );
+    });
   }
 
   Future<bool> checkPermission() async {
@@ -127,11 +158,17 @@ class DesktopLyricsService {
     }
   }
 
-  Future<void> updateKaraokeProgress({required double progress}) async {
+  Future<void> updateKaraokeProgress({
+    required double progress,
+    required Duration? lineDuration,
+    required bool isPlaying,
+  }) async {
     if (!isSupportedPlatform) return;
     try {
       await _channel.invokeMethod<void>('updateKaraokeProgress', {
         'progress': progress,
+        'lineDurationMs': lineDuration?.inMilliseconds ?? 0,
+        'isPlaying': isPlaying,
       });
     } on MissingPluginException {
       // ignore

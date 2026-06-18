@@ -72,6 +72,7 @@ class PlayerController extends ChangeNotifier {
   PlayerController(this._api, this._audioHandler) {
     unawaited(_restoreSettings());
     _audioHandler.attachTransportControls(onNext: next, onPrevious: previous);
+    _desktopLyrics.setVisibilityChangedHandler(_handleDesktopLyricsVisibility);
     _positionSub = audioPlayer.positionStream.listen((value) {
       if (!_isSeeking) {
         _setPositionBase(value, playing: isPlaying);
@@ -80,9 +81,12 @@ class PlayerController extends ChangeNotifier {
       _maybeSyncDesktopLyricFromPosition();
       notifyListeners();
     });
-    // Frame-level karaoke sync for smooth 60fps updates
+    // Send timing anchors; Android animates karaoke progress at display refresh.
     SchedulerBinding.instance.addPersistentFrameCallback((_) {
-      if (desktopLyricsEnabled && isPlaying && lyrics.isNotEmpty && !_isScrubbing) {
+      if (_shouldShowDesktopLyrics &&
+          isPlaying &&
+          lyrics.isNotEmpty &&
+          !_isScrubbing) {
         _syncDesktopKaraokeProgress();
       }
     });
@@ -148,6 +152,8 @@ class PlayerController extends ChangeNotifier {
   bool _isScrubbing = false;
   bool _isHandlingCompletion = false;
   String? _completedSongHash;
+  bool _isAppForeground = true;
+  bool _desktopLyricsPreviewVisible = false;
 
   Song? currentSong;
   List<Song> queue = const [];
@@ -288,9 +294,7 @@ class PlayerController extends ChangeNotifier {
     lyrics = const [];
     _lastDesktopLyricIndex = -1;
     notifyListeners();
-    if (desktopLyricsEnabled) {
-      unawaited(_desktopLyrics.show(title: song.title, artist: song.artist));
-    }
+    unawaited(_syncDesktopLyricsVisibility());
 
     try {
       final playUrl = await _api.songUrl(song, quality: audioQuality);
@@ -710,26 +714,47 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
 
     if (enabled) {
+      final hasPermission = await _desktopLyrics.checkPermission();
+      if (!hasPermission) {
+        desktopLyricsEnabled = false;
+        await prefs.setBool(_desktopLyricsEnabledSettingKey, false);
+        notifyListeners();
+        await _desktopLyrics.requestPermission();
+        return;
+      }
       final song = currentSong;
       if (song != null) {
-        final hasPermission = await _desktopLyrics.checkPermission();
-        if (!hasPermission) {
-          desktopLyricsEnabled = false;
-          await prefs.setBool(_desktopLyricsEnabledSettingKey, false);
-          notifyListeners();
-          await _desktopLyrics.requestPermission();
-          return;
-        }
-        await _desktopLyrics.show(title: song.title, artist: song.artist);
-        _syncDesktopLyrics();
+        await _syncDesktopLyricsVisibility();
       }
     } else {
       await _desktopLyrics.hide();
     }
   }
 
+  bool get _shouldShowDesktopLyrics {
+    return desktopLyricsEnabled &&
+        currentSong != null &&
+        (!_isAppForeground || _desktopLyricsPreviewVisible);
+  }
+
+  Future<void> _syncDesktopLyricsVisibility() async {
+    if (!_shouldShowDesktopLyrics) {
+      await _desktopLyrics.hide();
+      return;
+    }
+
+    final song = currentSong;
+    if (song == null) return;
+    final shown = await _desktopLyrics.show(title: song.title, artist: song.artist);
+    if (shown) {
+      _syncDesktopLyrics();
+      _syncDesktopPlayState();
+      _syncDesktopKaraokeProgress();
+    }
+  }
+
   void _syncDesktopLyrics() {
-    if (!desktopLyricsEnabled) return;
+    if (!_shouldShowDesktopLyrics) return;
     final index = activeLyricIndex;
     if (lyrics.isEmpty) {
       _desktopLyrics.updateLyrics(current: '', next: '');
@@ -742,14 +767,14 @@ class PlayerController extends ChangeNotifier {
   }
 
   void _syncDesktopPlayState() {
-    if (!desktopLyricsEnabled) return;
+    if (!_shouldShowDesktopLyrics) return;
     _desktopLyrics.updatePlayState(isPlaying: isPlaying);
   }
 
   int _lastDesktopLyricIndex = -1;
 
   void _maybeSyncDesktopLyricFromPosition() {
-    if (!desktopLyricsEnabled || lyrics.isEmpty) return;
+    if (!_shouldShowDesktopLyrics || lyrics.isEmpty) return;
     final index = activeLyricIndex;
     if (index != _lastDesktopLyricIndex) {
       _lastDesktopLyricIndex = index;
@@ -760,32 +785,68 @@ class PlayerController extends ChangeNotifier {
   }
 
   void _syncDesktopKaraokeProgress() {
-    if (!desktopLyricsEnabled || lyrics.isEmpty) return;
+    if (!_shouldShowDesktopLyrics || lyrics.isEmpty) return;
     final index = activeLyricIndex;
     final line = lyrics[index.clamp(0, lyrics.length - 1)];
     final position = smoothPosition;
+    final lineDuration = line.duration ?? _estimatedLineDuration(index);
 
     if (line.words.isEmpty) {
       // No word-level data: estimate progress from line duration
       final lineStart = line.time.inMilliseconds;
-      final lineDuration = line.duration?.inMilliseconds ?? 0;
-      if (lineDuration > 0) {
+      final lineDurationMs = lineDuration?.inMilliseconds ?? 0;
+      if (lineDurationMs > 0) {
         final elapsed = position.inMilliseconds - lineStart;
-        final progress = (elapsed / lineDuration).clamp(0.0, 1.0);
-        _desktopLyrics.updateKaraokeProgress(progress: progress);
+        final progress = (elapsed / lineDurationMs).clamp(0.0, 1.0);
+        _desktopLyrics.updateKaraokeProgress(
+          progress: progress,
+          lineDuration: lineDuration,
+          isPlaying: isPlaying,
+        );
       } else {
-        _desktopLyrics.updateKaraokeProgress(progress: 1.0);
+        _desktopLyrics.updateKaraokeProgress(
+          progress: 1.0,
+          lineDuration: null,
+          isPlaying: isPlaying,
+        );
       }
     } else {
       // Word-level: find active word and compute progress
       final lineStart = line.time.inMilliseconds;
-      final lineDuration = line.duration?.inMilliseconds ?? 0;
-      if (lineDuration > 0) {
+      final lineDurationMs = lineDuration?.inMilliseconds ?? 0;
+      if (lineDurationMs > 0) {
         final elapsed = position.inMilliseconds - lineStart;
-        final progress = (elapsed / lineDuration).clamp(0.0, 1.0);
-        _desktopLyrics.updateKaraokeProgress(progress: progress);
+        final progress = (elapsed / lineDurationMs).clamp(0.0, 1.0);
+        _desktopLyrics.updateKaraokeProgress(
+          progress: progress,
+          lineDuration: lineDuration,
+          isPlaying: isPlaying,
+        );
       }
     }
+  }
+
+  Duration? _estimatedLineDuration(int index) {
+    if (index < 0 || index >= lyrics.length) {
+      return null;
+    }
+    final explicit = lyrics[index].duration;
+    if (explicit != null && explicit > Duration.zero) {
+      return explicit;
+    }
+    if (index + 1 < lyrics.length) {
+      final nextDuration = lyrics[index + 1].time - lyrics[index].time;
+      if (nextDuration > Duration.zero) {
+        return nextDuration;
+      }
+    }
+    if (duration > lyrics[index].time) {
+      final tailDuration = duration - lyrics[index].time;
+      if (tailDuration > Duration.zero) {
+        return tailDuration;
+      }
+    }
+    return null;
   }
 
   Future<void> updateDesktopLyricsSettings(DesktopLyricsSettings settings) async {
@@ -799,9 +860,32 @@ class PlayerController extends ChangeNotifier {
   bool get isDesktopLyricsSupported => DesktopLyricsService.isSupportedPlatform;
 
   void setAppForeground(bool isForeground) {
+    if (_isAppForeground == isForeground) return;
+    _isAppForeground = isForeground;
     if (desktopLyricsEnabled) {
       _desktopLyrics.setAppForeground(isForeground: isForeground);
+      unawaited(_syncDesktopLyricsVisibility());
     }
+  }
+
+  Future<void> setDesktopLyricsPreviewVisible(bool visible) async {
+    if (_desktopLyricsPreviewVisible == visible) return;
+    _desktopLyricsPreviewVisible = visible;
+    await _syncDesktopLyricsVisibility();
+  }
+
+  Future<void> _handleDesktopLyricsVisibility({
+    required bool visible,
+    required bool userClosed,
+  }) async {
+    if (!userClosed || !desktopLyricsEnabled) {
+      return;
+    }
+    desktopLyricsEnabled = false;
+    _desktopLyricsPreviewVisible = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_desktopLyricsEnabledSettingKey, false);
+    notifyListeners();
   }
 
   Future<bool> checkDesktopLyricsPermission() =>
@@ -1129,6 +1213,7 @@ class PlayerController extends ChangeNotifier {
       ),
     );
     _audioHandler.detachTransportControls();
+    _desktopLyrics.setVisibilityChangedHandler(null);
     unawaited(_audioHandler.close());
     unawaited(_desktopLyrics.hide());
     super.dispose();

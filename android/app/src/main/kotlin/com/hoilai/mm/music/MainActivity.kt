@@ -22,6 +22,8 @@ import java.io.File
 class MainActivity : AudioServiceActivity() {
     private val updateDownloads = mutableMapOf<Long, String>()
     private var downloadReceiverRegistered = false
+    private var lyricsStateReceiverRegistered = false
+    private var desktopLyricsChannel: MethodChannel? = null
     private var bassBoost: BassBoost? = null
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
@@ -34,6 +36,27 @@ class MainActivity : AudioServiceActivity() {
             if (isDownloadSuccessful(downloadId)) {
                 installDownloadedApk(fileName)
             }
+        }
+    }
+
+    private val lyricsStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != LyricsOverlayService.ACTION_VISIBILITY_CHANGED) {
+                return
+            }
+            desktopLyricsChannel?.invokeMethod(
+                "onVisibilityChanged",
+                mapOf(
+                    "visible" to intent.getBooleanExtra(
+                        LyricsOverlayService.EXTRA_VISIBLE,
+                        false
+                    ),
+                    "userClosed" to intent.getBooleanExtra(
+                        LyricsOverlayService.EXTRA_USER_CLOSED,
+                        false
+                    )
+                )
+            )
         }
     }
 
@@ -124,8 +147,12 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/desktop_lyrics")
-            .setMethodCallHandler { call, result ->
+        desktopLyricsChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kgka_music_hl/desktop_lyrics"
+        )
+        registerLyricsStateReceiver()
+        desktopLyricsChannel?.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "checkPermission" -> {
                         result.success(Settings.canDrawOverlays(this))
@@ -188,9 +215,13 @@ class MainActivity : AudioServiceActivity() {
                     }
                     "updateKaraokeProgress" -> {
                         val progress = call.argument<Double>("progress")?.toFloat() ?: 0f
+                        val lineDurationMs = call.argument<Int>("lineDurationMs") ?: 0
+                        val isPlaying = call.argument<Boolean>("isPlaying") ?: false
                         val intent = Intent(this, LyricsOverlayService::class.java).apply {
                             action = LyricsOverlayService.ACTION_UPDATE_KARAOKE
                             putExtra(LyricsOverlayService.EXTRA_PROGRESS, progress)
+                            putExtra(LyricsOverlayService.EXTRA_LINE_DURATION_MS, lineDurationMs)
+                            putExtra(LyricsOverlayService.EXTRA_IS_PLAYING, isPlaying)
                         }
                         startService(intent)
                         result.success(null)
@@ -224,6 +255,20 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun registerLyricsStateReceiver() {
+        if (lyricsStateReceiverRegistered) {
+            return
+        }
+        val filter = IntentFilter(LyricsOverlayService.ACTION_VISIBILITY_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(lyricsStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(lyricsStateReceiver, filter)
+        }
+        lyricsStateReceiverRegistered = true
     }
 
     private fun equalizerConfig(audioSessionId: Int?): Map<String, Any>? {
@@ -412,6 +457,10 @@ class MainActivity : AudioServiceActivity() {
         if (downloadReceiverRegistered) {
             unregisterReceiver(downloadReceiver)
             downloadReceiverRegistered = false
+        }
+        if (lyricsStateReceiverRegistered) {
+            unregisterReceiver(lyricsStateReceiver)
+            lyricsStateReceiverRegistered = false
         }
         super.onDestroy()
     }

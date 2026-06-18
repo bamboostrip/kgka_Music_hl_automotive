@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
+import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -32,6 +34,7 @@ class LyricsOverlayService : Service() {
         const val ACTION_UPDATE_KARAOKE = "com.hoilai.mm.music.UPDATE_KARAOKE"
         const val ACTION_UPDATE_SETTINGS = "com.hoilai.mm.music.UPDATE_SETTINGS"
         const val ACTION_SET_APP_FOREGROUND = "com.hoilai.mm.music.SET_APP_FOREGROUND"
+        const val ACTION_VISIBILITY_CHANGED = "com.hoilai.mm.music.LYRICS_VISIBILITY_CHANGED"
 
         const val EXTRA_CURRENT_LYRIC = "current_lyric"
         const val EXTRA_NEXT_LYRIC = "next_lyric"
@@ -45,6 +48,9 @@ class LyricsOverlayService : Service() {
         const val EXTRA_TEXT_COLOR = "text_color"
         const val EXTRA_FONT_SIZE = "font_size"
         const val EXTRA_IS_FOREGROUND = "is_foreground"
+        const val EXTRA_LINE_DURATION_MS = "line_duration_ms"
+        const val EXTRA_VISIBLE = "visible"
+        const val EXTRA_USER_CLOSED = "user_closed"
 
         private const val PREFS_NAME = "lyrics_overlay_prefs"
         private const val KEY_POS_X = "pos_x"
@@ -76,6 +82,12 @@ class LyricsOverlayService : Service() {
     private var layoutParams: WindowManager.LayoutParams? = null
     private var isShowing = false
     private var isAppForeground = false
+    private val choreographer by lazy { Choreographer.getInstance() }
+    private var karaokeFrameCallback: Choreographer.FrameCallback? = null
+    private var karaokeAnchorProgress = 0f
+    private var karaokeAnchorUptimeMs = 0L
+    private var karaokeLineDurationMs = 0
+    private var karaokePlaying = false
 
     // Settings
     private var bgOpacity: Float = 0.8f
@@ -115,7 +127,9 @@ class LyricsOverlayService : Service() {
             }
             ACTION_UPDATE_KARAOKE -> {
                 val progress = intent.getFloatExtra(EXTRA_PROGRESS, 0f)
-                updateKaraokeProgress(progress)
+                val lineDurationMs = intent.getIntExtra(EXTRA_LINE_DURATION_MS, 0)
+                val isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, false)
+                updateKaraokeProgress(progress, lineDurationMs, isPlaying)
             }
             ACTION_UPDATE_SETTINGS -> {
                 bgOpacity = intent.getFloatExtra(EXTRA_OPACITY, bgOpacity)
@@ -153,7 +167,7 @@ class LyricsOverlayService : Service() {
         btnLock = overlayView?.findViewById(R.id.btn_lock)
 
         btnClose?.setOnClickListener {
-            hideOverlay()
+            hideOverlay(userClosed = true)
             stopSelf()
         }
 
@@ -191,6 +205,7 @@ class LyricsOverlayService : Service() {
         try {
             windowManager?.addView(overlayView, layoutParams)
             isShowing = true
+            notifyVisibilityChanged(visible = true, userClosed = false)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -255,6 +270,7 @@ class LyricsOverlayService : Service() {
     }
 
     private fun updateLyrics(current: String, next: String) {
+        stopKaraokeTicker()
         karaokeView?.post {
             karaokeView?.text = if (current.isEmpty()) "暂无歌词" else current
             karaokeView?.progress = 0f
@@ -264,13 +280,65 @@ class LyricsOverlayService : Service() {
     }
 
     private fun updateKaraokeProgress(progress: Float) {
+        updateKaraokeProgress(progress, 0, karaokePlaying)
+    }
+
+    private fun updateKaraokeProgress(progress: Float, lineDurationMs: Int, isPlaying: Boolean) {
+        karaokeAnchorProgress = progress.coerceIn(0f, 1f)
+        karaokeAnchorUptimeMs = SystemClock.uptimeMillis()
+        karaokeLineDurationMs = lineDurationMs.coerceAtLeast(0)
+        karaokePlaying = isPlaying
         karaokeView?.post {
-            karaokeView?.progress = progress
+            karaokeView?.progress = karaokeAnchorProgress
+        }
+        if (karaokePlaying && karaokeLineDurationMs > 0 && karaokeAnchorProgress < 1f) {
+            startKaraokeTicker()
+        } else {
+            stopKaraokeTicker()
         }
     }
 
     private fun updatePlayState(isPlaying: Boolean) {
-        // Could dim the overlay when paused if desired
+        karaokePlaying = isPlaying
+        if (isPlaying && karaokeLineDurationMs > 0 && karaokeAnchorProgress < 1f) {
+            karaokeAnchorUptimeMs = SystemClock.uptimeMillis()
+            startKaraokeTicker()
+        } else {
+            stopKaraokeTicker()
+        }
+    }
+
+    private fun startKaraokeTicker() {
+        if (karaokeFrameCallback != null) {
+            return
+        }
+        val callback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                val duration = karaokeLineDurationMs
+                if (!karaokePlaying || duration <= 0 || karaokeAnchorProgress >= 1f) {
+                    karaokeFrameCallback = null
+                    return
+                }
+
+                val frameTimeMs = frameTimeNanos / 1_000_000
+                val elapsed = (frameTimeMs - karaokeAnchorUptimeMs).coerceAtLeast(0L)
+                val nextProgress = (karaokeAnchorProgress + elapsed.toFloat() / duration)
+                    .coerceIn(0f, 1f)
+                karaokeView?.progress = nextProgress
+                if (nextProgress < 1f) {
+                    choreographer.postFrameCallback(this)
+                } else {
+                    karaokeFrameCallback = null
+                }
+            }
+        }
+        karaokeFrameCallback = callback
+        choreographer.postFrameCallback(callback)
+    }
+
+    private fun stopKaraokeTicker() {
+        karaokeFrameCallback?.let { choreographer.removeFrameCallback(it) }
+        karaokeFrameCallback = null
     }
 
     private fun applySettings() {
@@ -354,8 +422,9 @@ class LyricsOverlayService : Service() {
             .apply()
     }
 
-    private fun hideOverlay() {
+    private fun hideOverlay(userClosed: Boolean = false) {
         if (!isShowing) return
+        stopKaraokeTicker()
         try {
             windowManager?.removeView(overlayView)
         } catch (_: Exception) {}
@@ -366,6 +435,15 @@ class LyricsOverlayService : Service() {
         btnLock = null
         layoutParams = null
         isShowing = false
+        notifyVisibilityChanged(visible = false, userClosed = userClosed)
+    }
+
+    private fun notifyVisibilityChanged(visible: Boolean, userClosed: Boolean) {
+        val intent = Intent(ACTION_VISIBILITY_CHANGED)
+        intent.putExtra(EXTRA_VISIBLE, visible)
+        intent.putExtra(EXTRA_USER_CLOSED, userClosed)
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
     }
 
     private fun createNotificationChannel() {
