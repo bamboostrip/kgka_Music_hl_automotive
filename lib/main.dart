@@ -17,6 +17,7 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.portraitUp,
   ]);
+  await AppConfig.loadCustomBaseUrl();
 
   final client = ApiClient();
   final api = MusicApi(client);
