@@ -235,6 +235,9 @@ class AuthController extends ChangeNotifier {
       if (cachedProfile != null) {
         profile = cachedProfile.data;
       }
+      // 缓存数据已就绪，立即通知 UI 显示，API 刷新在后台进行
+      isRestoring = false;
+      notifyListeners();
       await refreshProfile(silent: true);
       _vipBackgroundTask.schedule(session);
     } catch (error) {
@@ -400,11 +403,27 @@ class AuthController extends ChangeNotifier {
       return cached;
     }
 
+    // 清理旧 key 与 CacheService 索引
     await prefs.remove(_playlistCacheKey);
+    await _cacheService.remove(_playlistCacheKeyV2);
     return const [];
   }
 
   Future<List<PlaylistSummary>> _loadCachedPlaylists() async {
+    // 优先读 CacheService（统一管理），回退旧 key（兼容旧版本）
+    final cached = await _cacheService.read<List<PlaylistSummary>>(
+      _playlistCacheKeyV2,
+      decode: (json) => (json['playlists'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(PlaylistSummary.fromCache)
+          .where((playlist) => playlist.id.isNotEmpty)
+          .toList(),
+      ttl: AppConfig.userProfileTtl,
+    );
+    if (cached != null) {
+      return cached.data;
+    }
+    // 回退旧 key
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_playlistCacheKey);
     if (raw == null || raw.isEmpty) {
@@ -426,6 +445,10 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _saveCachedPlaylists(List<PlaylistSummary> playlists) async {
+    // 双写：CacheService（统一管理）+ 旧 key（兼容）
+    await _cacheService.write(_playlistCacheKeyV2, {
+      'playlists': playlists.map((p) => p.toCache()).toList(),
+    });
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _playlistCacheKey,
@@ -442,6 +465,9 @@ class AuthController extends ChangeNotifier {
   }
 
   String get _userCacheKey => 'cache_user_${session?.userId ?? 'default'}';
+
+  String get _playlistCacheKeyV2 =>
+      'cache_user_playlists_${session?.userId ?? 'default'}';
 
   Future<void> _clearSession() async {
     final prefs = await SharedPreferences.getInstance();

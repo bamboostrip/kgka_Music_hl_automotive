@@ -42,11 +42,12 @@ Future<void> showSongActionSheet({
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Song info
-              Row(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Song info
+                Row(
                 children: [
                   Artwork(url: song.coverUrl, size: 52, borderRadius: 10),
                   const SizedBox(width: 12),
@@ -127,7 +128,8 @@ Future<void> showSongActionSheet({
                   ),
                 ),
               ],
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -155,6 +157,7 @@ class _GridItem extends StatelessWidget {
         );
       },
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(

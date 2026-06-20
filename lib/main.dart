@@ -72,7 +72,8 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
     _downloads = DownloadController(_downloadService, _api);
     _auth = AuthController(_api, _cacheService);
     _player = PlayerController(_api, widget.audioHandler)
-      ..downloadController = _downloads;
+      ..downloadController = _downloads
+      ..cacheService = _cacheService;
     _auth.restore();
     _downloads.initialize();
   }

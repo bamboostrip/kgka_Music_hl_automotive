@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/music_models.dart';
 import '../services/audio_effects_service.dart';
+import '../services/cache_service.dart';
 import '../services/desktop_lyrics_service.dart';
 import '../services/music_api.dart';
 import '../services/music_audio_handler.dart';
@@ -72,6 +73,9 @@ class PlayerController extends ChangeNotifier {
 
   /// 下载控制器（由 main.dart 在创建后注入，供 UI 访问下载功能）。
   DownloadController? downloadController;
+
+  /// 缓存服务（由 main.dart 在创建后注入，用于歌词等缓存）。
+  CacheService? cacheService;
 
   PlayerController(this._api, this._audioHandler) {
     unawaited(_restoreSettings());
@@ -498,14 +502,51 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> loadLyrics(Song song) async {
-    try {
-      lyrics = await _api.lyrics(song);
-      notifyListeners();
-    } catch (_) {
-      lyrics = const [];
-      notifyListeners();
+    final cache = cacheService;
+    final cacheKey = 'cache_lyric_${song.hash}';
+
+    // 1. 先读缓存，命中则立即显示（无感）
+    if (cache != null) {
+      try {
+        final cached = await cache.read<List<LyricLine>>(
+          cacheKey,
+          decode: (json) => (json['lines'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(LyricLine.fromCache)
+              .toList(),
+          ttl: const Duration(days: 30),
+        );
+        if (cached != null && !listEquals(lyrics, cached.data) && currentSong?.hash == song.hash) {
+          lyrics = cached.data;
+          notifyListeners();
+          _syncDesktopLyrics();
+        }
+      } catch (_) {}
     }
-    _syncDesktopLyrics();
+
+    // 2. 后台静默刷新
+    try {
+      final fresh = await _api.lyrics(song);
+      if (currentSong?.hash != song.hash) return; // 已切歌，丢弃
+      if (!listEquals(lyrics, fresh)) {
+        lyrics = fresh;
+        notifyListeners();
+      }
+      // 写缓存（空歌词也缓存，避免重复请求）
+      if (cache != null) {
+        unawaited(cache.write(cacheKey, {
+          'lines': fresh.map((l) => l.toCache()).toList(),
+        }));
+      }
+    } catch (_) {
+      if (currentSong?.hash == song.hash && lyrics.isEmpty) {
+        lyrics = const [];
+        notifyListeners();
+      }
+    }
+    if (currentSong?.hash == song.hash) {
+      _syncDesktopLyrics();
+    }
   }
 
   Future<void> togglePlay() async {

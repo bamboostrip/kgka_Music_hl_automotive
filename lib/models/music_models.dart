@@ -1179,6 +1179,29 @@ class LyricLine {
     }
     return active;
   }
+
+  Map<String, dynamic> toCache() => {
+        'timeMs': time.inMilliseconds,
+        'text': text,
+        'durationMs': duration?.inMilliseconds,
+        'translation': translation,
+        'romanization': romanization,
+        'words': words.map((w) => w.toCache()).toList(),
+      };
+
+  factory LyricLine.fromCache(Map<String, dynamic> json) {
+    return LyricLine(
+      time: Duration(milliseconds: asInt(json['timeMs']) ?? 0),
+      text: asString(json['text']) ?? '',
+      duration: durationFromMilliseconds(json['durationMs']),
+      translation: asString(json['translation']),
+      romanization: asString(json['romanization']),
+      words: (json['words'] as List? ?? const [])
+          .whereType<Map>()
+          .map((w) => LyricWord.fromCache(asMap(w)))
+          .toList(),
+    );
+  }
 }
 
 class LyricWord {
@@ -1191,6 +1214,20 @@ class LyricWord {
   final Duration time;
   final Duration duration;
   final String text;
+
+  Map<String, dynamic> toCache() => {
+        'timeMs': time.inMilliseconds,
+        'durationMs': duration.inMilliseconds,
+        'text': text,
+      };
+
+  factory LyricWord.fromCache(Map<String, dynamic> json) {
+    return LyricWord(
+      time: Duration(milliseconds: asInt(json['timeMs']) ?? 0),
+      duration: Duration(milliseconds: asInt(json['durationMs']) ?? 0),
+      text: asString(json['text']) ?? '',
+    );
+  }
 }
 
 class CommentLikeInfo {
