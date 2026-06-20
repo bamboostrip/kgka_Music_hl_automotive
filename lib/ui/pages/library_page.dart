@@ -47,24 +47,55 @@ class LibraryPage extends StatelessWidget {
       );
     }
 
-    return SafeArea(
-      bottom: false,
-      child: AnimatedBuilder(
-        animation: auth,
-        builder: (context, _) {
-          return CustomScrollView(
-            slivers: [
-              // Header
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 12, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '我的',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      children: [
+        // 顶部渐变背景（仅顶部区域，淡淡过渡到透明）
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 280,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: isDark
+                    ? const [
+                        Color(0xFF10233A),
+                        Color(0xFF0B1828),
+                        Color(0x0006070A),
+                      ]
+                    : const [
+                        Color(0xFFEAF3FF),
+                        Color(0xFFF2F7FD),
+                        Color(0x00FFFFFF),
+                      ],
+                stops: const [0, .6, 1],
+              ),
+            ),
+          ),
+        ),
+        // 内容层
+        SafeArea(
+          bottom: false,
+          child: AnimatedBuilder(
+            animation: auth,
+            builder: (context, _) {
+              return CustomScrollView(
+                slivers: [
+                  // Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 14, 12, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '我的',
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 22,
                               ),
@@ -156,6 +187,8 @@ class LibraryPage extends StatelessWidget {
           );
         },
       ),
+        ),
+      ],
     );
   }
 }
@@ -233,7 +266,7 @@ class _QuickActionRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 16, 0, 0),
       child: SizedBox(
-        height: 116,
+        height: 120,
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.only(right: 18),
