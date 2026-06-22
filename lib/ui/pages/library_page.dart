@@ -129,9 +129,9 @@ class _LibraryPageState extends State<LibraryPage>
                               '我的',
                               style: Theme.of(context).textTheme.headlineSmall
                                   ?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 22,
-                              ),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 22,
+                                  ),
                             ),
                           ),
                           IconButton(
@@ -302,7 +302,7 @@ class _QuickActionRow extends StatelessWidget {
               title: '我喜欢',
               onTap: onOpenLiked,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             _QuickActionCard(
               icon: Icons.cloud_rounded,
               iconColor: const Color.fromARGB(200, 88, 156, 245),
@@ -310,7 +310,7 @@ class _QuickActionRow extends StatelessWidget {
               title: '云盘',
               onTap: onOpenCloudDrive,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             AnimatedBuilder(
               animation: downloads,
               builder: (context, _) {
@@ -350,7 +350,7 @@ class _QuickActionCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      width: 104,
+      width: 93,
       margin: const EdgeInsets.only(right: 0),
       child: Material(
         color: colorScheme.surfaceContainer,
@@ -359,34 +359,34 @@ class _QuickActionCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: iconColor,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(11),
                   ),
-                  child: Icon(icon, color: Colors.white, size: 22),
+                  child: Icon(icon, color: Colors.white, size: 20),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   subtitle,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -513,9 +513,9 @@ class _TabItem extends StatelessWidget {
           ),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: selected ? colorScheme.onPrimary : colorScheme.onSurface,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-              ),
+            color: selected ? colorScheme.onPrimary : colorScheme.onSurface,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -587,8 +587,8 @@ class _EmptyGroup extends StatelessWidget {
             Text(
               '这里还没有内容',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -600,7 +600,11 @@ class _EmptyGroup extends StatelessWidget {
 // --- Playlist group with dividers (no card background) ---
 
 class _PlaylistGroup extends StatelessWidget {
-  const _PlaylistGroup({super.key, required this.playlists, required this.onOpen});
+  const _PlaylistGroup({
+    super.key,
+    required this.playlists,
+    required this.onOpen,
+  });
 
   final List<PlaylistSummary> playlists;
   final void Function(PlaylistSummary) onOpen;
