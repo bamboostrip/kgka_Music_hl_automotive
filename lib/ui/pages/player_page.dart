@@ -16,6 +16,7 @@ import '../widgets/artwork.dart';
 import '../widgets/playback_speed_sheet.dart';
 import '../widgets/sleep_timer_sheet.dart';
 import '../widgets/song_action_sheets.dart';
+import '../widgets/toast.dart';
 import 'artist_detail_page.dart';
 import 'comment_page.dart';
 import 'desktop_lyrics_settings_page.dart';
@@ -158,12 +159,7 @@ Future<void> _showAudioQualityPicker(
   }
 
   await player.setAudioQuality(quality, reloadCurrent: true);
-  if (!context.mounted) {
-    return;
-  }
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text('已切换到 ${quality.label}')));
+  Toast.success('已切换到 ${quality.label}');
 }
 
 class _PlayerBodyState extends State<_PlayerBody> {
@@ -317,9 +313,7 @@ class _PlayerBodyState extends State<_PlayerBody> {
   Future<void> _openArtist(Song song) async {
     final artists = song.artists;
     if (artists.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('暂无歌手详情')));
+      Toast.info('暂无歌手详情');
       return;
     }
 
@@ -2634,15 +2628,10 @@ class _Controls extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 onPressed: () {
                   player.cyclePlaybackMode();
-                  ScaffoldMessenger.of(context)
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(
-                      SnackBar(
-                        content: Text('已切换到${player.playbackModeLabel}'),
-                        duration: const Duration(milliseconds: 1100),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                  Toast.show(
+                    '已切换到${player.playbackModeLabel}',
+                    duration: const Duration(milliseconds: 1100),
+                  );
                 },
                 icon: Icon(_playbackModeIcon(player.playbackMode)),
               ),

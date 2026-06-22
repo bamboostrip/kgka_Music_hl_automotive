@@ -6,6 +6,7 @@ import '../../config/app_config.dart';
 import '../../services/app_update_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/app_update_widgets.dart';
+import '../widgets/toast.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key, required this.api});
@@ -51,10 +52,8 @@ class _AboutPageState extends State<AboutPage> {
       AboutPage._repositoryUri,
       mode: LaunchMode.externalApplication,
     );
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('无法打开 GitHub 仓库链接')));
+    if (!opened) {
+      Toast.error('无法打开 GitHub 仓库链接');
     }
   }
 

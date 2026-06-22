@@ -10,6 +10,7 @@ import '../widgets/artwork.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
+import '../widgets/toast.dart';
 import 'artist_detail_page.dart';
 
 enum _PlaylistAction { collect, deleteOrUncollect }
@@ -355,17 +356,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       if (widget.auth.errorMessage != null) {
         throw Exception(widget.auth.errorMessage);
       }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('操作完成')));
-      }
+      Toast.success('操作完成');
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
-      }
+      Toast.error('操作失败：$error');
     } finally {
       if (mounted) {
         setState(() => _isMutating = false);

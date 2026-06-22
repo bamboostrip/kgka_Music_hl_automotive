@@ -12,6 +12,7 @@ import '../widgets/app_update_widgets.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
+import '../widgets/toast.dart';
 import 'album_shop_page.dart';
 import 'playlist_detail_page.dart';
 import 'search_page.dart';
@@ -1192,9 +1193,7 @@ class _RadioSectionState extends State<_RadioSection> {
         return;
       }
       if (queue.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('这个电台暂时没有可播放歌曲')));
+        Toast.info('这个电台暂时没有可播放歌曲');
         return;
       }
       widget.player.playSong(queue.first, queue: queue);
@@ -1202,9 +1201,7 @@ class _RadioSectionState extends State<_RadioSection> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('电台加载失败：$error')));
+      Toast.error('电台加载失败：$error');
     } finally {
       if (mounted) {
         setState(() => _loadingStationId = null);

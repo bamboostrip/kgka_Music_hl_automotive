@@ -14,6 +14,7 @@ import 'services/music_api.dart';
 import 'ui/app_theme.dart';
 import 'ui/pages/app_shell.dart';
 import 'ui/pages/login_page.dart';
+import 'ui/widgets/toast.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,6 +110,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
     return MaterialApp(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
+      navigatorKey: Toast.navigatorKey,
       themeMode: ThemeMode.system,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/app_version.dart';
 import '../../services/app_update_service.dart';
 import '../../services/music_api.dart';
+import 'toast.dart';
 
 class AppUpdateBanner extends StatelessWidget {
   const AppUpdateBanner({
@@ -76,8 +77,7 @@ Future<void> checkAppUpdateManually({
     return;
   }
 
-  final messenger = ScaffoldMessenger.of(context);
-  messenger.showSnackBar(const SnackBar(content: Text('正在检测更新...')));
+  Toast.info('正在检测更新...');
 
   try {
     final service = AppUpdateService(api);
@@ -86,9 +86,8 @@ Future<void> checkAppUpdateManually({
       return;
     }
 
-    messenger.hideCurrentSnackBar();
     if (version == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('当前已是最新版本')));
+      Toast.success('当前已是最新版本');
       return;
     }
 
@@ -102,8 +101,7 @@ Future<void> checkAppUpdateManually({
     if (!context.mounted) {
       return;
     }
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text('检测更新失败：$error')));
+    Toast.error('检测更新失败：$error');
   }
 }
 
@@ -123,9 +121,7 @@ Future<void> showAppUpdateDialog({
           if (!dialogContext.mounted) {
             return;
           }
-          ScaffoldMessenger.of(
-            dialogContext,
-          ).showSnackBar(const SnackBar(content: Text('更新包下载中，完成后会打开安装界面')));
+          Toast.info('更新包下载中，完成后会打开安装界面');
           if (!force) {
             Navigator.of(dialogContext).pop();
           }
@@ -133,9 +129,7 @@ Future<void> showAppUpdateDialog({
           if (!dialogContext.mounted) {
             return;
           }
-          ScaffoldMessenger.of(
-            dialogContext,
-          ).showSnackBar(SnackBar(content: Text('开始更新失败：$error')));
+          Toast.error('开始更新失败：$error');
         }
       }
 

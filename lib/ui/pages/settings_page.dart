@@ -8,6 +8,7 @@ import '../../services/app_update_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/audio_effects_sheet.dart';
 import '../widgets/audio_quality_sheet.dart';
+import '../widgets/toast.dart';
 import 'about_page.dart';
 import 'audio_interruption_settings_page.dart';
 import 'desktop_lyrics_settings_page.dart';
@@ -128,10 +129,8 @@ class SettingsPage extends StatelessWidget {
                         value: player.desktopLyricsEnabled,
                         onChanged: (value) async {
                           await player.setDesktopLyricsEnabled(value);
-                          if (context.mounted && !player.desktopLyricsEnabled && value) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('需要悬浮窗权限才能使用桌面歌词')),
-                            );
+                          if (!player.desktopLyricsEnabled && value) {
+                            Toast.error('需要悬浮窗权限才能使用桌面歌词');
                           }
                         },
                       ),
@@ -282,15 +281,10 @@ class SettingsPage extends StatelessWidget {
     await AppConfig.saveCustomBaseUrl(result);
     if (!context.mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          AppConfig.hasCustomBaseUrl
-              ? '已切换到 ${AppConfig.customBaseUrl}，重启后生效'
-              : '已恢复默认 API 地址，重启后生效',
-        ),
-      ),
+    Toast.success(
+      AppConfig.hasCustomBaseUrl
+          ? '已切换到 ${AppConfig.customBaseUrl}，重启后生效'
+          : '已恢复默认 API 地址，重启后生效',
     );
   }
 

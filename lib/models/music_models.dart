@@ -1732,12 +1732,17 @@ class CloudDriveSongMeta {
     }
     final artistName = artists.map((artist) => artist.name).join(' / ');
 
+    // 云盘歌曲的 name 字段通常是上传时的文件名（如 "xxx.mp3"），这里移除后缀。
+    final ext = asString(json['ext']);
+    final rawName = asString(json['name']) ?? asString(json['audio_name']) ?? '';
+    final cleanName = _stripCloudFileExtension(rawName, ext);
+
     final song = Song(
       id: asString(json['audio_id']) ??
           asString(json['album_audio_id']) ??
           asString(json['hash']) ??
           '',
-      title: asString(json['name']) ?? asString(json['audio_name']) ?? '未知歌曲',
+      title: cleanName.isNotEmpty ? cleanName : '未知歌曲',
       artist: artistName.isNotEmpty ? artistName : authorName ?? '未知艺人',
       hash: asString(json['hash']) ?? asString(json['hash_std']) ?? '',
       albumId: asString(albumInfo['album_id']),
@@ -1755,10 +1760,35 @@ class CloudDriveSongMeta {
       song: song,
       fileSize: asInt(json['size']),
       bitrate: asInt(json['bitrate']),
-      fileExt: asString(json['ext']),
+      fileExt: ext,
       addedAt: addTime == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(addTime * 1000),
     );
   }
+}
+
+/// 移除云盘歌曲文件名的后缀。
+///
+/// 优先按服务端返回的 `ext` 字段移除；若无则按常见音频后缀兜底。
+String _stripCloudFileExtension(String name, String? ext) {
+  var result = name.trim();
+  if (result.isEmpty) return result;
+
+  // 按服务端返回的 ext 移除（ext 可能带或不带点）
+  if (ext != null && ext.isNotEmpty) {
+    final normalizedExt = ext.startsWith('.') ? ext : '.$ext';
+    if (result.toLowerCase().endsWith(normalizedExt.toLowerCase())) {
+      result = result.substring(0, result.length - normalizedExt.length);
+    }
+  }
+
+  // 兜底：移除常见音频文件后缀
+  final match = RegExp(r'\.(mp3|flac|ape|wav|aac|m4a|ogg|wma|opus)$', caseSensitive: false)
+      .firstMatch(result);
+  if (match != null) {
+    result = result.substring(0, match.start);
+  }
+
+  return result.trim();
 }
