@@ -52,6 +52,8 @@ class _HomePageState extends State<HomePage> {
     final cached = _cachedData;
     if (cached != null) {
       _future = Future.value(cached);
+      // 有缓存数据，立即显示并后台静默刷新
+      _silentRefresh();
     } else if (!widget.auth.isRestoring) {
       _future = _load();
     } else {
@@ -70,13 +72,47 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleAuthChanged() {
-    if (widget.auth.isRestoring || !widget.auth.isLoggedIn || _future != null) {
+    if (widget.auth.isRestoring || !widget.auth.isLoggedIn) {
       return;
     }
+    // 首次加载（无缓存）或 auth 恢复完成后触发加载
+    if (_future == null) {
+      setState(() {
+        _future = _load();
+      });
+    }
+  }
 
-    setState(() {
-      _future = _load();
-    });
+  /// 后台静默刷新首页数据。
+  ///
+  /// 先从缓存显示（已在 initState/_tryRestoreFromCache 中完成），
+  /// 然后后台请求最新数据，成功后更新 UI，失败则保持缓存数据。
+  Future<void> _silentRefresh() async {
+    try {
+      final results = await Future.wait([
+        widget.api.dailyRecommend(),
+        widget.api.recommendedPlaylists(),
+        widget.api.albumShop(),
+      ]);
+      if (!mounted) return;
+      final data = _HomeData(
+        daily: results[0] as DailyRecommend,
+        playlists: results[1] as List<PlaylistSummary>,
+        albums: results[2] as List<AlbumShopItem>,
+      );
+      _cachedData = data;
+      await widget.cache.write('cache_home', {
+        'daily': data.daily.toCache(),
+        'playlists': data.playlists.map((p) => p.toCache()).toList(),
+        'albums': data.albums.map((a) => a.toCache()).toList(),
+      });
+      if (!mounted) return;
+      setState(() {
+        _future = Future.value(data);
+      });
+    } catch (_) {
+      // 静默刷新失败，保持缓存数据不变
+    }
   }
 
   Future<_HomeData> _load() async {
@@ -111,6 +147,13 @@ class _HomePageState extends State<HomePage> {
       _cachedData = data;
       setState(() {
         _future = Future.value(data);
+      });
+      // 缓存数据已显示，后台静默刷新
+      _silentRefresh();
+    } else {
+      // 无缓存数据，直接从网络加载
+      setState(() {
+        _future = _load();
       });
     }
   }
