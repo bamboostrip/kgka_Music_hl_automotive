@@ -396,6 +396,14 @@ class PlaylistSummary {
   }
 }
 
+/// 歌曲来源平台。
+enum SongSource {
+  /// 酷狗音乐（默认）
+  kugou,
+  /// 网易云音乐
+  netease,
+}
+
 class Song {
   const Song({
     required this.id,
@@ -409,6 +417,7 @@ class Song {
     this.duration,
     this.artists = const [],
     this.isCloudDrive = false,
+    this.source = SongSource.kugou,
   });
 
   final String id;
@@ -424,6 +433,9 @@ class Song {
 
   /// 标记是否为云盘歌曲。云盘歌曲的播放地址需通过 `/user/cloud/url` 获取。
   final bool isCloudDrive;
+
+  /// 歌曲来源平台。
+  final SongSource source;
 
   factory Song.fromSearch(Map<String, dynamic> json) {
     final songId =
@@ -1791,4 +1803,86 @@ String _stripCloudFileExtension(String name, String? ext) {
   }
 
   return result.trim();
+}
+
+/// 网易云音乐搜索结果项。
+class NetEaseSong {
+  const NetEaseSong({
+    required this.id,
+    required this.name,
+    required this.artists,
+    required this.album,
+    required this.duration,
+  });
+
+  final int id;
+  final String name;
+  final List<NetEaseArtist> artists;
+  final NetEaseAlbum album;
+  final Duration duration;
+
+  /// 转换为 [Song]，标记来源为网易云。
+  Song toSong() {
+    final artistName = artists.map((a) => a.name).join(' / ');
+    return Song(
+      id: '$id',
+      title: name,
+      artist: artistName.isNotEmpty ? artistName : '未知艺人',
+      hash: 'ne_$id',
+      albumId: '${album.id}',
+      albumAudioId: '$id',
+      albumName: album.name,
+      coverUrl: album.picUrl,
+      duration: duration,
+      artists: artists
+          .map((a) => ArtistRef(id: '${a.id}', name: a.name))
+          .where((a) => a.name.isNotEmpty)
+          .toList(),
+      source: SongSource.netease,
+    );
+  }
+
+  factory NetEaseSong.fromJson(Map<String, dynamic> json) {
+    return NetEaseSong(
+      id: asInt(json['id']) ?? 0,
+      name: asString(json['name']) ?? '未知歌曲',
+      artists: asList(json['ar'])
+          .whereType<Map>()
+          .map((item) => NetEaseArtist.fromJson(asMap(item)))
+          .where((a) => a.name.isNotEmpty)
+          .toList(),
+      album: NetEaseAlbum.fromJson(asMap(json['al'])),
+      duration: durationFromMilliseconds(json['dt']) ?? Duration.zero,
+    );
+  }
+}
+
+class NetEaseArtist {
+  const NetEaseArtist({required this.id, required this.name});
+
+  final int id;
+  final String name;
+
+  factory NetEaseArtist.fromJson(Map<String, dynamic> json) {
+    return NetEaseArtist(
+      id: asInt(json['id']) ?? 0,
+      name: asString(json['name']) ?? '',
+    );
+  }
+}
+
+class NetEaseAlbum {
+  const NetEaseAlbum({required this.id, required this.name, this.picUrl});
+
+  final int id;
+  final String name;
+  final String? picUrl;
+
+  factory NetEaseAlbum.fromJson(Map<String, dynamic> json) {
+    return NetEaseAlbum(
+      id: asInt(json['id']) ?? 0,
+      name: asString(json['name']) ?? '未知专辑',
+      picUrl: asString(json['picUrl']),
+    );
+  }
 }

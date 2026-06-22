@@ -643,6 +643,57 @@ class MusicApi {
         .toList();
   }
 
+  /// 搜索网易云歌曲。
+  ///
+  /// 使用独立的网易云 API（`wyy.music.api.hoilai.cn`）：
+  /// 1. 调用 `/search?keywords=xxx` 获取歌曲 ID 列表
+  /// 2. 调用 `/song/detail?ids=id1,id2,...` 获取歌曲详情（名称、歌手、专辑、封面）
+  Future<List<Song>> searchNetEaseSongs(
+    String keywords, {
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final baseUri = Uri.parse('https://wyy.music.api.hoilai.cn');
+
+    // 1. 搜索获取歌曲 ID
+    final searchUri = baseUri.replace(
+      path: '/search',
+      queryParameters: {
+        'keywords': keywords,
+        'limit': '$limit',
+        'offset': '$offset',
+        'type': '1',
+      },
+    );
+    final searchResponse = await _client.getRaw(searchUri);
+    final searchJson = asMap(searchResponse);
+    final rawSongs = asList(searchJson['result'] is Map
+        ? asMap(searchJson['result'])['songs']
+        : searchJson['songs']);
+    final ids = rawSongs
+        .whereType<Map>()
+        .map((item) => asInt(asMap(item)['id']))
+        .whereType<int>()
+        .where((id) => id > 0)
+        .toList();
+    if (ids.isEmpty) return const [];
+
+    // 2. 批量获取歌曲详情
+    final detailUri = baseUri.replace(
+      path: '/song/detail',
+      queryParameters: {'ids': ids.join(',')},
+    );
+    final detailResponse = await _client.getRaw(detailUri);
+    final detailJson = asMap(detailResponse);
+    final songsList = asList(detailJson['songs']);
+
+    return songsList
+        .whereType<Map<String, dynamic>>()
+        .map((item) => NetEaseSong.fromJson(item).toSong())
+        .where((song) => song.hash.isNotEmpty)
+        .toList();
+  }
+
   Future<List<LyricLine>> lyrics(Song song) async {
     _debugLyricLog(
       'request song="${song.title}" artist="${song.artist}" hash="${song.hash}" albumAudioId="${song.albumAudioId}"',

@@ -311,12 +311,25 @@ class PlayerController extends ChangeNotifier {
       if (local != null) {
         url = local;
       } else {
-        final playUrl = song.isCloudDrive
-            ? await _api.cloudSongUrl(song)
-            : await _api.songUrl(song, quality: audioQuality);
+        final PlayUrl playUrl;
+        if (song.isCloudDrive) {
+          playUrl = await _api.cloudSongUrl(song);
+        } else if (song.source == SongSource.netease) {
+          // 网易云歌曲使用外链播放地址
+          playUrl = PlayUrl(
+            url: 'https://music.163.com/song/media/outer/url?id=${song.id}.mp3',
+            hash: song.hash,
+          );
+        } else {
+          playUrl = await _api.songUrl(song, quality: audioQuality);
+        }
         if (playUrl.url.isEmpty) {
           throw Exception(
-            song.isCloudDrive ? '云盘歌曲暂时没有可播放地址' : '这首歌暂时没有可播放地址',
+            song.isCloudDrive
+                ? '云盘歌曲暂时没有可播放地址'
+                : song.source == SongSource.netease
+                    ? '网易云歌曲暂时没有可播放地址'
+                    : '这首歌暂时没有可播放地址',
           );
         }
         url = playUrl.url;
@@ -688,9 +701,17 @@ class PlayerController extends ChangeNotifier {
       if (local != null) {
         url = local;
       } else {
-        final playUrl = song.isCloudDrive
-            ? await _api.cloudSongUrl(song)
-            : await _api.songUrl(song, quality: audioQuality);
+        final PlayUrl playUrl;
+        if (song.isCloudDrive) {
+          playUrl = await _api.cloudSongUrl(song);
+        } else if (song.source == SongSource.netease) {
+          playUrl = PlayUrl(
+            url: 'https://music.163.com/song/media/outer/url?id=${song.id}.mp3',
+            hash: song.hash,
+          );
+        } else {
+          playUrl = await _api.songUrl(song, quality: audioQuality);
+        }
         if (playUrl.url.isEmpty) {
           throw Exception('当前音质暂时没有可播放地址');
         }

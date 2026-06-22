@@ -311,6 +311,10 @@ class _PlayerBodyState extends State<_PlayerBody> {
   }
 
   Future<void> _openArtist(Song song) async {
+    if (song.source != SongSource.kugou) {
+      Toast.info('其他平台歌曲暂不支持查看歌手');
+      return;
+    }
     final artists = song.artists;
     if (artists.isEmpty) {
       Toast.info('暂无歌手详情');
@@ -614,7 +618,9 @@ class _LandscapeHeader extends StatelessWidget {
                 tooltip: liked ? '取消喜欢' : '喜欢',
                 size: compact ? 38 : 44,
                 iconSize: compact ? 22 : 24,
-                onPressed: () => auth.toggleLike(song),
+                onPressed: song.source == SongSource.kugou
+                    ? () => auth.toggleLike(song)
+                    : null,
                 icon: liked
                     ? Icons.favorite_rounded
                     : Icons.favorite_border_rounded,
@@ -657,12 +663,13 @@ class _LandscapeHeader extends StatelessWidget {
           subtitle: player.audioEffectsLabel,
           onTap: () => showAudioEffectsSheet(context: context, player: player),
         ),
-        SongSheetAction(
-          icon: Icons.playlist_add_rounded,
-          title: '添加到歌单',
-          onTap: () =>
-              showAddToPlaylistSheet(context: context, auth: auth, song: song),
-        ),
+        if (song.source == SongSource.kugou)
+          SongSheetAction(
+            icon: Icons.playlist_add_rounded,
+            title: '添加到歌单',
+            onTap: () =>
+                showAddToPlaylistSheet(context: context, auth: auth, song: song),
+          ),
         SongSheetAction(
           icon: Icons.bedtime_rounded,
           title: '定时播放',
@@ -713,7 +720,7 @@ class _LandscapeHeaderButton extends StatelessWidget {
   final String tooltip;
   final double size;
   final double iconSize;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final IconData icon;
 
   @override
@@ -1164,7 +1171,9 @@ class _TopBar extends StatelessWidget {
               ),
               _GlassIconButton(
                 tooltip: liked ? '取消喜欢' : '喜欢',
-                onPressed: () => auth.toggleLike(song),
+                onPressed: song.source == SongSource.kugou
+                    ? () => auth.toggleLike(song)
+                    : null,
                 icon: liked
                     ? Icons.favorite_rounded
                     : Icons.favorite_border_rounded,
@@ -1249,12 +1258,13 @@ class _TopBar extends StatelessWidget {
           ),
         ),
         // List actions
-        SongSheetAction(
-          icon: Icons.playlist_add_rounded,
-          title: '添加到歌单',
-          onTap: () =>
-              showAddToPlaylistSheet(context: context, auth: auth, song: song),
-        ),
+        if (song.source == SongSource.kugou)
+          SongSheetAction(
+            icon: Icons.playlist_add_rounded,
+            title: '添加到歌单',
+            onTap: () =>
+                showAddToPlaylistSheet(context: context, auth: auth, song: song),
+          ),
       ],
     );
   }
@@ -2719,7 +2729,7 @@ class _GlassIconButton extends StatelessWidget {
   });
 
   final String tooltip;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final IconData icon;
 
   @override
@@ -2748,6 +2758,10 @@ class _CommentEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 其他平台歌曲不支持评论
+    if (song.source != SongSource.kugou) {
+      return const SizedBox.shrink();
+    }
     return Align(
       alignment: Alignment.centerLeft,
       child: Material(
