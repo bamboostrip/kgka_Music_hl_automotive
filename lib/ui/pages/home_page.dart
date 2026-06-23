@@ -1061,10 +1061,7 @@ class _PlaylistRail extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: _SectionHeader(
               title: '推荐歌单',
-              action: Icon(
-                Icons.more_horiz_rounded,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+              action: const SizedBox.shrink(),
             ),
           ),
           const SizedBox(height: 12),

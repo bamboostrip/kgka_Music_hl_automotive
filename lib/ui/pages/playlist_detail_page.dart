@@ -231,8 +231,15 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
         setState(() {
           final songs = songPage.songs;
-          _songs.clear();
-          _songs.addAll(songs);
+          // 增量替换：仅当网络数据与当前列表不同时才更新，
+          // 避免缓存已显示后网络刷新触发 clear+addAll 导致滚动位置重置。
+          final changed = _songs.length != songs.length ||
+              !_listEquals(_songs, songs);
+          if (changed) {
+            _songs
+              ..clear()
+              ..addAll(songs);
+          }
           _nextPage = 2;
           _hasMore =
               _songs.length < (widget.playlist.songCount ?? 1 << 31) &&
@@ -258,8 +265,16 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         final songs = songPage.songs;
         setState(() {
           _info = info;
-          _songs.clear();
-          _songs.addAll(songs);
+          final songs = songPage.songs;
+          // 增量替换：仅当网络数据与当前列表不同时才更新，
+          // 避免缓存已显示后网络刷新触发 clear+addAll 导致滚动位置重置。
+          final changed = _songs.length != songs.length ||
+              !_listEquals(_songs, songs);
+          if (changed) {
+            _songs
+              ..clear()
+              ..addAll(songs);
+          }
           _nextPage = 2;
           _hasMore =
               _songs.length < (info.songCount ?? 1 << 31) &&
@@ -293,6 +308,16 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     if (position.extentAfter < 520) {
       _loadMore();
     }
+  }
+
+  /// 比较两份歌曲列表是否内容一致（按 hash 逐项比较）。
+  bool _listEquals(List<Song> a, List<Song> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].hash != b[i].hash) return false;
+    }
+    return true;
   }
 
   Future<void> _loadMore() async {
