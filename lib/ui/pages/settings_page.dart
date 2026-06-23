@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
+import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../services/app_update_service.dart';
+import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/audio_effects_sheet.dart';
 import '../widgets/audio_quality_sheet.dart';
@@ -14,6 +16,8 @@ import 'about_page.dart';
 import 'audio_interruption_settings_page.dart';
 import 'desktop_lyrics_settings_page.dart';
 import 'personalization_settings_page.dart';
+import 'playback_history_page.dart';
+import 'playback_stats_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -22,12 +26,16 @@ class SettingsPage extends StatelessWidget {
     required this.auth,
     required this.player,
     required this.theme,
+    this.cache,
+    this.downloads,
   });
 
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
   final ThemeController theme;
+  final CacheService? cache;
+  final DownloadController? downloads;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +99,15 @@ class SettingsPage extends StatelessWidget {
                       onTap: () => _selectDefaultAudioQuality(context),
                     ),
                     _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.auto_awesome_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '智能音质',
+                      subtitle: '播放失败时自动降级音质重试',
+                      value: player.smartQualityEnabled,
+                      onChanged: player.setSmartQualityEnabled,
+                    ),
+                    _SettingsDivider(),
                     _SettingsTile(
                       icon: Icons.graphic_eq_rounded,
                       iconColor: colorScheme.primary,
@@ -99,6 +116,34 @@ class SettingsPage extends StatelessWidget {
                       onTap: () => showAudioEffectsSheet(
                         context: context,
                         player: player,
+                      ),
+                    ),
+                    _SettingsDivider(),
+                    _SettingsTile(
+                      icon: Icons.bar_chart_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '播放统计',
+                      subtitle: '听歌时长、最常听歌手等',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PlaybackStatsPage(player: player),
+                        ),
+                      ),
+                    ),
+                    _SettingsDivider(),
+                    _SettingsTile(
+                      icon: Icons.history_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '播放历史',
+                      subtitle: '最近播放的歌曲',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PlaybackHistoryPage(
+                            api: api,
+                            auth: auth,
+                            player: player,
+                          ),
+                        ),
                       ),
                     ),
                     _SettingsDivider(),
@@ -173,6 +218,21 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
+                // Cache section
+                _SectionHeader(title: '缓存'),
+                const SizedBox(height: 8),
+                _SettingsCard(
+                  children: [
+                    _SettingsTile(
+                      icon: Icons.storage_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '缓存管理',
+                      subtitle: '查看和清理缓存',
+                      onTap: () => _showCacheManagement(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 // Personalization section
                 _SectionHeader(title: '个性化'),
                 const SizedBox(height: 8),
@@ -238,6 +298,25 @@ class SettingsPage extends StatelessWidget {
     );
     if (quality == null) return;
     await player.setAudioQuality(quality);
+  }
+
+  /// 打开缓存管理 BottomSheet。
+  Future<void> _showCacheManagement(BuildContext context) async {
+    final cache = this.cache;
+    final downloads = this.downloads;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        return _CacheManagementSheet(
+          cache: cache,
+          downloads: downloads,
+        );
+      },
+    );
   }
 
   Future<void> _editApiBaseUrl(BuildContext context) async {
@@ -527,6 +606,211 @@ class _SettingsDivider extends StatelessWidget {
       height: 1,
       indent: 62,
       color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .4),
+    );
+  }
+}
+
+/// 缓存管理 BottomSheet。
+class _CacheManagementSheet extends StatefulWidget {
+  const _CacheManagementSheet({this.cache, this.downloads});
+
+  final CacheService? cache;
+  final DownloadController? downloads;
+
+  @override
+  State<_CacheManagementSheet> createState() => _CacheManagementSheetState();
+}
+
+class _CacheManagementSheetState extends State<_CacheManagementSheet> {
+  int? _dataCacheSize;
+  int? _downloadSize;
+  int? _playCacheSize;
+  bool _clearing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSizes();
+  }
+
+  Future<void> _loadSizes() async {
+    int? dataCache, download, playCache;
+    if (widget.cache != null) {
+      try {
+        dataCache = await widget.cache!.getCacheSize();
+      } catch (_) {}
+    }
+    if (widget.downloads != null) {
+      try {
+        download = await widget.downloads!.getDownloadDirSize();
+      } catch (_) {}
+      try {
+        playCache = await widget.downloads!.getPlayCacheDirSize();
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        _dataCacheSize = dataCache;
+        _downloadSize = download;
+        _playCacheSize = playCache;
+      });
+    }
+  }
+
+  String _formatSize(int? bytes) {
+    if (bytes == null) return '计算中…';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '缓存管理',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _CacheItem(
+              icon: Icons.storage_rounded,
+              title: '数据缓存',
+              size: _formatSize(_dataCacheSize),
+              onClear:
+                  widget.cache != null &&
+                      _dataCacheSize != null &&
+                      _dataCacheSize! > 0
+                  ? () async {
+                      setState(() => _clearing = true);
+                      try {
+                        await widget.cache!.clearAllCache();
+                        await _loadSizes();
+                        if (mounted) {
+                          Toast.success('数据缓存已清理');
+                        }
+                      } catch (_) {
+                        if (mounted) {
+                          Toast.error('清理失败');
+                        }
+                      }
+                      if (mounted) {
+                        setState(() => _clearing = false);
+                      }
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 10),
+            _CacheItem(
+              icon: Icons.download_rounded,
+              title: '下载文件',
+              size: _formatSize(_downloadSize),
+              onClear: null, // 下载文件用户主动管理，不提供一键清理
+            ),
+            const SizedBox(height: 10),
+            _CacheItem(
+              icon: Icons.cached_rounded,
+              title: '播放缓存',
+              size: _formatSize(_playCacheSize),
+              onClear: widget.downloads != null &&
+                      _playCacheSize != null &&
+                      _playCacheSize! > 0
+                  ? () async {
+                      setState(() => _clearing = true);
+                      try {
+                        await widget.downloads!.clearPlayCache();
+                        await _loadSizes();
+                        if (mounted) {
+                          Toast.success('播放缓存已清理');
+                        }
+                      } catch (_) {
+                        if (mounted) {
+                          Toast.error('清理失败');
+                        }
+                      }
+                      if (mounted) {
+                        setState(() => _clearing = false);
+                      }
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 20),
+            if (_clearing) const Center(child: CircularProgressIndicator()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 缓存管理中的单项条目。
+class _CacheItem extends StatelessWidget {
+  const _CacheItem({
+    required this.icon,
+    required this.title,
+    required this.size,
+    this.onClear,
+  });
+
+  final IconData icon;
+  final String title;
+  final String size;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 22, color: colorScheme.primary),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  size,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onClear != null)
+            TextButton(
+              onPressed: onClear,
+              child: Text(
+                '清理',
+                style: TextStyle(color: colorScheme.error),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

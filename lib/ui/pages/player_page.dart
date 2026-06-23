@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
@@ -1644,10 +1645,29 @@ class _LyricPlayerPageState extends State<_LyricPlayerPage>
     with AutomaticKeepAliveClientMixin {
   late _LyricDisplayMode _displayMode;
 
+  /// 歌词字体缩放倍率（持久化）。
+  static const _lyricScaleKey = 'settings.lyric_scale';
+  double _lyricScale = 1.0;
+
   @override
   void initState() {
     super.initState();
     _displayMode = _initialLyricDisplayMode(widget.player.lyrics);
+    _loadLyricScale();
+  }
+
+  Future<void> _loadLyricScale() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() => _lyricScale = prefs.getDouble(_lyricScaleKey) ?? 1.0);
+    }
+  }
+
+  Future<void> _setLyricScale(double scale) async {
+    final clamped = scale.clamp(0.7, 1.6);
+    setState(() => _lyricScale = clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_lyricScaleKey, clamped);
   }
 
   @override
@@ -1724,6 +1744,28 @@ class _LyricPlayerPageState extends State<_LyricPlayerPage>
             isPageActive: widget.isPageActive,
             isPageVisible: widget.isPageVisible,
             isPageTransitioning: widget.isPageTransitioning,
+            lyricScale: _lyricScale,
+          ),
+          // 字体大小调节按钮（左侧底部）
+          Positioned(
+            left: 0,
+            bottom: 16,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _GlassIconButton(
+                  tooltip: '缩小歌词',
+                  onPressed: () => _setLyricScale(_lyricScale - 0.1),
+                  icon: Icons.text_decrease_rounded,
+                ),
+                const SizedBox(width: 8),
+                _GlassIconButton(
+                  tooltip: '放大歌词',
+                  onPressed: () => _setLyricScale(_lyricScale + 0.1),
+                  icon: Icons.text_increase_rounded,
+                ),
+              ],
+            ),
           ),
           if (canToggleLyricDisplayMode)
             Positioned(
@@ -1760,6 +1802,7 @@ class _LyricViewport extends StatefulWidget {
     required this.isPageActive,
     required this.isPageVisible,
     required this.isPageTransitioning,
+    required this.lyricScale,
   });
 
   final PlayerController player;
@@ -1773,6 +1816,7 @@ class _LyricViewport extends StatefulWidget {
   final bool isPageActive;
   final bool isPageVisible;
   final bool isPageTransitioning;
+  final double lyricScale;
 
   @override
   State<_LyricViewport> createState() => _LyricViewportState();
@@ -2192,37 +2236,54 @@ class _LyricViewportState extends State<_LyricViewport>
                               child: child,
                             );
                           },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                RepaintBoundary(
-                                  child: _LyricText(
-                                    line: line,
-                                    active: active,
-                                    position: _framePosition,
-                                    reserveActiveLayout: true,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            // 双击歌词跳转播放进度
+                            onDoubleTap: () {
+                              widget.player.seek(line.time);
+                            },
+                            // 长按复制歌词
+                            onLongPress: () {
+                              Clipboard.setData(
+                                ClipboardData(text: line.text),
+                              );
+                              Toast.success('已复制歌词');
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  RepaintBoundary(
+                                    child: _LyricText(
+                                      line: line,
+                                      active: active,
+                                      position: _framePosition,
+                                      reserveActiveLayout: true,
+                                      textScale: widget.lyricScale,
+                                    ),
                                   ),
-                                ),
-                                if (secondaryText != null &&
-                                    secondaryText.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    secondaryText,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          color: Colors.white.withValues(
-                                            alpha: active ? .62 : .38,
+                                  if (secondaryText != null &&
+                                      secondaryText.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      secondaryText,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: Colors.white.withValues(
+                                              alpha: active ? .62 : .38,
+                                            ),
+                                            height: 1.28,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize:
+                                                16 * widget.lyricScale,
                                           ),
-                                          height: 1.28,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -2281,6 +2342,7 @@ class _LyricText extends StatelessWidget {
     this.textAlign = TextAlign.start,
     this.singleLine = false,
     this.reserveActiveLayout = false,
+    this.textScale = 1.0,
   });
 
   final LyricLine line;
@@ -2290,6 +2352,7 @@ class _LyricText extends StatelessWidget {
   final TextAlign textAlign;
   final bool singleLine;
   final bool reserveActiveLayout;
+  final double textScale;
 
   @override
   Widget build(BuildContext context) {
@@ -2301,7 +2364,7 @@ class _LyricText extends StatelessWidget {
         styleOverride ??
         Theme.of(context).textTheme.headlineMedium!.copyWith(
           color: Colors.white,
-          fontSize: active ? 34 : 27,
+          fontSize: (active ? 34 : 27) * textScale,
           height: 1.24,
           fontWeight: active ? FontWeight.w900 : FontWeight.w800,
         );
@@ -2373,7 +2436,7 @@ class _LyricText extends StatelessWidget {
   Widget _buildReservedLayoutText(BuildContext context) {
     final style = Theme.of(context).textTheme.headlineMedium!.copyWith(
       color: Colors.white,
-      fontSize: 34,
+      fontSize: 34 * textScale,
       height: 1.24,
       fontWeight: FontWeight.w900,
     );

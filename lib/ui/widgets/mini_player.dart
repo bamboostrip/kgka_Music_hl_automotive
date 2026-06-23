@@ -7,6 +7,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../pages/player_page.dart';
 import 'artwork.dart';
+import 'toast.dart';
 
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key, required this.player, required this.auth});
@@ -215,6 +216,16 @@ class MiniPlayer extends StatelessWidget {
                               color: colorScheme.onSurfaceVariant,
                             ),
                       ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: player.queue.length > 1
+                            ? () => _clearQueue(sheetContext)
+                            : null,
+                        child: Text(
+                          '清空',
+                          style: TextStyle(color: colorScheme.error),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -255,6 +266,9 @@ class MiniPlayer extends StatelessWidget {
                               Navigator.of(sheetContext).pop();
                               player.playSong(song, queue: player.queue);
                             },
+                            onDelete: player.queue.length > 1
+                                ? () => _removeFromQueue(sheetContext, index)
+                                : null,
                           );
                         },
                       );
@@ -268,6 +282,39 @@ class MiniPlayer extends StatelessWidget {
       },
     );
   }
+
+  /// 从队列中移除指定项（保留当前播放歌曲）。
+  void _removeFromQueue(BuildContext sheetContext, int index) {
+    final newQueue = List<Song>.of(player.queue);
+    if (index < 0 || index >= newQueue.length) return;
+    final removed = newQueue.removeAt(index);
+    final current = player.currentSong;
+    if (current == null) return;
+
+    if (removed.hash == current.hash) {
+      // 删除的是当前播放歌曲：切到同位置的新歌
+      final nextIndex = index.clamp(0, newQueue.length - 1);
+      if (newQueue.isEmpty) {
+        Navigator.of(sheetContext).pop();
+        player.playSong(current, queue: [current]);
+        return;
+      }
+      Navigator.of(sheetContext).pop();
+      player.playSong(newQueue[nextIndex], queue: newQueue);
+    } else {
+      // 非当前歌曲：仅更新队列，不打断播放
+      player.playSong(current, queue: newQueue);
+    }
+  }
+
+  /// 清空队列（仅保留当前播放歌曲）。
+  void _clearQueue(BuildContext sheetContext) {
+    final current = player.currentSong;
+    if (current == null) return;
+    Navigator.of(sheetContext).pop();
+    player.playSong(current, queue: [current]);
+    Toast.success('已清空播放队列');
+  }
 }
 
 class _QueueTile extends StatelessWidget {
@@ -277,6 +324,7 @@ class _QueueTile extends StatelessWidget {
     required this.active,
     required this.isPlaying,
     required this.onTap,
+    this.onDelete,
   });
 
   final Song song;
@@ -284,6 +332,7 @@ class _QueueTile extends StatelessWidget {
   final bool active;
   final bool isPlaying;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -352,6 +401,18 @@ class _QueueTile extends StatelessWidget {
                 size: 18,
                 color: colorScheme.primary,
               ),
+            if (onDelete != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                onPressed: onDelete,
+                visualDensity: VisualDensity.compact,
+                tooltip: '从队列移除',
+                color: colorScheme.onSurfaceVariant,
+                constraints: const BoxConstraints(),
+                padding: EdgeInsets.zero,
+              ),
+            ],
           ],
         ),
       ),

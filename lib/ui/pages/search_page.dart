@@ -6,9 +6,11 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
+import '../../services/search_history_service.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
+import '../widgets/toast.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({
@@ -42,11 +44,16 @@ class _SearchPageState extends State<SearchPage> {
   bool _searched = false;
   _SearchPlatform _platform = _SearchPlatform.kugou;
 
+  // 搜索历史
+  final _historyService = SearchHistoryService();
+  List<String> _searchHistory = const [];
+
   @override
   void initState() {
     super.initState();
     _focusNode.requestFocus();
     _loadHotKeywords();
+    _loadSearchHistory();
     _controller.addListener(_onTextChanged);
   }
 
@@ -72,6 +79,12 @@ class _SearchPageState extends State<SearchPage> {
         setState(() => _hotLoading = false);
       }
     }
+  }
+
+  /// 加载本地搜索历史。
+  Future<void> _loadSearchHistory() async {
+    final history = await _historyService.getHistory();
+    if (mounted) setState(() => _searchHistory = history);
   }
 
   void _onTextChanged() {
@@ -112,6 +125,9 @@ class _SearchPageState extends State<SearchPage> {
           ? await widget.api.searchNetEaseSongs(keywords)
           : await widget.api.searchSongs(keywords);
       if (mounted) setState(() => _results = songs);
+      // 搜索成功后记录历史（不阻塞 UI）
+      unawaited(_historyService.add(keywords));
+      _loadSearchHistory();
     } catch (error) {
       if (mounted) {
         setState(() => _results = const []);
@@ -250,10 +266,69 @@ class _SearchPageState extends State<SearchPage> {
       if (_hotLoading) {
         return const _HotSearchSkeleton();
       }
-      if (_hotCategories.isEmpty) {
-        return const SizedBox.shrink();
-      }
-      return _HotSearchPanel(categories: _hotCategories, onTap: _onKeywordTap);
+      // 历史记录 + 热搜面板共存于一个可滚动列表
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 160),
+        children: [
+          if (_searchHistory.isNotEmpty) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '搜索历史',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                        ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    await _historyService.clear();
+                    _loadSearchHistory();
+                    if (mounted) {
+                      Toast.show('已清空搜索历史', type: ToastType.info);
+                    }
+                  },
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 22,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _searchHistory.map((keyword) {
+                return _HistoryChip(
+                  keyword: keyword,
+                  onTap: () => _onKeywordTap(keyword),
+                  onDelete: () async {
+                    await _historyService.remove(keyword);
+                    _loadSearchHistory();
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+          ],
+          if (_hotCategories.isEmpty)
+            const SizedBox.shrink()
+          else
+            // 热搜面板内部使用 Column + Expanded 结构，
+            // 这里用固定高度 SizedBox 提供布局边界。
+            SizedBox(
+              height: 540,
+              child: _HotSearchPanel(
+                categories: _hotCategories,
+                onTap: _onKeywordTap,
+              ),
+            ),
+        ],
+      );
     }
 
     if (_suggestions.isNotEmpty) {
@@ -926,6 +1001,60 @@ class _EmptyResults extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 搜索历史标签 Chip。
+///
+/// 左侧为关键词，右侧带一个删除小图标；整体可点击触发搜索。
+class _HistoryChip extends StatelessWidget {
+  const _HistoryChip({
+    required this.keyword,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final String keyword;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: .6),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 14, top: 7, bottom: 7, right: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                keyword,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: onDelete,
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

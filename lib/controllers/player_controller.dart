@@ -14,6 +14,8 @@ import '../services/cache_service.dart';
 import '../services/desktop_lyrics_service.dart';
 import '../services/music_api.dart';
 import '../services/music_audio_handler.dart';
+import '../services/playback_history_service.dart';
+import '../services/playback_stats_service.dart';
 import 'download_controller.dart';
 
 enum PlaybackMode { playlistLoop, shuffle, singleLoop }
@@ -40,6 +42,7 @@ class PlayerController extends ChangeNotifier {
   static const _playbackSpeedSettingKey = 'settings.playback_speed';
   static const _desktopLyricsEnabledSettingKey = 'settings.desktop_lyrics_enabled';
   static const _desktopLyricsSettingsKey = 'settings.desktop_lyrics_settings';
+  static const _smartQualitySettingKey = 'settings.smart_quality_enabled';
   static const _listenTimeReportInterval = Duration(minutes: 30);
   static const _listenTimeCheckInterval = Duration(minutes: 1);
   static const _defaultEqualizerLevels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -136,6 +139,8 @@ class PlayerController extends ChangeNotifier {
   final MusicAudioHandler _audioHandler;
   final AudioEffectsService _audioEffects = AudioEffectsService();
   final DesktopLyricsService _desktopLyrics = DesktopLyricsService();
+  final PlaybackHistoryService _historyService = PlaybackHistoryService();
+  final PlaybackStatsService _statsService = PlaybackStatsService();
 
   AudioPlayer get audioPlayer => _audioHandler.audioPlayer;
 
@@ -174,6 +179,8 @@ class PlayerController extends ChangeNotifier {
   bool isPreparing = false;
   bool addListeningTimeEnabled = true;
   AudioQuality audioQuality = AudioQuality.standard;
+  /// 是否开启音质智能切换（播放失败时自动降级重试）。
+  bool smartQualityEnabled = false;
   double playbackSpeed = 1.0;
   bool equalizerEnabled = false;
   List<int> equalizerLevels = List<int>.of(_defaultEqualizerLevels);
@@ -311,18 +318,7 @@ class PlayerController extends ChangeNotifier {
       if (local != null) {
         url = local;
       } else {
-        final PlayUrl playUrl;
-        if (song.isCloudDrive) {
-          playUrl = await _api.cloudSongUrl(song);
-        } else if (song.source == SongSource.netease) {
-          // 网易云歌曲使用外链播放地址
-          playUrl = PlayUrl(
-            url: 'https://music.163.com/song/media/outer/url?id=${song.id}.mp3',
-            hash: song.hash,
-          );
-        } else {
-          playUrl = await _api.songUrl(song, quality: audioQuality);
-        }
+        final playUrl = await _resolvePlayUrl(song);
         if (playUrl.url.isEmpty) {
           throw Exception(
             song.isCloudDrive
@@ -344,7 +340,10 @@ class PlayerController extends ChangeNotifier {
       isPreparing = false;
       notifyListeners();
       unawaited(loadLyrics(song));
-      unawaited(_audioHandler.play());
+      await _audioHandler.play();
+      // 记录播放历史与本地播放统计（后台执行，不阻塞播放）
+      unawaited(_historyService.record(song));
+      unawaited(_statsService.recordPlay(song));
       // 首播后后台缓存（仅当本次用的是网络 URL）
       if (networkUrl != null) {
         unawaited(
@@ -360,6 +359,66 @@ class PlayerController extends ChangeNotifier {
         isPreparing = false;
         notifyListeners();
       }
+    }
+  }
+
+  /// 解析播放地址。
+  ///
+  /// - 云盘歌曲走 [MusicApi.cloudSongUrl]
+  /// - 网易云歌曲使用外链地址
+  /// - 其它歌曲走 [MusicApi.songUrl]，开启智能音质时在网络请求失败
+  ///   或返回空地址时自动降级重试（lossless -> high -> standard）。
+  Future<PlayUrl> _resolvePlayUrl(Song song) async {
+    if (song.isCloudDrive) {
+      return _api.cloudSongUrl(song);
+    }
+    if (song.source == SongSource.netease) {
+      // 网易云歌曲使用外链播放地址
+      return PlayUrl(
+        url: 'https://music.163.com/song/media/outer/url?id=${song.id}.mp3',
+        hash: song.hash,
+      );
+    }
+
+    try {
+      final playUrl = await _api.songUrl(song, quality: audioQuality);
+      if (playUrl.url.isNotEmpty || !smartQualityEnabled) {
+        return playUrl;
+      }
+      // 返回空地址：按智能音质策略降级重试
+      final fallback = _nextLowerQuality(audioQuality);
+      if (fallback == null) return playUrl;
+      return _api.songUrl(song, quality: fallback);
+    } catch (error) {
+      if (!smartQualityEnabled) rethrow;
+      // 网络请求失败：尝试降级重试
+      final fallback = _nextLowerQuality(audioQuality);
+      if (fallback == null) rethrow;
+      try {
+        final retryUrl = await _api.songUrl(song, quality: fallback);
+        if (retryUrl.url.isNotEmpty) {
+          debugPrint(
+            '[KA Music][smart-quality] ${audioQuality.badge} 失败，'
+            '已降级为 ${fallback.badge}',
+          );
+          return retryUrl;
+        }
+      } catch (_) {
+        // 降级也失败，抛出原始错误
+      }
+      rethrow;
+    }
+  }
+
+  /// 返回更低一档的音质；已是最低档时返回 null。
+  AudioQuality? _nextLowerQuality(AudioQuality quality) {
+    switch (quality) {
+      case AudioQuality.lossless:
+        return AudioQuality.high;
+      case AudioQuality.high:
+        return AudioQuality.standard;
+      case AudioQuality.standard:
+        return null;
     }
   }
 
@@ -419,6 +478,28 @@ class PlayerController extends ChangeNotifier {
       await _reloadCurrentSongForQuality();
     }
   }
+
+  /// 开关音质智能切换（播放失败时自动降级重试）。
+  Future<void> setSmartQualityEnabled(bool enabled) async {
+    if (smartQualityEnabled == enabled) return;
+    smartQualityEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_smartQualitySettingKey, enabled);
+    notifyListeners();
+  }
+
+  /// 读取本地播放统计。
+  Future<PlaybackStats> getPlaybackStats() => _statsService.getStats();
+
+  /// 清空本地播放统计。
+  Future<void> clearPlaybackStats() => _statsService.clear();
+
+  /// 读取播放历史。
+  Future<List<Song>> getPlaybackHistory({int limit = 100}) =>
+      _historyService.getHistory(limit: limit);
+
+  /// 清空播放历史。
+  Future<void> clearPlaybackHistory() => _historyService.clear();
 
   Future<void> setPlaybackSpeed(double speed) async {
     final clamped = speed.clamp(0.5, 3.0);
@@ -1074,6 +1155,8 @@ class PlayerController extends ChangeNotifier {
     audioQuality = AudioQuality.fromApiValue(
       prefs.getString(_audioQualitySettingKey),
     );
+    smartQualityEnabled =
+        prefs.getBool(_smartQualitySettingKey) ?? smartQualityEnabled;
     equalizerEnabled =
         prefs.getBool(_equalizerEnabledSettingKey) ?? equalizerEnabled;
     equalizerPresetName =
@@ -1243,6 +1326,8 @@ class PlayerController extends ChangeNotifier {
     _isReportingListenTime = true;
     try {
       await _api.addListeningTime();
+      // 上报成功，同步记录本地统计的听歌时长
+      unawaited(_statsService.addListenTime(_listenTimeReportInterval));
       final stillPlaying = isPlaying && currentSong != null;
       final remainder = _trackedListeningTime() - _listenTimeReportInterval;
       _pendingListenTime = remainder > Duration.zero

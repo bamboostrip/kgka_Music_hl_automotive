@@ -17,7 +17,7 @@ import 'artist_detail_page.dart';
 /// 缓存中完整歌单歌曲列表的 key 后缀。
 const _fullSongsCacheSuffix = '_full';
 
-
+enum _PlaylistAction { collect, deleteOrUncollect }
 
 class PlaylistDetailPage extends StatefulWidget {
   const PlaylistDetailPage({
@@ -432,7 +432,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     final options = <_ActionOption>[];
     if (!_isAlbum && !_isInLibrary) {
       options.add(_ActionOption(
-        icon: Icons.bookmark_add_outlined,
+        icon: Icons.bookmark_add_out_rounded,
         title: '收藏歌单',
         onTap: _collectPlaylist,
       ));
@@ -443,7 +443,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       options.add(_ActionOption(
         icon: isCreated
             ? Icons.delete_outline_rounded
-            : Icons.bookmark_remove_outlined,
+            : Icons.bookmark_remove_out_rounded,
         title: isAlbum
             ? '取消收藏专辑'
             : isCreated

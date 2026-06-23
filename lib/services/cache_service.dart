@@ -97,6 +97,45 @@ class CacheService {
     }
   }
 
+  /// 获取所有数据缓存的总大小（字节）。
+  ///
+  /// 遍历 SharedPreferences 中的所有 key，计算以 `cache_` 开头或
+  /// 歌单缓存相关 key 的字符串大小（UTF-16 每字符约 2 字节）。
+  Future<int> getCacheSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    var total = 0;
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('cache_') ||
+          key.startsWith('ka_music_cached_playlists')) {
+        final value = prefs.getString(key);
+        if (value != null) {
+          total += value.length * 2; // UTF-16 每字符约 2 字节
+        }
+      }
+    }
+    return total;
+  }
+
+  /// 获取缓存条目数量。
+  Future<int> getCacheCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs
+        .getKeys()
+        .where((key) => key.startsWith('cache_'))
+        .length;
+  }
+
+  /// 清除所有数据缓存（保留用户歌单索引等必要数据）。
+  Future<void> clearAllCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().toList();
+    for (final key in keys) {
+      if (key.startsWith('cache_')) {
+        await prefs.remove(key);
+      }
+    }
+  }
+
   /// stale-while-revalidate 封装。
   ///
   /// 流程：

@@ -226,6 +226,40 @@ class DownloadService {
     return 0;
   }
 
+  /// 获取下载目录的总大小（字节）。
+  Future<int> getDownloadDirSize() async {
+    try {
+      final dir = await downloadDir();
+      if (!dir.existsSync()) return 0;
+      var total = 0;
+      for (final entity in dir.listSync(recursive: true)) {
+        if (entity is File) {
+          total += entity.lengthSync();
+        }
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// 获取播放缓存目录的总大小（字节）。
+  Future<int> getPlayCacheDirSize() async {
+    try {
+      final dir = await playCacheDir();
+      if (!dir.existsSync()) return 0;
+      var total = 0;
+      for (final entity in dir.listSync(recursive: true)) {
+        if (entity is File) {
+          total += entity.lengthSync();
+        }
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// 清空整个播放缓存目录。
   Future<void> clearPlayCacheDir() async {
     final dir = await playCacheDir();

@@ -10,6 +10,7 @@ import '../widgets/artwork.dart';
 import '../widgets/toast.dart';
 import 'cloud_drive_page.dart';
 import 'downloaded_songs_page.dart';
+import 'playback_history_page.dart';
 import 'playlist_detail_page.dart';
 import 'settings_page.dart';
 
@@ -70,6 +71,8 @@ class _LibraryPageState extends State<LibraryPage>
           auth: widget.auth,
           player: widget.player,
           theme: widget.theme,
+          downloads: widget.downloads,
+          cache: widget.player.cacheService,
         ),
       ),
     );
@@ -222,6 +225,7 @@ class _LibraryPageState extends State<LibraryPage>
                       created: created,
                       collected: collected,
                       albums: albums,
+                      auth: widget.auth,
                       onOpen: _openPlaylist,
                     ),
                   ),
@@ -347,6 +351,22 @@ class _QuickActionRow extends StatelessWidget {
                   onTap: onOpenDownloads,
                 );
               },
+            ),
+            const SizedBox(width: 10),
+            _QuickActionCard(
+              icon: Icons.history_rounded,
+              iconColor: const Color.fromARGB(200, 255, 167, 38),
+              subtitle: '最近播放',
+              title: '历史',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PlaybackHistoryPage(
+                    api: api,
+                    auth: auth,
+                    player: player,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -549,12 +569,16 @@ class _TabItem extends StatelessWidget {
 
 // --- Tab 内容视图 ---
 
-class _PlaylistTabView extends StatelessWidget {
+/// 歌单排序模式。
+enum _PlaylistSortMode { defaultOrder, byName, bySongCount, byCreatedTime }
+
+class _PlaylistTabView extends StatefulWidget {
   const _PlaylistTabView({
     required this.controller,
     required this.created,
     required this.collected,
     required this.albums,
+    required this.auth,
     required this.onOpen,
   });
 
@@ -562,30 +586,366 @@ class _PlaylistTabView extends StatelessWidget {
   final List<PlaylistSummary> created;
   final List<PlaylistSummary> collected;
   final List<PlaylistSummary> albums;
+  final AuthController auth;
   final void Function(PlaylistSummary) onOpen;
+
+  @override
+  State<_PlaylistTabView> createState() => _PlaylistTabViewState();
+}
+
+class _PlaylistTabViewState extends State<_PlaylistTabView> {
+  _PlaylistSortMode _sortMode = _PlaylistSortMode.defaultOrder;
+
+  /// 多选模式状态：选中的歌单。
+  final Set<int> _selectedIndices = {};
+  bool _multiSelectMode = false;
+
+  List<PlaylistSummary> get _currentList {
+    final lists = [widget.created, widget.collected, widget.albums];
+    return lists[widget.controller.index.clamp(0, 2)];
+  }
+
+  /// 按当前排序模式返回新列表（不修改原列表）。
+  List<PlaylistSummary> _sortedPlaylists(List<PlaylistSummary> playlists) {
+    switch (_sortMode) {
+      case _PlaylistSortMode.byName:
+        final sorted = List<PlaylistSummary>.of(playlists);
+        sorted.sort((a, b) => a.title.compareTo(b.title));
+        return sorted;
+      case _PlaylistSortMode.bySongCount:
+        final sorted = List<PlaylistSummary>.of(playlists);
+        sorted.sort((a, b) => (b.songCount ?? 0).compareTo(a.songCount ?? 0));
+        return sorted;
+      case _PlaylistSortMode.byCreatedTime:
+      case _PlaylistSortMode.defaultOrder:
+        return playlists;
+    }
+  }
+
+  String get _sortModeLabel {
+    return switch (_sortMode) {
+      _PlaylistSortMode.defaultOrder => '默认排序',
+      _PlaylistSortMode.byName => '按名称',
+      _PlaylistSortMode.bySongCount => '按歌曲数',
+      _PlaylistSortMode.byCreatedTime => '按创建时间',
+    };
+  }
+
+  Future<void> _showSortSheet(BuildContext context) async {
+    final selected = await showModalBottomSheet<_PlaylistSortMode>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        final colorScheme = Theme.of(sheetContext).colorScheme;
+        final options = [
+          (_PlaylistSortMode.defaultOrder, '默认排序'),
+          (_PlaylistSortMode.byName, '按名称'),
+          (_PlaylistSortMode.bySongCount, '按歌曲数'),
+          (_PlaylistSortMode.byCreatedTime, '按创建时间'),
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '排序方式',
+                  style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Material(
+                  color: colorScheme.surfaceContainer,
+                  borderRadius: BorderRadius.circular(16),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < options.length; i++) ...[
+                        _SortOptionTile(
+                          label: options[i].$2,
+                          selected: _sortMode == options[i].$1,
+                          onTap: () =>
+                              Navigator.of(sheetContext).pop(options[i].$1),
+                        ),
+                        if (i < options.length - 1)
+                          Divider(
+                            height: 1,
+                            indent: 16,
+                            color: colorScheme.outlineVariant
+                                .withValues(alpha: .3),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null && selected != _sortMode) {
+      setState(() => _sortMode = selected);
+    }
+  }
+
+  void _enterMultiSelect(int index) {
+    setState(() {
+      _multiSelectMode = true;
+      _selectedIndices
+        ..clear()
+        ..add(index);
+    });
+  }
+
+  void _toggleSelected(int index) {
+    setState(() {
+      if (_selectedIndices.contains(index)) {
+        _selectedIndices.remove(index);
+        if (_selectedIndices.isEmpty) {
+          _multiSelectMode = false;
+        }
+      } else {
+        _selectedIndices.add(index);
+      }
+    });
+  }
+
+  void _exitMultiSelect() {
+    setState(() {
+      _multiSelectMode = false;
+      _selectedIndices.clear();
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    final playlists = _currentList;
+    final targets = _selectedIndices
+        .where((i) => i >= 0 && i < playlists.length)
+        .map((i) => playlists[i])
+        .toList();
+    if (targets.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除歌单'),
+        content: Text('确定要删除选中的 ${targets.length} 个歌单吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    for (final playlist in targets) {
+      try {
+        await widget.auth.deleteOrUncollectPlaylist(playlist);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (widget.auth.errorMessage != null) {
+      Toast.error('删除失败：${widget.auth.errorMessage}');
+    } else {
+      Toast.success('已删除 ${targets.length} 个歌单');
+    }
+    _exitMultiSelect();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
       child: AnimatedBuilder(
-        animation: controller,
+        animation: widget.controller,
         builder: (context, _) {
-          final lists = [created, collected, albums];
-          final current = lists[controller.index.clamp(0, 2)];
-          return AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            child: current.isEmpty
-                ? _EmptyGroup(key: ValueKey('empty_${controller.index}'))
-                : _PlaylistGroup(
-                    key: ValueKey('group_${controller.index}'),
-                    playlists: current,
-                    onOpen: onOpen,
+          final current = _currentList;
+          final sorted = _sortedPlaylists(current);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 多选模式下的操作栏
+              if (_multiSelectMode)
+                _MultiSelectBar(
+                  selectedCount: _selectedIndices.length,
+                  onCancel: _exitMultiSelect,
+                  onDelete: _deleteSelected,
+                ),
+              // 排序行（仅在有歌单且非多选模式时显示）
+              if (current.isNotEmpty && !_multiSelectMode)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, top: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        '共 ${current.length} 个',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showSortSheet(context),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.sort_rounded,
+                              size: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _sortModeLabel,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(width: 2),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: sorted.isEmpty
+                    ? _EmptyGroup(key: ValueKey('empty_${widget.controller.index}'))
+                    : _PlaylistGroup(
+                        key: ValueKey('group_${widget.controller.index}'),
+                        playlists: sorted,
+                        multiSelectMode: _multiSelectMode,
+                        selectedIndices: _selectedIndices,
+                        onOpen: widget.onOpen,
+                        onLongPress: _enterMultiSelect,
+                        onTapInMultiSelect: _toggleSelected,
+                      ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// 排序选项条目。
+class _SortOptionTile extends StatelessWidget {
+  const _SortOptionTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: selected ? colorScheme.primary : null,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+              ),
+            ),
+            if (selected)
+              Icon(
+                Icons.check_rounded,
+                size: 20,
+                color: colorScheme.primary,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 多选模式操作栏。
+class _MultiSelectBar extends StatelessWidget {
+  const _MultiSelectBar({
+    required this.selectedCount,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  final int selectedCount;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '取消',
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_rounded),
+          ),
+          Expanded(
+            child: Text(
+              '已选中 $selectedCount 项',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: selectedCount > 0 ? onDelete : null,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('删除'),
+            style: FilledButton.styleFrom(
+              foregroundColor: colorScheme.error,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -629,10 +989,18 @@ class _PlaylistGroup extends StatelessWidget {
     super.key,
     required this.playlists,
     required this.onOpen,
+    this.multiSelectMode = false,
+    this.selectedIndices = const {},
+    this.onLongPress,
+    this.onTapInMultiSelect,
   });
 
   final List<PlaylistSummary> playlists;
   final void Function(PlaylistSummary) onOpen;
+  final bool multiSelectMode;
+  final Set<int> selectedIndices;
+  final void Function(int index)? onLongPress;
+  final void Function(int index)? onTapInMultiSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -649,7 +1017,12 @@ class _PlaylistGroup extends StatelessWidget {
             for (var i = 0; i < playlists.length; i++) ...[
               _PlaylistRow(
                 playlist: playlists[i],
-                onTap: () => onOpen(playlists[i]),
+                selected: multiSelectMode && selectedIndices.contains(i),
+                multiSelectMode: multiSelectMode,
+                onTap: multiSelectMode
+                    ? () => onTapInMultiSelect?.call(i)
+                    : () => onOpen(playlists[i]),
+                onLongPress: () => onLongPress?.call(i),
               ),
               if (i < playlists.length - 1)
                 Divider(
@@ -668,20 +1041,53 @@ class _PlaylistGroup extends StatelessWidget {
 // --- Playlist row ---
 
 class _PlaylistRow extends StatelessWidget {
-  const _PlaylistRow({required this.playlist, required this.onTap});
+  const _PlaylistRow({
+    required this.playlist,
+    required this.onTap,
+    this.onLongPress,
+    this.selected = false,
+    this.multiSelectMode = false,
+  });
 
   final PlaylistSummary playlist;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
+  final bool multiSelectMode;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
-            Artwork(url: playlist.coverUrl, size: 44, borderRadius: 8),
+            // 多选模式下显示勾选标记，否则显示封面
+            if (multiSelectMode)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: selected
+                      ? Icon(
+                          Icons.check_circle_rounded,
+                          key: const ValueKey('checked'),
+                          size: 26,
+                          color: colorScheme.primary,
+                        )
+                      : Icon(
+                          Icons.radio_button_unchecked_rounded,
+                          key: const ValueKey('unchecked'),
+                          size: 26,
+                          color: colorScheme.outline,
+                        ),
+                ),
+              )
+            else
+              Artwork(url: playlist.coverUrl, size: 44, borderRadius: 8),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -703,17 +1109,18 @@ class _PlaylistRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: Theme.of(context).colorScheme.outline,
-            ),
+            if (!multiSelectMode)
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: colorScheme.outline,
+              ),
           ],
         ),
       ),

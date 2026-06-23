@@ -223,6 +223,12 @@ class DownloadController extends ChangeNotifier {
 
   List<PlayCacheEntry> get playCacheEntries => _playCache.values.toList();
 
+  /// 获取下载目录大小（字节）。
+  Future<int> getDownloadDirSize() => _service.getDownloadDirSize();
+
+  /// 获取播放缓存目录大小（字节）。
+  Future<int> getPlayCacheDirSize() => _service.getPlayCacheDirSize();
+
   // ===== 下载操作 =====
 
   /// 用户主动下载歌曲。
