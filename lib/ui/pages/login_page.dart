@@ -40,7 +40,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _sendCode() async {
     if (_codeSeconds > 0) return;
 
-    final mobile = _mobileController.text.trim();
+    final mobile = _mobileController.text.replaceAll(RegExp(r'\D'), '');
     if (!_mobilePattern.hasMatch(mobile)) {
       setState(() => _localError = '请输入正确的手机号');
       _mobileFocus.requestFocus();
@@ -77,8 +77,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
-    final mobile = _mobileController.text.trim();
-    final code = _codeController.text.trim();
+    final mobile = _mobileController.text.replaceAll(RegExp(r'\D'), '');
+    final code = _codeController.text.replaceAll(RegExp(r'\D'), '');
     if (!_mobilePattern.hasMatch(mobile)) {
       setState(() => _localError = '请输入正确的手机号');
       _mobileFocus.requestFocus();
@@ -587,6 +587,7 @@ class _LoginTextField extends StatelessWidget {
                         textInputAction: textInputAction,
                         readOnly: !enabled,
                         inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
                           LengthLimitingTextInputFormatter(maxLength),
                         ],
                         cursorColor: colorScheme.primary,

@@ -139,9 +139,15 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
       if (!mounted) return;
       setState(() {
-        _songs
-          ..clear()
-          ..addAll(allSongs);
+        // 增量追加：保留已有歌曲，仅追加尚未加载的歌曲，
+        // 避免先清空再重建列表导致滚动位置被强制重置。
+        final existingHashes = _songs.map((s) => s.hash).toSet();
+        for (final song in allSongs) {
+          if (song.hash.isNotEmpty && !existingHashes.contains(song.hash)) {
+            _songs.add(song);
+            existingHashes.add(song.hash);
+          }
+        }
         _allSongsLoaded = true;
         _hasMore = false;
         _isLoadingAllSongs = false;

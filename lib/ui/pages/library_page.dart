@@ -7,6 +7,7 @@ import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
+import '../widgets/toast.dart';
 import 'cloud_drive_page.dart';
 import 'downloaded_songs_page.dart';
 import 'playlist_detail_page.dart';
@@ -74,6 +75,25 @@ class _LibraryPageState extends State<LibraryPage>
     );
   }
 
+  Future<void> _showCreatePlaylistDialog() async {
+    final name = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) => _CreatePlaylistSheet(),
+    );
+    if (name == null) return;
+
+    await widget.auth.createPlaylist(name);
+    if (!mounted) return;
+    if (widget.auth.errorMessage != null) {
+      Toast.error('创建失败：${widget.auth.errorMessage}');
+    } else {
+      Toast.success('歌单已创建');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -133,6 +153,11 @@ class _LibraryPageState extends State<LibraryPage>
                                     fontSize: 22,
                                   ),
                             ),
+                          ),
+                          IconButton(
+                            tooltip: '创建歌单',
+                            onPressed: _showCreatePlaylistDialog,
+                            icon: const Icon(Icons.add_rounded),
                           ),
                           IconButton(
                             tooltip: '设置',
@@ -691,6 +716,94 @@ class _PlaylistRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 创建歌单 BottomSheet。
+///
+/// 作为独立 StatefulWidget，让 [TextField]、[FocusNode]、
+/// [TextEditingController] 的生命周期与 BottomSheet 内容一致，
+/// 由 Flutter 框架在卸载时统一清理依赖关系。
+class _CreatePlaylistSheet extends StatefulWidget {
+  @override
+  State<_CreatePlaylistSheet> createState() => _CreatePlaylistSheetState();
+}
+
+class _CreatePlaylistSheetState extends State<_CreatePlaylistSheet> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // 进入动画结束后再请求焦点，避免动画期间建立 TextInputConnection
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    final trimmed = (value ?? _controller.text).trim();
+    Navigator.of(context).pop(trimmed.isEmpty ? null : trimmed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '创建歌单',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            maxLength: 40,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              hintText: '请输入歌单名称',
+              counterText: '',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: _submit,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () => _submit(),
+                child: const Text('创建'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

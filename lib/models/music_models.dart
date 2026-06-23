@@ -292,15 +292,17 @@ class PlaylistSummary {
   }
 
   factory PlaylistSummary.fromRecommend(Map<String, dynamic> json) {
+    final globalCollectionId = asString(json['global_collection_id']);
+    final id = globalCollectionId ?? asString(json['specialid']) ?? '';
     return PlaylistSummary(
-      id:
-          asString(json['global_collection_id']) ??
-          asString(json['specialid']) ??
-          '',
+      id: id,
       title: asString(json['specialname']) ?? '未命名歌单',
       subtitle: asString(json['nickname']) ?? asString(json['intro']),
       coverUrl: normalizeImageUrl(asString(json['flexible_cover'])),
       playCount: asInt(json['play_count']),
+      // 标记来源 ID，避免被 isCollectedAlbum 误判为收藏专辑，
+      // 否则 PlaylistDetailPage 会走专辑加载分支导致歌曲列表为空。
+      sourceGlobalId: globalCollectionId ?? id,
     );
   }
 
