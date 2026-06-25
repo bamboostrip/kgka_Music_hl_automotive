@@ -50,9 +50,6 @@ KA Music 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 
 |:------:|:------:|:--------:|
 | ![我的](screenshots/library.jpg) | ![搜索](screenshots/search.jpg) | ![歌单](screenshots/playlist.jpg) |
 
-| 均衡器 |
-|:------:|
-| ![均衡器](screenshots/equalizer.jpg) |
 
 ---
 
