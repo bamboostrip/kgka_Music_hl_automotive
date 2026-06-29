@@ -1033,6 +1033,43 @@ class _PlaylistGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final size = MediaQuery.sizeOf(context);
+    final isWide = size.width >= 720;
+
+    if (isWide) {
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 340,
+          mainAxisExtent: 72,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: playlists.length,
+        itemBuilder: (context, i) {
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainer,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: _PlaylistRow(
+                playlist: playlists[i],
+                selected: multiSelectMode && selectedIndices.contains(i),
+                multiSelectMode: multiSelectMode,
+                onTap: multiSelectMode
+                    ? () => onTapInMultiSelect?.call(i)
+                    : () => onOpen(playlists[i]),
+                onLongPress: () => onLongPress?.call(i),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,

@@ -9,6 +9,7 @@ import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
+import '../adaptive_layout.dart';
 import 'artist_detail_page.dart';
 
 /// 播放历史页面：展示最近播放的歌曲列表，支持点击播放和清空。
@@ -98,73 +99,75 @@ class _PlaybackHistoryPageState extends State<PlaybackHistoryPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          FutureBuilder<List<Song>>(
-            future: _future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
+      body: AdaptiveContentPadding(
+        child: Stack(
+          children: [
+            FutureBuilder<List<Song>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return CustomScrollView(
+                    slivers: [
+                      _buildAppBar(context, colorScheme, 0),
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyOrError(
+                          icon: Icons.error_outline_rounded,
+                          title: '加载失败',
+                          message: '${snapshot.error}',
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                final songs = snapshot.data ?? const <Song>[];
                 return CustomScrollView(
                   slivers: [
-                    _buildAppBar(context, colorScheme, 0),
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyOrError(
-                        icon: Icons.error_outline_rounded,
-                        title: '加载失败',
-                        message: '${snapshot.error}',
+                    _buildAppBar(context, colorScheme, songs.length),
+                    if (songs.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyOrError(
+                          icon: Icons.history_rounded,
+                          title: '还没有播放记录',
+                          message: '播放过的歌曲会显示在这里',
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                        sliver: SliverList.separated(
+                          itemCount: songs.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 2),
+                          itemBuilder: (context, index) {
+                            final song = songs[index];
+                            return _HistorySongRow(
+                              song: song,
+                              index: index + 1,
+                              player: widget.player,
+                              onTap: () => _play(song, songs),
+                              onAddToPlaylist: () =>
+                                  _addSongToPlaylist(song),
+                              onViewArtist: () => _openArtist(song),
+                            );
+                          },
+                        ),
                       ),
-                    ),
                   ],
                 );
-              }
-              final songs = snapshot.data ?? const <Song>[];
-              return CustomScrollView(
-                slivers: [
-                  _buildAppBar(context, colorScheme, songs.length),
-                  if (songs.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyOrError(
-                        icon: Icons.history_rounded,
-                        title: '还没有播放记录',
-                        message: '播放过的歌曲会显示在这里',
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                      sliver: SliverList.separated(
-                        itemCount: songs.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 2),
-                        itemBuilder: (context, index) {
-                          final song = songs[index];
-                          return _HistorySongRow(
-                            song: song,
-                            index: index + 1,
-                            player: widget.player,
-                            onTap: () => _play(song, songs),
-                            onAddToPlaylist: () =>
-                                _addSongToPlaylist(song),
-                            onViewArtist: () => _openArtist(song),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: bottomInset + 10,
-            child: MiniPlayer(player: widget.player, auth: widget.auth),
-          ),
-        ],
+              },
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: bottomInset + 10,
+              child: MiniPlayer(player: widget.player, auth: widget.auth),
+            ),
+          ],
+        ),
       ),
     );
   }

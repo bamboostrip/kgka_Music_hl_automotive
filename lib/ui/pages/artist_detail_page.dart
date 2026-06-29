@@ -7,6 +7,7 @@ import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
+import '../adaptive_layout.dart';
 
 class ArtistDetailPage extends StatefulWidget {
   const ArtistDetailPage({
@@ -187,7 +188,8 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
         scrolledUnderElevation: 0,
         title: const SizedBox.shrink(),
       ),
-      body: CustomScrollView(
+      body: AdaptiveContentPadding(
+        child: CustomScrollView(
         controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
@@ -252,7 +254,8 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
           ],
         ],
       ),
-    );
+    ),
+  );
   }
 }
 

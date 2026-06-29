@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,13 +14,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// 通过 SharedPreferences 持久化，通过 ChangeNotifier 驱动 UI 重建。
 class ThemeController extends ChangeNotifier {
-  ThemeController();
+  ThemeController() {
+    _instance = this;
+  }
+
+  static ThemeController? _instance;
+  static ThemeController get instance => _instance!;
 
   // ===== SharedPreferences keys =====
   static const _seedColorKey = 'theme.seed_color';
   static const _bgEnabledKey = 'theme.bg_enabled';
   static const _bgImagePathKey = 'theme.bg_image_path';
   static const _bgOpacityKey = 'theme.bg_opacity';
+  static const _landscapeEnabledKey = 'theme.landscape_enabled';
 
   /// 预设种子色列表。
   static const presetColors = <_PresetColor>[
@@ -37,11 +44,16 @@ class ThemeController extends ChangeNotifier {
   bool _backgroundEnabled = false;
   String? _backgroundImagePath;
   double _backgroundOpacity = 0.15;
+  bool _landscapeEnabled = false;
+
+  bool? _lastAppliedIsTablet;
+  bool? _lastAppliedLandscapeEnabled;
 
   Color get seedColor => _seedColor;
   bool get backgroundEnabled => _backgroundEnabled;
   String? get backgroundImagePath => _backgroundImagePath;
   double get backgroundOpacity => _backgroundOpacity;
+  bool get landscapeEnabled => _landscapeEnabled;
 
   /// 是否使用了非默认种子色。
   bool get hasCustomSeedColor => _seedColor != const Color(0xFF1478FF);
@@ -55,6 +67,7 @@ class ThemeController extends ChangeNotifier {
     }
     _backgroundEnabled = prefs.getBool(_bgEnabledKey) ?? false;
     _backgroundImagePath = prefs.getString(_bgImagePathKey);
+    _landscapeEnabled = prefs.getBool(_landscapeEnabledKey) ?? false;
     final opacity = prefs.getDouble(_bgOpacityKey);
     if (opacity != null) {
       _backgroundOpacity = opacity.clamp(0.0, 0.8);
@@ -78,6 +91,39 @@ class ThemeController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_bgEnabledKey, enabled);
     notifyListeners();
+  }
+
+  /// 开启/关闭横屏模式。
+  Future<void> setLandscapeEnabled(bool enabled, bool isTablet) async {
+    if (_landscapeEnabled == enabled) return;
+    _landscapeEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_landscapeEnabledKey, enabled);
+    applyOrientations(isTablet);
+    notifyListeners();
+  }
+
+  /// 动态应用屏幕方向锁定/解锁。
+  void applyOrientations(bool isTablet) {
+    if (_lastAppliedIsTablet == isTablet &&
+        _lastAppliedLandscapeEnabled == _landscapeEnabled) {
+      return;
+    }
+    _lastAppliedIsTablet = isTablet;
+    _lastAppliedLandscapeEnabled = _landscapeEnabled;
+
+    if (isTablet || _landscapeEnabled) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+      ]);
+    }
   }
 
   /// 设置背景图路径（null 表示清除）。

@@ -9,6 +9,7 @@ import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import 'artist_detail_page.dart';
+import '../adaptive_layout.dart';
 
 /// 用户云盘音乐页面。
 class CloudDrivePage extends StatefulWidget {
@@ -154,89 +155,91 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
 
     return Scaffold(
       extendBody: true,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              SliverAppBar(
-                pinned: true,
-                expandedHeight: 198,
-                surfaceTintColor: Colors.transparent,
-                title: const Text(
-                  '云盘',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                ),
-                flexibleSpace: FlexibleSpaceBar(
-                  stretchModes: const [StretchMode.zoomBackground],
-                  background: _CloudHeader(info: _info),
-                ),
-              ),
-              if (_isInitialLoading)
-                const _CloudSkeleton()
-              else if (_errorMessage case final message?)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _CloudError(message: message, onRetry: _loadInitial),
-                )
-              else ...[
-                SliverToBoxAdapter(
-                  child: _Actions(
-                    count: _info?.totalCount ?? _songs.length,
-                    loadedCount: _songs.length,
-                    onPlay: _songs.isEmpty
-                        ? null
-                        : () => widget.player.playSong(
-                            _songs.first,
-                            queue: List<Song>.of(_songs),
-                          ),
+      body: AdaptiveContentPadding(
+        child: Stack(
+          children: [
+            CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverAppBar(
+                  pinned: true,
+                  expandedHeight: 198,
+                  surfaceTintColor: Colors.transparent,
+                  title: const Text(
+                    '云盘',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  flexibleSpace: FlexibleSpaceBar(
+                    stretchModes: const [StretchMode.zoomBackground],
+                    background: _CloudHeader(info: _info),
                   ),
                 ),
-                if (_songs.isEmpty)
-                  const SliverFillRemaining(
+                if (_isInitialLoading)
+                  const _CloudSkeleton()
+                else if (_errorMessage case final message?)
+                  SliverFillRemaining(
                     hasScrollBody: false,
-                    child: _EmptyState(),
+                    child: _CloudError(message: message, onRetry: _loadInitial),
                   )
                 else ...[
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                    sliver: SliverList.separated(
-                      itemCount: _songs.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 2),
-                      itemBuilder: (context, index) {
-                        final song = _songs[index];
-                        return _CloudSongRow(
-                          song: song,
-                          index: index + 1,
-                          player: widget.player,
-                          onTap: () => widget.player.playSong(
-                            song,
-                            queue: List<Song>.of(_songs),
-                          ),
-                          onViewArtist: () => _openArtist(song),
-                        );
-                      },
-                    ),
-                  ),
                   SliverToBoxAdapter(
-                    child: _LoadMoreFooter(
-                      hasMore: _hasMore,
-                      isLoading: _isLoadingMore,
-                      errorMessage: _loadMoreError,
-                      onRetry: _loadMore,
+                    child: _Actions(
+                      count: _info?.totalCount ?? _songs.length,
+                      loadedCount: _songs.length,
+                      onPlay: _songs.isEmpty
+                          ? null
+                          : () => widget.player.playSong(
+                              _songs.first,
+                              queue: List<Song>.of(_songs),
+                            ),
                     ),
                   ),
+                  if (_songs.isEmpty)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _EmptyState(),
+                    )
+                  else ...[
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                      sliver: SliverList.separated(
+                        itemCount: _songs.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 2),
+                        itemBuilder: (context, index) {
+                          final song = _songs[index];
+                          return _CloudSongRow(
+                            song: song,
+                            index: index + 1,
+                            player: widget.player,
+                            onTap: () => widget.player.playSong(
+                              song,
+                              queue: List<Song>.of(_songs),
+                            ),
+                            onViewArtist: () => _openArtist(song),
+                          );
+                        },
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: _LoadMoreFooter(
+                        hasMore: _hasMore,
+                        isLoading: _isLoadingMore,
+                        errorMessage: _loadMoreError,
+                        onRetry: _loadMore,
+                      ),
+                    ),
+                  ],
                 ],
               ],
-            ],
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: bottomInset + 10,
-            child: MiniPlayer(player: widget.player, auth: widget.auth),
-          ),
-        ],
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: bottomInset + 10,
+              child: MiniPlayer(player: widget.player, auth: widget.auth),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -20,6 +20,7 @@ import 'desktop_lyrics_settings_page.dart';
 import 'personalization_settings_page.dart';
 import 'playback_history_page.dart';
 import 'playback_stats_page.dart';
+import '../adaptive_layout.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -58,10 +59,11 @@ class SettingsPage extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(title: const Text('设置')),
         body: AnimatedBuilder(
-          animation: Listenable.merge([auth, player, localMusic]),
+          animation: Listenable.merge([auth, player, localMusic, theme]),
           builder: (context, _) {
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            return AdaptiveContentPadding(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
                 // Account section
                 _SectionHeader(title: '账号'),
@@ -270,6 +272,17 @@ class SettingsPage extends StatelessWidget {
                         ),
                       ),
                     ),
+                    _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.screen_rotation_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '横屏模式',
+                      subtitle: '允许手机横屏时自动旋转（平板默认开启）',
+                      value: theme.landscapeEnabled,
+                      onChanged: (value) {
+                        theme.setLandscapeEnabled(value, AdaptiveLayout.isTablet(context));
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -294,9 +307,10 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
               ],
-            );
-          },
-        ),
+            ),
+          );
+        },
+      ),
       ),
     );
   }

@@ -12,6 +12,7 @@ import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
+import '../adaptive_layout.dart';
 import 'artist_detail_page.dart';
 
 /// 缓存中完整歌单歌曲列表的 key 后缀。
@@ -603,7 +604,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
     return Scaffold(
       extendBody: true,
-      body: Stack(
+      body: AdaptiveContentPadding(
+        child: Stack(
         children: [
           CustomScrollView(
             controller: _scrollController,
@@ -785,7 +787,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }
 

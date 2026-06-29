@@ -610,7 +610,7 @@ class _FeatureShelf extends StatelessWidget {
         builder: (context, constraints) {
           final cardSize = (constraints.maxWidth - 10) / 2;
           return SizedBox(
-            height: cardSize,
+            height: cardSize.clamp(140.0, 200.0),
             child: Row(
               children: [
                 Expanded(
@@ -798,6 +798,10 @@ class _SongSectionState extends State<_SongSection> {
       return const SizedBox.shrink();
     }
 
+    final size = MediaQuery.sizeOf(context);
+    final isWide = size.width >= 720;
+    final rowCount = isWide ? (_perPage / 2).ceil() : _perPage;
+
     return AnimatedBuilder(
       animation: widget.auth,
       builder: (context, _) {
@@ -820,7 +824,7 @@ class _SongSectionState extends State<_SongSection> {
               ),
               const SizedBox(height: 8),
               SizedBox(
-                height: _perPage * 76.0,
+                height: rowCount * 76.0,
                 child: PageView.builder(
                   controller: _pageController,
                   itemCount: _pageCount,
@@ -829,6 +833,50 @@ class _SongSectionState extends State<_SongSection> {
                     final start = pageIndex * _perPage;
                     final end = (start + _perPage).clamp(0, widget.songs.length);
                     final pageSongs = widget.songs.sublist(start, end);
+
+                    if (isWide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < pageSongs.length; i += 2)
+                                  _HomeSongRow(
+                                    song: pageSongs[i],
+                                    queue: widget.songs,
+                                    onPlay: widget.onPlay,
+                                    isLiked: widget.isLiked(pageSongs[i]),
+                                    onLikeTap: () => widget.onLikeTap(pageSongs[i]),
+                                    auth: widget.auth,
+                                    player: widget.player,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (pageSongs.length > 1) ...[
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  for (var i = 1; i < pageSongs.length; i += 2)
+                                    _HomeSongRow(
+                                      song: pageSongs[i],
+                                      queue: widget.songs,
+                                      onPlay: widget.onPlay,
+                                      isLiked: widget.isLiked(pageSongs[i]),
+                                      onLikeTap: () => widget.onLikeTap(pageSongs[i]),
+                                      auth: widget.auth,
+                                      player: widget.player,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    }
+
                     return Column(
                       children: [
                         for (final song in pageSongs)

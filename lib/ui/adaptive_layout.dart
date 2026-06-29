@@ -29,19 +29,25 @@ class AdaptiveLayout {
 /// 平板端：将内容居中并限制最大宽度为 [AdaptiveLayout.contentMaxWidth]，
 /// 避免在宽屏平板上内容横向拉伸到难以阅读的宽度。
 class AdaptiveContentPadding extends StatelessWidget {
-  const AdaptiveContentPadding({super.key, required this.child});
+  const AdaptiveContentPadding({
+    super.key,
+    required this.child,
+    this.maxWidth,
+  });
 
   final Widget child;
+  final double? maxWidth;
 
   @override
   Widget build(BuildContext context) {
-    if (!AdaptiveLayout.isTablet(context)) {
+    final size = MediaQuery.sizeOf(context);
+    if (size.width < 600) {
       return child;
     }
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: AdaptiveLayout.contentMaxWidth,
+        constraints: BoxConstraints(
+          maxWidth: maxWidth ?? AdaptiveLayout.contentMaxWidth,
         ),
         child: child,
       ),

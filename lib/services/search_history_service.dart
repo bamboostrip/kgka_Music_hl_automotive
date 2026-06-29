@@ -14,14 +14,14 @@ class SearchHistoryService {
   Future<List<String>> getHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
-    if (raw == null) return const [];
+    if (raw == null) return [];
     try {
       final list = jsonDecode(raw);
       if (list is List) {
         return list.whereType<String>().toList();
       }
     } catch (_) {}
-    return const [];
+    return [];
   }
 
   /// 新增一条搜索词，去重并截断至上限。

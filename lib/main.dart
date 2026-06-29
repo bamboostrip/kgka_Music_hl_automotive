@@ -15,6 +15,7 @@ import 'services/cache_service.dart';
 import 'services/download_service.dart';
 import 'services/music_audio_handler.dart';
 import 'services/music_api.dart';
+import 'ui/adaptive_layout.dart';
 import 'ui/app_theme.dart';
 import 'ui/pages/app_shell.dart';
 import 'ui/pages/login_page.dart';
@@ -22,9 +23,6 @@ import 'ui/widgets/toast.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations(const [
-    DeviceOrientation.portraitUp,
-  ]);
   await AppConfig.loadCustomBaseUrl();
 
   final client = ApiClient();
@@ -126,6 +124,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    _theme.applyOrientations(AdaptiveLayout.isTablet(context));
     return AnimatedBuilder(
       animation: _theme,
       builder: (context, _) {

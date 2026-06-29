@@ -7,6 +7,7 @@ import '../../services/app_update_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/app_update_widgets.dart';
 import '../widgets/toast.dart';
+import '../adaptive_layout.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key, required this.api});
@@ -62,7 +63,8 @@ class _AboutPageState extends State<AboutPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: CustomScrollView(
+      body: AdaptiveContentPadding(
+        child: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
@@ -188,7 +190,8 @@ class _AboutPageState extends State<AboutPage> {
           ],
         ],
       ),
-    );
+    ),
+  );
   }
 }
 

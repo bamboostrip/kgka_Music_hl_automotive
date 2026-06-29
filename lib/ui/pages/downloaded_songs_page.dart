@@ -6,6 +6,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
+import '../adaptive_layout.dart';
 
 /// 已下载歌曲与播放缓存管理页。
 class DownloadedSongsPage extends StatefulWidget {
@@ -55,17 +56,19 @@ class _DownloadedSongsPageState extends State<DownloadedSongsPage>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _DownloadedList(
-            api: widget.api,
-            auth: widget.auth,
-            player: widget.player,
-            downloads: widget.downloads,
-          ),
-          _PlayCacheList(downloads: widget.downloads),
-        ],
+      body: AdaptiveContentPadding(
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _DownloadedList(
+              api: widget.api,
+              auth: widget.auth,
+              player: widget.player,
+              downloads: widget.downloads,
+            ),
+            _PlayCacheList(downloads: widget.downloads),
+          ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/player_controller.dart';
 import '../../services/playback_stats_service.dart';
 import '../widgets/toast.dart';
+import '../adaptive_layout.dart';
 
 /// 播放统计页面：展示累计播放次数、听歌时长、最常听歌手/歌曲 Top 10。
 class PlaybackStatsPage extends StatefulWidget {
@@ -78,22 +79,24 @@ class _PlaybackStatsPageState extends State<PlaybackStatsPage> {
           ),
         ],
       ),
-      body: FutureBuilder<PlaybackStats>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return _ErrorView(message: '${snapshot.error}');
-          }
-          final stats = snapshot.data ?? const PlaybackStats();
-          if (stats.totalPlays == 0 &&
-              stats.totalListenTime == Duration.zero) {
-            return const _EmptyView();
-          }
-          return _StatsContent(stats: stats);
-        },
+      body: AdaptiveContentPadding(
+        child: FutureBuilder<PlaybackStats>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return _ErrorView(message: '${snapshot.error}');
+            }
+            final stats = snapshot.data ?? const PlaybackStats();
+            if (stats.totalPlays == 0 &&
+                stats.totalListenTime == Duration.zero) {
+              return const _EmptyView();
+            }
+            return _StatsContent(stats: stats);
+          },
+        ),
       ),
     );
   }

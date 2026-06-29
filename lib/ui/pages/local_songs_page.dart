@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import '../adaptive_layout.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/local_music_controller.dart';
 import '../widgets/toast.dart';
@@ -150,9 +151,10 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
           ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: Listenable.merge([widget.localMusic, widget.player]),
-        builder: (context, _) {
+      body: AdaptiveContentPadding(
+        child: AnimatedBuilder(
+          animation: Listenable.merge([widget.localMusic, widget.player]),
+          builder: (context, _) {
           final dir = widget.localMusic.localMusicDir;
           if (dir == null || dir.isEmpty) {
             return Center(
@@ -331,11 +333,12 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
                               );
                             },
                           ),
-              ),
+                        ),
             ],
           );
         },
       ),
-    );
+    ),
+  );
   }
 }

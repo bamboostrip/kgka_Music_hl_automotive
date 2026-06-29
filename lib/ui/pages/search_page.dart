@@ -8,9 +8,11 @@ import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../../services/search_history_service.dart';
 import '../widgets/artwork.dart';
+import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
+import '../adaptive_layout.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({
@@ -125,9 +127,9 @@ class _SearchPageState extends State<SearchPage> {
           ? await widget.api.searchNetEaseSongs(keywords)
           : await widget.api.searchSongs(keywords);
       if (mounted) setState(() => _results = songs);
-      // 搜索成功后记录历史（不阻塞 UI）
-      unawaited(_historyService.add(keywords));
-      _loadSearchHistory();
+      // 搜索成功后记录历史
+      await _historyService.add(keywords);
+      await _loadSearchHistory();
     } catch (error) {
       if (mounted) {
         setState(() => _results = const []);
@@ -219,9 +221,23 @@ class _SearchPageState extends State<SearchPage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: widget.auth,
-        builder: (context, _) => _buildBody(context),
+      body: AdaptiveContentPadding(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: widget.auth,
+                builder: (context, _) => _buildBody(context),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.paddingOf(context).bottom + 10,
+              child: MiniPlayer(player: widget.player, auth: widget.auth),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -321,7 +337,7 @@ class _SearchPageState extends State<SearchPage> {
             // 热搜面板内部使用 Column + Expanded 结构，
             // 这里用固定高度 SizedBox 提供布局边界。
             SizedBox(
-              height: 540,
+              height: 550,
               child: _HotSearchPanel(
                 categories: _hotCategories,
                 onTap: _onKeywordTap,
@@ -522,7 +538,7 @@ class _HotSearchPanelState extends State<_HotSearchPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 0, 0),
+          padding: const EdgeInsets.only(top: 8),
           child: Text(
             '热搜',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -536,7 +552,7 @@ class _HotSearchPanelState extends State<_HotSearchPanel> {
           height: 36,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            padding: EdgeInsets.zero,
             itemCount: categories.length,
             separatorBuilder: (_, _) => const SizedBox(width: 10),
             itemBuilder: (context, index) {
@@ -640,7 +656,9 @@ class _CategoryKeywordList extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 160),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: keywords.length,
       itemBuilder: (context, index) {
         final item = keywords[index];
@@ -648,7 +666,7 @@ class _CategoryKeywordList extends StatelessWidget {
         return InkWell(
           onTap: () => onTap(item.keyword),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 11),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
                 SizedBox(

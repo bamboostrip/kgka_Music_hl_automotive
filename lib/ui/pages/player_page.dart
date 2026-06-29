@@ -10,7 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
+import '../adaptive_layout.dart';
 import '../widgets/audio_effects_sheet.dart';
 import '../widgets/audio_quality_sheet.dart';
 import '../widgets/artwork.dart';
@@ -23,7 +25,11 @@ import 'comment_page.dart';
 import 'desktop_lyrics_settings_page.dart';
 
 class PlayerPage extends StatefulWidget {
-  const PlayerPage({super.key, required this.player, required this.auth});
+  const PlayerPage({
+    super.key,
+    required this.player,
+    required this.auth,
+  });
 
   final PlayerController player;
   final AuthController auth;
@@ -50,7 +56,18 @@ class _PlayerPageState extends State<PlayerPage> {
   void dispose() {
     unawaited(_setKeepScreenOn(false));
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    
+    final isTablet = AdaptiveLayout.isTablet(context);
+    if (isTablet || ThemeController.instance.landscapeEnabled) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+    }
     super.dispose();
   }
 
