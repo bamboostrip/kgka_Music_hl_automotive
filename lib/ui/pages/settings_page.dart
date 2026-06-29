@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
+import '../../controllers/local_music_controller.dart';
 import '../../services/app_update_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
@@ -26,6 +28,7 @@ class SettingsPage extends StatelessWidget {
     required this.auth,
     required this.player,
     required this.theme,
+    required this.localMusic,
     this.cache,
     this.downloads,
   });
@@ -34,6 +37,7 @@ class SettingsPage extends StatelessWidget {
   final AuthController auth;
   final PlayerController player;
   final ThemeController theme;
+  final LocalMusicController localMusic;
   final CacheService? cache;
   final DownloadController? downloads;
 
@@ -54,7 +58,7 @@ class SettingsPage extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(title: const Text('设置')),
         body: AnimatedBuilder(
-          animation: Listenable.merge([auth, player]),
+          animation: Listenable.merge([auth, player, localMusic]),
           builder: (context, _) {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -198,6 +202,21 @@ class SettingsPage extends StatelessWidget {
                         ),
                       ],
                     ],
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Local Music section
+                _SectionHeader(title: '本地'),
+                const SizedBox(height: 8),
+                _SettingsCard(
+                  children: [
+                    _SettingsTile(
+                      icon: Icons.computer_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '本地音乐目录',
+                      subtitle: localMusic.localMusicDir ?? '未设置',
+                      onTap: () => _selectOrClearDir(context, localMusic),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -390,6 +409,73 @@ class SettingsPage extends StatelessWidget {
           ? '已切换到 ${AppConfig.customBaseUrl}，重启后生效'
           : '已恢复默认 API 地址，重启后生效',
     );
+  }
+
+  Future<void> _selectOrClearDir(BuildContext context, LocalMusicController localMusic) async {
+    final dir = localMusic.localMusicDir;
+    if (dir == null || dir.isEmpty) {
+      await _pickLocalMusicDir(context, localMusic);
+      return;
+    }
+
+    final option = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  '当前目录: $dir',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.folder_open_rounded),
+                title: const Text('选择新目录'),
+                onTap: () => Navigator.of(context).pop(1),
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
+                title: Text('清除目录', style: TextStyle(color: colorScheme.error)),
+                onTap: () => Navigator.of(context).pop(2),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!context.mounted) return;
+    if (option == 1) {
+      await _pickLocalMusicDir(context, localMusic);
+    } else if (option == 2) {
+      await localMusic.setLocalMusicDir(null);
+      Toast.success('已清除本地目录');
+    }
+  }
+
+  Future<void> _pickLocalMusicDir(BuildContext context, LocalMusicController localMusic) async {
+    try {
+      final path = await FilePicker.getDirectoryPath();
+      if (path == null) return;
+      await localMusic.setLocalMusicDir(path);
+      Toast.success('设置成功并开始扫描');
+    } catch (e) {
+      debugPrint('Error picking folder: $e');
+      Toast.error('选择文件夹失败：$e');
+    }
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

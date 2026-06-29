@@ -13,6 +13,8 @@ import 'downloaded_songs_page.dart';
 import 'playback_history_page.dart';
 import 'playlist_detail_page.dart';
 import 'settings_page.dart';
+import 'local_songs_page.dart';
+import '../../controllers/local_music_controller.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({
@@ -22,6 +24,7 @@ class LibraryPage extends StatefulWidget {
     required this.player,
     required this.downloads,
     required this.theme,
+    required this.localMusic,
   });
 
   final MusicApi api;
@@ -29,6 +32,7 @@ class LibraryPage extends StatefulWidget {
   final PlayerController player;
   final DownloadController downloads;
   final ThemeController theme;
+  final LocalMusicController localMusic;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
@@ -73,6 +77,7 @@ class _LibraryPageState extends State<LibraryPage>
           theme: widget.theme,
           downloads: widget.downloads,
           cache: widget.player.cacheService,
+          localMusic: widget.localMusic,
         ),
       ),
     );
@@ -184,6 +189,7 @@ class _LibraryPageState extends State<LibraryPage>
                       auth: widget.auth,
                       downloads: widget.downloads,
                       player: widget.player,
+                      localMusic: widget.localMusic,
                       api: widget.api,
                       onOpenLiked: widget.auth.likedPlaylist == null
                           ? null
@@ -300,6 +306,7 @@ class _QuickActionRow extends StatelessWidget {
     required this.auth,
     required this.downloads,
     required this.player,
+    required this.localMusic,
     required this.api,
     required this.onOpenLiked,
     required this.onOpenDownloads,
@@ -309,6 +316,7 @@ class _QuickActionRow extends StatelessWidget {
   final AuthController auth;
   final DownloadController downloads;
   final PlayerController player;
+  final LocalMusicController localMusic;
   final MusicApi api;
   final VoidCallback? onOpenLiked;
   final VoidCallback onOpenDownloads;
@@ -349,6 +357,26 @@ class _QuickActionRow extends StatelessWidget {
                   subtitle: '${downloads.downloadedSongs.length} 首歌曲',
                   title: '已下载',
                   onTap: onOpenDownloads,
+                );
+              },
+            ),
+            const SizedBox(width: 10),
+            AnimatedBuilder(
+              animation: localMusic,
+              builder: (context, _) {
+                return _QuickActionCard(
+                  icon: Icons.computer_rounded,
+                  iconColor: const Color.fromARGB(200, 76, 175, 80),
+                  subtitle: '${localMusic.songs.length} 首歌曲',
+                  title: '本地',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LocalSongsPage(
+                        player: player,
+                        localMusic: localMusic,
+                      ),
+                    ),
+                  ),
                 );
               },
             ),

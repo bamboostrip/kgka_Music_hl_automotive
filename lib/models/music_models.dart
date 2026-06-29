@@ -404,6 +404,8 @@ enum SongSource {
   kugou,
   /// 网易云音乐
   netease,
+  /// 本地音乐
+  local,
 }
 
 class Song {

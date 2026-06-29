@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:audio_session/audio_session.dart';
@@ -199,6 +200,7 @@ class PlayerController extends ChangeNotifier {
   Timer? _sleepTimer;
   DateTime? _sleepTimerEnd;
   bool _sleepFinishCurrentSong = false;
+  bool _sleepFinishCurrentSongOption = false;
   String? errorMessage;
   int seekRevision = 0;
   int? _androidAudioSessionId;
@@ -317,6 +319,8 @@ class PlayerController extends ChangeNotifier {
       final local = downloadController?.localPathFor(song, audioQuality);
       if (local != null) {
         url = local;
+      } else if (song.source == SongSource.local) {
+        url = song.id;
       } else {
         final playUrl = await _resolvePlayUrl(song);
         if (playUrl.url.isEmpty) {
@@ -369,6 +373,9 @@ class PlayerController extends ChangeNotifier {
   /// - 其它歌曲走 [MusicApi.songUrl]，开启智能音质时在网络请求失败
   ///   或返回空地址时自动降级重试（lossless -> high -> standard）。
   Future<PlayUrl> _resolvePlayUrl(Song song) async {
+    if (song.source == SongSource.local) {
+      return PlayUrl(url: song.id, hash: song.hash);
+    }
     if (song.isCloudDrive) {
       return _api.cloudSongUrl(song);
     }
@@ -603,6 +610,39 @@ class PlayerController extends ChangeNotifier {
     final cache = cacheService;
     final cacheKey = 'cache_lyric_${song.hash}';
 
+    if (song.source == SongSource.local) {
+      try {
+        final songFile = File(song.id);
+        final dotIndex = songFile.path.lastIndexOf('.');
+        final lrcPath = '${dotIndex != -1 ? songFile.path.substring(0, dotIndex) : songFile.path}.lrc';
+        final file = File(lrcPath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          String content;
+          try {
+            content = utf8.decode(bytes);
+          } catch (_) {
+            content = utf8.decode(bytes, allowMalformed: true);
+          }
+          final lines = parseLyrics(content);
+          if (currentSong?.hash == song.hash) {
+            lyrics = lines;
+            notifyListeners();
+            _syncDesktopLyrics();
+          }
+          return;
+        }
+      } catch (e) {
+        debugPrint('Failed to load local lyrics: $e');
+      }
+      if (currentSong?.hash == song.hash) {
+        lyrics = const [];
+        notifyListeners();
+        _syncDesktopLyrics();
+      }
+      return;
+    }
+
     // 1. 先读缓存，命中则立即显示（无感）
     if (cache != null) {
       try {
@@ -714,6 +754,7 @@ class PlayerController extends ChangeNotifier {
     try {
       if (_sleepFinishCurrentSong) {
         _sleepFinishCurrentSong = false;
+        _sleepFinishCurrentSongOption = false;
         sleepTimerRemaining = null;
         notifyListeners();
         unawaited(_audioHandler.pause());
@@ -781,6 +822,8 @@ class PlayerController extends ChangeNotifier {
       final local = downloadController?.localPathFor(song, audioQuality);
       if (local != null) {
         url = local;
+      } else if (song.source == SongSource.local) {
+        url = song.id;
       } else {
         final PlayUrl playUrl;
         if (song.isCloudDrive) {
@@ -1124,9 +1167,11 @@ class PlayerController extends ChangeNotifier {
       sleepTimerRemaining != null && sleepTimerRemaining! > Duration.zero;
 
   bool get isSleepFinishCurrentSong => _sleepFinishCurrentSong;
+  bool get sleepFinishCurrentSongOption => _sleepFinishCurrentSongOption;
 
-  /// Set a sleep timer that pauses playback immediately when it expires.
-  void setSleepTimer(Duration duration) {
+  /// Set a sleep timer that pauses playback immediately or after current song finishes when it expires.
+  void setSleepTimer(Duration duration, {bool finishCurrentSong = false}) {
+    _sleepFinishCurrentSongOption = finishCurrentSong;
     _sleepFinishCurrentSong = false;
     _sleepTimer?.cancel();
     _sleepTimerEnd = DateTime.now().add(duration);
@@ -1138,7 +1183,15 @@ class PlayerController extends ChangeNotifier {
       if (end == null) return;
       final remaining = end.difference(DateTime.now());
       if (remaining <= Duration.zero) {
-        _executeSleepTimer();
+        if (_sleepFinishCurrentSongOption) {
+          _sleepTimer?.cancel();
+          _sleepTimer = null;
+          _sleepTimerEnd = null;
+          _sleepFinishCurrentSong = true;
+          notifyListeners();
+        } else {
+          _executeSleepTimer();
+        }
       } else {
         sleepTimerRemaining = remaining;
         notifyListeners();
@@ -1148,28 +1201,21 @@ class PlayerController extends ChangeNotifier {
 
   /// Set a sleep timer that finishes the current song, then stops.
   void setSleepTimerFinishSong(Duration duration) {
-    _sleepFinishCurrentSong = false;
-    _sleepTimer?.cancel();
-    _sleepTimerEnd = DateTime.now().add(duration);
-    sleepTimerRemaining = duration;
-    notifyListeners();
+    setSleepTimer(duration, finishCurrentSong: true);
+  }
 
-    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final end = _sleepTimerEnd;
-      if (end == null) return;
-      final remaining = end.difference(DateTime.now());
-      if (remaining <= Duration.zero) {
-        _sleepTimer?.cancel();
-        _sleepTimer = null;
-        _sleepTimerEnd = null;
-        _sleepFinishCurrentSong = true;
-        // Keep sleepTimerRemaining showing a "finishing" state
-        notifyListeners();
+  /// Update the sleep timer finish song option dynamically.
+  void updateSleepTimerOption(bool finishCurrentSong) {
+    if (_sleepTimer != null || _sleepFinishCurrentSong) {
+      _sleepFinishCurrentSongOption = finishCurrentSong;
+      // If the timer has already expired and is waiting for song to finish,
+      // and they turn it OFF, we should stop immediately.
+      if (!finishCurrentSong && _sleepFinishCurrentSong) {
+        _executeSleepTimer();
       } else {
-        sleepTimerRemaining = remaining;
         notifyListeners();
       }
-    });
+    }
   }
 
   void cancelSleepTimer() {
@@ -1177,6 +1223,7 @@ class PlayerController extends ChangeNotifier {
     _sleepTimer = null;
     _sleepTimerEnd = null;
     _sleepFinishCurrentSong = false;
+    _sleepFinishCurrentSongOption = false;
     sleepTimerRemaining = null;
     notifyListeners();
   }
@@ -1186,6 +1233,7 @@ class PlayerController extends ChangeNotifier {
     _sleepTimer = null;
     _sleepTimerEnd = null;
     _sleepFinishCurrentSong = false;
+    _sleepFinishCurrentSongOption = false;
     sleepTimerRemaining = null;
     notifyListeners();
     unawaited(_audioHandler.pause());

@@ -8,6 +8,7 @@ import 'config/app_config.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/player_controller.dart';
+import 'controllers/local_music_controller.dart';
 import 'controllers/theme_controller.dart';
 import 'core/api_client.dart';
 import 'services/cache_service.dart';
@@ -75,6 +76,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
   late final AuthController _auth;
   late final PlayerController _player;
   late final ThemeController _theme;
+  late final LocalMusicController _localMusic;
 
   @override
   void initState() {
@@ -86,6 +88,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
     _downloadService = DownloadService();
     _downloads = DownloadController(_downloadService, _api);
     _auth = AuthController(_api, _cacheService);
+    _localMusic = LocalMusicController();
     _player = PlayerController(_api, widget.audioHandler)
       ..downloadController = _downloads
       ..cacheService = _cacheService;
@@ -100,6 +103,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
     _auth.dispose();
     _player.dispose();
     _downloads.dispose();
+    _localMusic.dispose();
     _downloadService.dispose();
     _client.close();
     super.dispose();
@@ -158,6 +162,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
                 cache: _cacheService,
                 downloads: _downloads,
                 theme: _theme,
+                localMusic: _localMusic,
               );
             },
           ),

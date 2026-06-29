@@ -32,7 +32,7 @@ class _SleepTimerSheetState extends State<_SleepTimerSheet> {
   void initState() {
     super.initState();
     widget.player.addListener(_onPlayerUpdate);
-    _finishSong = widget.player.isSleepFinishCurrentSong;
+    _finishSong = widget.player.isSleepFinishCurrentSong || widget.player.sleepFinishCurrentSongOption;
   }
 
   @override
@@ -42,7 +42,11 @@ class _SleepTimerSheetState extends State<_SleepTimerSheet> {
   }
 
   void _onPlayerUpdate() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        _finishSong = widget.player.isSleepFinishCurrentSong || widget.player.sleepFinishCurrentSongOption;
+      });
+    }
   }
 
   void _setTimer(Duration duration) {
@@ -101,7 +105,10 @@ class _SleepTimerSheetState extends State<_SleepTimerSheet> {
               ),
               child: SwitchListTile(
                 value: _finishSong,
-                onChanged: (v) => setState(() => _finishSong = v),
+                onChanged: (v) {
+                  setState(() => _finishSong = v);
+                  widget.player.updateSleepTimerOption(v);
+                },
                 title: const Text('播完当前歌曲再停止'),
                 subtitle: const Text('定时结束后，等当前歌曲播放完毕再暂停'),
                 contentPadding: const EdgeInsets.symmetric(

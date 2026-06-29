@@ -44,7 +44,11 @@ class MusicAudioHandler extends BaseAudioHandler
       queue.add(items);
     }
     mediaItem.add(currentItem);
-    await audioPlayer.setUrl(url);
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      await audioPlayer.setUrl(url);
+    } else {
+      await audioPlayer.setAudioSource(AudioSource.file(url));
+    }
   }
 
   @override

@@ -4,6 +4,7 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
+import '../../controllers/local_music_controller.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/mini_player.dart';
@@ -19,6 +20,7 @@ class AppShell extends StatefulWidget {
     required this.cache,
     required this.downloads,
     required this.theme,
+    required this.localMusic,
   });
 
   final MusicApi api;
@@ -27,6 +29,7 @@ class AppShell extends StatefulWidget {
   final CacheService cache;
   final DownloadController downloads;
   final ThemeController theme;
+  final LocalMusicController localMusic;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -41,7 +44,14 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _pages = [
       HomePage(api: widget.api, auth: widget.auth, player: widget.player, cache: widget.cache),
-      LibraryPage(api: widget.api, auth: widget.auth, player: widget.player, downloads: widget.downloads, theme: widget.theme),
+      LibraryPage(
+        api: widget.api,
+        auth: widget.auth,
+        player: widget.player,
+        downloads: widget.downloads,
+        theme: widget.theme,
+        localMusic: widget.localMusic,
+      ),
     ];
   }
 
