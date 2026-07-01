@@ -13,6 +13,7 @@ import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
+import 'artist_detail_page.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({
@@ -166,6 +167,28 @@ class _SearchPageState extends State<SearchPage> {
     widget.player.playSong(song, queue: _results);
   }
 
+  void _openArtist(Song song) {
+    if (song.source != SongSource.kugou) {
+      Toast.info('其他平台歌曲暂不支持查看歌手');
+      return;
+    }
+    final artist = song.artists.firstWhere(
+      (a) => a.name.isNotEmpty,
+      orElse: () => const ArtistRef(id: '', name: ''),
+    );
+    if (artist.name.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArtistDetailPage(
+          api: widget.api,
+          auth: widget.auth,
+          artist: artist,
+          player: widget.player,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -275,6 +298,7 @@ class _SearchPageState extends State<SearchPage> {
               onLikeTap: (song) => widget.auth.toggleLike(song),
               auth: widget.auth,
               player: widget.player,
+              onViewArtist: _openArtist,
             );
     }
 
@@ -781,6 +805,7 @@ class _SearchResults extends StatelessWidget {
     required this.onLikeTap,
     required this.auth,
     required this.player,
+    required this.onViewArtist,
   });
 
   final List<Song> songs;
@@ -789,6 +814,7 @@ class _SearchResults extends StatelessWidget {
   final void Function(Song song) onLikeTap;
   final AuthController auth;
   final PlayerController player;
+  final void Function(Song song) onViewArtist;
 
   @override
   Widget build(BuildContext context) {
@@ -929,6 +955,11 @@ class _SearchResults extends StatelessWidget {
                                       auth: auth,
                                       song: song,
                                     ),
+                                  ),
+                                  SongSheetAction(
+                                    icon: Icons.person_rounded,
+                                    title: '查看歌手',
+                                    onTap: () => onViewArtist(song),
                                   ),
                                   if (player.downloadController != null)
                                     SongSheetAction(

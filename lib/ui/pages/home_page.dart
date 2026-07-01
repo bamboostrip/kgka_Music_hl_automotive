@@ -14,6 +14,7 @@ import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import 'album_shop_page.dart';
+import 'artist_detail_page.dart';
 import 'playlist_detail_page.dart';
 import 'search_page.dart';
 
@@ -239,6 +240,24 @@ class _HomePageState extends State<HomePage> {
     widget.player.playSong(song, queue: queue);
   }
 
+  void _openArtist(Song song) {
+    final artist = song.artists.firstWhere(
+      (a) => a.name.isNotEmpty,
+      orElse: () => const ArtistRef(id: '', name: ''),
+    );
+    if (artist.name.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArtistDetailPage(
+          api: widget.api,
+          auth: widget.auth,
+          artist: artist,
+          player: widget.player,
+        ),
+      ),
+    );
+  }
+
   void _openAlbumShop() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -320,6 +339,7 @@ class _HomePageState extends State<HomePage> {
                               onLikeTap: (song) => widget.auth.toggleLike(song),
                               auth: widget.auth,
                               player: widget.player,
+                              onViewArtist: _openArtist,
                             ),
                             _PlaylistRail(
                               playlists: data.playlists,
@@ -759,6 +779,7 @@ class _SongSection extends StatefulWidget {
     required this.onLikeTap,
     required this.auth,
     required this.player,
+    required this.onViewArtist,
   });
 
   final String title;
@@ -768,6 +789,7 @@ class _SongSection extends StatefulWidget {
   final void Function(Song song) onLikeTap;
   final AuthController auth;
   final PlayerController player;
+  final void Function(Song song) onViewArtist;
 
   @override
   State<_SongSection> createState() => _SongSectionState();
@@ -850,6 +872,7 @@ class _SongSectionState extends State<_SongSection> {
                                     onLikeTap: () => widget.onLikeTap(pageSongs[i]),
                                     auth: widget.auth,
                                     player: widget.player,
+                                    onViewArtist: () => widget.onViewArtist(pageSongs[i]),
                                   ),
                               ],
                             ),
@@ -868,6 +891,7 @@ class _SongSectionState extends State<_SongSection> {
                                       onLikeTap: () => widget.onLikeTap(pageSongs[i]),
                                       auth: widget.auth,
                                       player: widget.player,
+                                      onViewArtist: () => widget.onViewArtist(pageSongs[i]),
                                     ),
                                 ],
                               ),
@@ -888,6 +912,7 @@ class _SongSectionState extends State<_SongSection> {
                             onLikeTap: () => widget.onLikeTap(song),
                             auth: widget.auth,
                             player: widget.player,
+                            onViewArtist: () => widget.onViewArtist(song),
                           ),
                       ],
                     );
@@ -935,6 +960,7 @@ class _HomeSongRow extends StatelessWidget {
     required this.onLikeTap,
     required this.auth,
     required this.player,
+    required this.onViewArtist,
   });
 
   final Song song;
@@ -944,6 +970,7 @@ class _HomeSongRow extends StatelessWidget {
   final VoidCallback onLikeTap;
   final AuthController auth;
   final PlayerController player;
+  final VoidCallback onViewArtist;
 
   @override
   Widget build(BuildContext context) {
@@ -1060,6 +1087,11 @@ class _HomeSongRow extends StatelessWidget {
                             auth: auth,
                             song: song,
                           ),
+                        ),
+                        SongSheetAction(
+                          icon: Icons.person_rounded,
+                          title: '查看歌手',
+                          onTap: onViewArtist,
                         ),
                         if (player.downloadController != null)
                           SongSheetAction(
