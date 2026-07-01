@@ -5,6 +5,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
+import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../adaptive_layout.dart';
@@ -179,6 +180,9 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    // MiniPlayer 高度约 64，距底部 16，合计预留空间防止遮挡最后一首歌
+    final miniPlayerSpace = bottomInset + 64 + 16;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -189,73 +193,100 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
         title: const SizedBox.shrink(),
       ),
       body: AdaptiveContentPadding(
-        child: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverToBoxAdapter(
-            child: _ArtistHeader(detail: _detail, fallback: widget.artist),
-          ),
-          if (_isInitialLoading)
-            const _ArtistDetailSkeleton()
-          else if (_errorMessage case final message?)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _ArtistDetailError(
-                message: message,
-                onRetry: _loadInitial,
-              ),
-            )
-          else ...[
-            SliverToBoxAdapter(
-              child: _SongSectionHeader(
-                count: _songs.length,
-                onPlayAll: _songs.isEmpty
-                    ? null
-                    : () => widget.player.playSong(
-                        _songs.first,
-                        queue: List<Song>.of(_songs),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _ArtistHeader(detail: _detail, fallback: widget.artist),
+                  ),
+                  if (_isInitialLoading)
+                    const _ArtistDetailSkeleton()
+                  else if (_errorMessage case final message?)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _ArtistDetailError(
+                        message: message,
+                        onRetry: _loadInitial,
                       ),
+                    )
+                  else ...[
+                    SliverToBoxAdapter(
+                      child: _SongSectionHeader(
+                        count: _songs.length,
+                        onPlayAll: _songs.isEmpty
+                            ? null
+                            : () => widget.player.playSong(
+                                _songs.first,
+                                queue: List<Song>.of(_songs),
+                              ),
+                      ),
+                    ),
+                    if (_songs.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyArtistSongs(),
+                      )
+                    else ...[
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        sliver: SliverList.separated(
+                          itemCount: _songs.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 2),
+                          itemBuilder: (context, index) {
+                            final song = _songs[index];
+                            return _ArtistSongRow(
+                              song: song,
+                              auth: widget.auth,
+                              player: widget.player,
+                              onTap: () => widget.player.playSong(
+                                song,
+                                queue: List<Song>.of(_songs),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _ArtistLoadMoreFooter(
+                          hasMore: _hasMore,
+                          isLoading: _isLoadingMore,
+                          errorMessage: _loadMoreError,
+                          onRetry: _loadMore,
+                        ),
+                      ),
+                      // 底部留白：播放中时为 MiniPlayer 预留空间，
+                      // 防止卡片遮挡导致用户点不到最底部的几首歌。
+                      SliverToBoxAdapter(
+                        child: AnimatedBuilder(
+                          animation: widget.player,
+                          builder: (context, _) {
+                            final hasSong = widget.player.currentSong != null;
+                            return SizedBox(height: hasSong ? miniPlayerSpace : 0);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
               ),
             ),
-            if (_songs.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EmptyArtistSongs(),
-              )
-            else ...[
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                sliver: SliverList.separated(
-                  itemCount: _songs.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 2),
-                  itemBuilder: (context, index) {
-                    final song = _songs[index];
-                    return _ArtistSongRow(
-                      song: song,
-                      auth: widget.auth,
-                      player: widget.player,
-                      onTap: () => widget.player.playSong(
-                        song,
-                        queue: List<Song>.of(_songs),
-                      ),
-                    );
-                  },
-                ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: bottomInset + 16,
+              child: MiniPlayer(
+                player: widget.player,
+                auth: widget.auth,
               ),
-              SliverToBoxAdapter(
-                child: _ArtistLoadMoreFooter(
-                  hasMore: _hasMore,
-                  isLoading: _isLoadingMore,
-                  errorMessage: _loadMoreError,
-                  onRetry: _loadMore,
-                ),
-              ),
-            ],
+            ),
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
   }
 }
 
