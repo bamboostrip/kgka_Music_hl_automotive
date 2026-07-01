@@ -1007,7 +1007,7 @@ List<ArtistRef> parseArtists(
     );
   }
 
-  for (final key in const ['singerinfo', 'authors', 'author', 'singers']) {
+  for (final key in const ['singerinfo', 'authors', 'author', 'singers', 'Singers']) {
     final value = json[key];
     if (value is List) {
       for (final item in value.whereType<Map<String, dynamic>>()) {
