@@ -21,6 +21,22 @@ class AdaptiveLayout {
     final size = MediaQuery.sizeOf(context);
     return size.shortestSide >= 600;
   }
+
+  /// 不依赖 [BuildContext] 的平板判断。
+  ///
+  /// 直接从 [PlatformDispatcher] 读取屏幕物理尺寸换算为逻辑像素。
+  /// 适用于 [State.dispose] 等 context 已失效、无法调用
+  /// [MediaQuery.sizeOf] 的场景，否则会触发
+  /// `Null check operator used on a null value` 异常。
+  static bool isTabletByPlatform() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return false;
+    final view = views.first;
+    final physical = view.physicalSize;
+    if (physical.isEmpty) return false;
+    final size = physical / view.devicePixelRatio;
+    return size.shortestSide >= 600;
+  }
 }
 
 /// 自适应内容内边距。

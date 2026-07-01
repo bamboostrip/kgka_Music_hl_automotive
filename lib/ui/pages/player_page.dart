@@ -57,7 +57,7 @@ class _PlayerPageState extends State<PlayerPage> {
     unawaited(_setKeepScreenOn(false));
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     
-    final isTablet = AdaptiveLayout.isTablet(context);
+    final isTablet = AdaptiveLayout.isTabletByPlatform();
     if (isTablet || ThemeController.instance.landscapeEnabled) {
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
