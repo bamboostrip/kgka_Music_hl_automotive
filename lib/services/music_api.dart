@@ -86,6 +86,16 @@ class MusicApi {
     await _client.post('/login/logout');
   }
 
+  Future<QrCodeInfo> getQrCode() async {
+    final json = asMap(await _client.get('/login/qr/key'));
+    return QrCodeInfo.fromJson(json);
+  }
+
+  Future<QrCheckResult> checkQrStatus(String key) async {
+    final json = asMap(await _client.get('/login/qr/check', {'key': key}));
+    return QrCheckResult.fromJson(json);
+  }
+
   Future<UserProfile> userDetail() async {
     final json = asMap(await _client.get('/user/detail'));
     return UserProfile.fromJson(json);

@@ -151,7 +151,7 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
             animation: _auth,
             builder: (context, _) {
               if (!_auth.isRestoring && !_auth.isLoggedIn) {
-                return LoginPage(auth: _auth);
+                return LoginPage(auth: _auth, api: _api);
               }
 
               return AppShell(

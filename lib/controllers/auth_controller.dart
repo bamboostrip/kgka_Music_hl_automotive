@@ -284,6 +284,22 @@ class AuthController extends ChangeNotifier {
     await _run(() => _api.sendLoginCode(mobile));
   }
 
+  Future<void> loginWithSession(LoginSession session) async {
+    await _run(() async {
+      this.session = session;
+      _api.setSession(session);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenKey, session.token ?? '');
+      await prefs.setString(_t1Key, session.t1 ?? '');
+      await prefs.setString(_sessionIdKey, session.sessionId ?? '');
+      await prefs.setString(_userIdKey, session.userId ?? '');
+
+      await refreshProfile(silent: true);
+      _vipBackgroundTask.schedule(session);
+    });
+  }
+
   Future<PhoneLoginResult?> login(
     String mobile,
     String code, {
