@@ -7,12 +7,14 @@ import 'package:flutter/services.dart';
 import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/music_models.dart';
+import '../../services/music_api.dart';
 import '../widgets/toast.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.auth});
+  const LoginPage({super.key, required this.auth, required this.api});
 
   final AuthController auth;
+  final MusicApi api;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -29,9 +31,17 @@ class _LoginPageState extends State<LoginPage> {
   String? _localError;
   int _codeSeconds = 0;
 
+  var _tabIndex = 0;
+  QrCodeInfo? _qrCode;
+  String _qrStatusText = '';
+  bool _qrLoading = false;
+  bool _qrExpired = false;
+  Timer? _qrPollTimer;
+
   @override
   void dispose() {
     _codeTimer?.cancel();
+    _qrPollTimer?.cancel();
     _mobileController.dispose();
     _codeController.dispose();
     _mobileFocus.dispose();
@@ -96,9 +106,8 @@ class _LoginPageState extends State<LoginPage> {
     final result = await widget.auth.login(mobile, code);
     if (!mounted || result?.requiresUserSelection != true) {
       return;
-    }
-    await _showAccountSelection(result!.accounts, mobile, code, result.message);
   }
+}
 
   Future<void> _showAccountSelection(
     List<MobileLoginAccount> accounts,
@@ -196,6 +205,69 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  Future<void> _loadQrCode() async {
+    _qrPollTimer?.cancel();
+    setState(() {
+      _qrCode = null;
+      _qrStatusText = '获取二维码中...';
+      _qrLoading = true;
+      _qrExpired = false;
+    });
+    try {
+      final qr = await widget.api.getQrCode();
+      if (!mounted) return;
+      setState(() {
+        _qrCode = qr;
+        _qrLoading = false;
+        _qrStatusText = '请使用酷狗音乐App扫码';
+      });
+      _startQrPolling(qr.key);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _qrLoading = false;
+        _qrStatusText = '获取二维码失败，点击重试';
+        _qrExpired = true;
+      });
+    }
+  }
+
+  void _startQrPolling(String key) {
+    _qrPollTimer?.cancel();
+    _qrPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final result = await widget.api.checkQrStatus(key);
+        if (!mounted) return;
+        if (result.isSuccess) {
+          _qrPollTimer?.cancel();
+          final session = LoginSession(
+            userId: result.userId ?? '',
+            token: result.token ?? '',
+            nickname: result.nickname,
+            avatarUrl: result.avatar,
+          );
+          await widget.auth.loginWithSession(session);
+          return;
+        }
+        if (result.isExpired) {
+          _qrPollTimer?.cancel();
+          setState(() {
+            _qrStatusText = '二维码已过期，点击刷新';
+            _qrExpired = true;
+          });
+          return;
+        }
+        setState(() {
+          _qrStatusText = result.isWaitingForConfirm
+              ? '扫码成功，请在手机上确认'
+              : '请使用酷狗音乐App扫码';
+        });
+      } catch (_) {
+        if (!mounted) return;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -250,18 +322,35 @@ class _LoginPageState extends State<LoginPage> {
                             children: [
                               _LoginHeader(colorScheme: colorScheme),
                               const SizedBox(height: 28),
-                              _LoginForm(
-                                auth: widget.auth,
-                                codeController: _codeController,
-                                codeFocus: _codeFocus,
-                                codeSeconds: _codeSeconds,
-                                errorText:
-                                    _localError ?? widget.auth.errorMessage,
-                                mobileController: _mobileController,
-                                mobileFocus: _mobileFocus,
-                                onLogin: _login,
-                                onSendCode: _sendCode,
+                              _LoginTabBar(
+                                selectedIndex: _tabIndex,
+                                onChanged: (i) {
+                                  setState(() => _tabIndex = i);
+                                  if (i == 1) _loadQrCode();
+                                },
                               ),
+                              const SizedBox(height: 20),
+                              if (_tabIndex == 0)
+                                _LoginForm(
+                                  auth: widget.auth,
+                                  codeController: _codeController,
+                                  codeFocus: _codeFocus,
+                                  codeSeconds: _codeSeconds,
+                                  errorText:
+                                      _localError ?? widget.auth.errorMessage,
+                                  mobileController: _mobileController,
+                                  mobileFocus: _mobileFocus,
+                                  onLogin: _login,
+                                  onSendCode: _sendCode,
+                                )
+                              else
+                                _QrLoginForm(
+                                  qrCode: _qrCode,
+                                  isLoading: _qrLoading,
+                                  statusText: _qrStatusText,
+                                  isExpired: _qrExpired,
+                                  onRefresh: _loadQrCode,
+                                ),
                             ],
                           ),
                         ),
@@ -794,6 +883,252 @@ class _PrimaryLoginButton extends StatelessWidget {
                 ),
               ),
       ),
+    );
+  }
+}
+
+class _LoginTabBar extends StatelessWidget {
+  const _LoginTabBar({required this.selectedIndex, required this.onChanged});
+
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: .68),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(0),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: selectedIndex == 0
+                      ? colorScheme.surface
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '手机号登录',
+                  style: TextStyle(
+                    color: selectedIndex == 0
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: selectedIndex == 1
+                      ? colorScheme.surface
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '扫码登录',
+                  style: TextStyle(
+                    color: selectedIndex == 1
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QrLoginForm extends StatelessWidget {
+  const _QrLoginForm({
+    required this.qrCode,
+    required this.isLoading,
+    required this.statusText,
+    required this.isExpired,
+    required this.onRefresh,
+  });
+
+  final QrCodeInfo? qrCode;
+  final bool isLoading;
+  final String statusText;
+  final bool isExpired;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: .92),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .06),
+            blurRadius: 24,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              Padding(
+                padding: const EdgeInsets.all(60),
+                child: CircularProgressIndicator(
+                  color: colorScheme.primary,
+                ),
+              )
+            else if (qrCode != null && qrCode!.imageUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _QrImage(
+                  imageUrl: qrCode!.imageUrl,
+                  size: 200,
+                  fallbackColor: colorScheme.surfaceContainerHighest,
+                  iconColor: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  Icons.qr_code_2_rounded,
+                  size: 80,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            const SizedBox(height: 24),
+            Text(
+              statusText,
+              style: textTheme.bodyMedium?.copyWith(
+                color: isExpired
+                    ? colorScheme.error
+                    : colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (isExpired) ...[
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: onRefresh,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    '刷新二维码',
+                    style: TextStyle(
+                      color: colorScheme.onPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 渲染二维码图片。
+///
+/// 后端 `/login/qr/key` 返回的 `qrcode_img` 是 `data:image/png;base64,...`
+/// 形式的 data URI，[Image.network] 无法直接加载，会触发 "Width is zero"
+/// 渲染警告并导致二维码不显示。这里自动识别 data URI 并走 [Image.memory]，
+/// 普通 http(s) URL 仍走 [Image.network]。
+class _QrImage extends StatelessWidget {
+  const _QrImage({
+    required this.imageUrl,
+    required this.size,
+    required this.fallbackColor,
+    required this.iconColor,
+  });
+
+  final String imageUrl;
+  final double size;
+  final Color fallbackColor;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget fallback() => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: fallbackColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(
+            Icons.qr_code_2_rounded,
+            size: 80,
+            color: iconColor,
+          ),
+        );
+
+    final uri = Uri.tryParse(imageUrl);
+    if (uri == null) return fallback();
+
+    // data:image/png;base64,... -> 解码字节后用 Image.memory 渲染
+    final data = uri.data;
+    if (data != null) {
+      final bytes = data.contentAsBytes();
+      if (bytes.isEmpty) return fallback();
+      return Image.memory(
+        bytes,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => fallback(),
+      );
+    }
+
+    return Image.network(
+      imageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => fallback(),
     );
   }
 }

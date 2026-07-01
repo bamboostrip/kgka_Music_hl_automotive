@@ -284,6 +284,61 @@ class AuthController extends ChangeNotifier {
     await _run(() => _api.sendLoginCode(mobile));
   }
 
+  Future<void> loginWithSession(LoginSession session) async {
+    await _run(() async {
+      this.session = session;
+      _api.setSession(session);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenKey, session.token ?? '');
+      await prefs.setString(_t1Key, session.t1 ?? '');
+      // session.sessionId 可能为 null（扫码登录），但 ApiClient 内部
+      // 已从登录响应 header 保存了后端的 session key，这里也持久化一份。
+      await prefs.setString(_sessionIdKey, _api.clientSessionId ?? '');
+      await prefs.setString(_userIdKey, session.userId ?? '');
+
+      // 扫码登录返回的 QrLoginStatusResponse 只有 token，缺少 t1。
+      // 后续 /user/detail 等接口需要 t1 header 鉴权，否则会失败导致
+      // profile/歌单拉取不到。这里先调 /login/token 刷新拿到 t1。
+      if (session.t1 == null || session.t1!.isEmpty) {
+        try {
+          final refreshed = await _api.refreshToken();
+          if (refreshed.token != null && refreshed.token!.isNotEmpty) {
+            // 合并：保留扫码返回的 nickname/avatar，用刷新结果的 token/t1
+            session = LoginSession(
+              userId: refreshed.userId ?? session.userId,
+              token: refreshed.token,
+              t1: refreshed.t1,
+              sessionId: _api.clientSessionId,
+              nickname: session.nickname,
+              avatarUrl: session.avatarUrl,
+            );
+            this.session = session;
+            _api.setSession(session);
+            await prefs.setString(_tokenKey, session.token ?? '');
+            await prefs.setString(_t1Key, session.t1 ?? '');
+            await prefs.setString(_sessionIdKey, _api.clientSessionId ?? '');
+            await prefs.setString(_userIdKey, session.userId ?? '');
+          }
+        } catch (_) {
+          // 刷新失败，继续用原 token
+        }
+      }
+
+      // 用 session 数据构造临时 profile，UI 立即展示用户信息；
+      // refreshProfile 成功后会覆盖为完整数据。
+      if (session.nickname != null && session.nickname!.isNotEmpty) {
+        profile = UserProfile(
+          nickname: session.nickname!,
+          avatarUrl: session.avatarUrl,
+        );
+      }
+
+      await refreshProfile(silent: true);
+      _vipBackgroundTask.schedule(session);
+    });
+  }
+
   Future<PhoneLoginResult?> login(
     String mobile,
     String code, {
@@ -307,7 +362,8 @@ class AuthController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_tokenKey, nextSession.token ?? '');
       await prefs.setString(_t1Key, nextSession.t1 ?? '');
-      await prefs.setString(_sessionIdKey, nextSession.sessionId ?? '');
+      // nextSession.sessionId 可能为 null，用 ApiClient 实际持有的 session key
+      await prefs.setString(_sessionIdKey, _api.clientSessionId ?? '');
       await prefs.setString(_userIdKey, nextSession.userId ?? '');
 
       await refreshProfile(silent: true);

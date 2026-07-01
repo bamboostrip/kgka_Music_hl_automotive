@@ -1,10 +1,19 @@
 class LoginSession {
-  const LoginSession({this.userId, this.token, this.t1, this.sessionId});
+  const LoginSession({
+    this.userId,
+    this.token,
+    this.t1,
+    this.sessionId,
+    this.nickname,
+    this.avatarUrl,
+  });
 
   final String? userId;
   final String? token;
   final String? t1;
   final String? sessionId;
+  final String? nickname;
+  final String? avatarUrl;
 
   bool get isValid =>
       (token != null && token!.isNotEmpty) ||
@@ -1600,6 +1609,52 @@ class SearchHotCategory {
           .whereType<Map<String, dynamic>>()
           .map(SearchHotKeyword.fromJson)
           .toList(),
+    );
+  }
+}
+
+class QrCodeInfo {
+  const QrCodeInfo({required this.key, required this.imageUrl});
+
+  final String key;
+  final String imageUrl;
+
+  factory QrCodeInfo.fromJson(Map<String, dynamic> json) {
+    return QrCodeInfo(
+      key: asString(json['qrcode']) ?? '',
+      imageUrl: asString(json['qrcode_img']) ?? '',
+    );
+  }
+}
+
+class QrCheckResult {
+  const QrCheckResult({
+    required this.status,
+    this.token,
+    this.userId,
+    this.nickname,
+    this.avatar,
+  });
+
+  final int status;
+  final String? token;
+  final String? userId;
+  final String? nickname;
+  final String? avatar;
+
+  // 酷狗二维码状态码：0=等待扫码, 1=已扫码待确认, 2=已过期, 4=登录成功
+  bool get isWaitingForScan => status == 0;
+  bool get isWaitingForConfirm => status == 1;
+  bool get isExpired => status == 2;
+  bool get isSuccess => status == 4 && token != null && token!.isNotEmpty;
+
+  factory QrCheckResult.fromJson(Map<String, dynamic> json) {
+    return QrCheckResult(
+      status: asInt(json['status']) ?? 0,
+      token: asString(json['token']),
+      userId: asString(json['userid']),
+      nickname: asString(json['nickname']),
+      avatar: asString(json['pic']),
     );
   }
 }
