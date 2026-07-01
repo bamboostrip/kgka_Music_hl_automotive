@@ -615,6 +615,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                 stretch: !_isSearching,
                 expandedHeight: _isSearching ? 0 : 198,
                 surfaceTintColor: Colors.transparent,
+                // 头部渐变顶部为半透明 primary，收缩后若 toolbar 无不透明背景，
+                // 列表内容会透过与标题/操作按钮重叠。这里用 scaffoldBackgroundColor
+                // 作为不透明底色（与头部渐变底部一致，过渡自然），展开态被 _HeroHeader 覆盖。
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 title: _isSearching
                     ? TextField(
                         controller: _searchController,

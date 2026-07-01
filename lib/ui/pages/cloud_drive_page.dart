@@ -165,6 +165,10 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
                   pinned: true,
                   expandedHeight: 198,
                   surfaceTintColor: Colors.transparent,
+                  // 头部渐变顶部为半透明 primary，收缩后若 toolbar 无不透明背景，
+                  // 列表内容会透过与标题重叠。这里用 scaffoldBackgroundColor 作为
+                  // 不透明底色（与头部渐变底部一致，过渡自然），展开态被 _CloudHeader 覆盖。
+                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                   title: const Text(
                     '云盘',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
