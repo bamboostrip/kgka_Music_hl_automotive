@@ -14,10 +14,27 @@ class MusicApi {
 
   final ApiClient _client;
 
+  /// 暴露 ApiClient 当前持有的后端 session key（由响应 header 自动保存）。
+  String? get clientSessionId => _client.sessionId;
+
   void setSession(LoginSession? session) {
-    _client.token = session?.token;
-    _client.t1 = session?.t1;
-    _client.sessionId = session?.sessionId;
+    if (session == null) {
+      _client.token = null;
+      _client.t1 = null;
+      _client.sessionId = null;
+      return;
+    }
+    _client.token = session.token;
+    _client.t1 = session.t1;
+    // 扫码/手机号登录返回的 session 不携带 sessionId，
+    // 此时 _client.sessionId 已由 ApiClient._processResponse 从
+    // 登录请求的响应 header (X-Kg-Session-Id) 中保存。
+    // 不能用 null 覆盖，否则后续请求无法关联到后端 session，
+    // 导致 /user/detail、/user/playlist 等接口拿不到登录态。
+    final sid = session.sessionId;
+    if (sid != null && sid.isNotEmpty) {
+      _client.sessionId = sid;
+    }
   }
 
   Future<void> sendLoginCode(String mobile) async {

@@ -1009,26 +1009,11 @@ class _QrLoginForm extends StatelessWidget {
             else if (qrCode != null && qrCode!.imageUrl.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  qrCode!.imageUrl,
-                  width: 200,
-                  height: 200,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) {
-                    return Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.qr_code_2_rounded,
-                        size: 80,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    );
-                  },
+                child: _QrImage(
+                  imageUrl: qrCode!.imageUrl,
+                  size: 200,
+                  fallbackColor: colorScheme.surfaceContainerHighest,
+                  iconColor: colorScheme.onSurfaceVariant,
                 ),
               )
             else
@@ -1082,6 +1067,68 @@ class _QrLoginForm extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 渲染二维码图片。
+///
+/// 后端 `/login/qr/key` 返回的 `qrcode_img` 是 `data:image/png;base64,...`
+/// 形式的 data URI，[Image.network] 无法直接加载，会触发 "Width is zero"
+/// 渲染警告并导致二维码不显示。这里自动识别 data URI 并走 [Image.memory]，
+/// 普通 http(s) URL 仍走 [Image.network]。
+class _QrImage extends StatelessWidget {
+  const _QrImage({
+    required this.imageUrl,
+    required this.size,
+    required this.fallbackColor,
+    required this.iconColor,
+  });
+
+  final String imageUrl;
+  final double size;
+  final Color fallbackColor;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget fallback() => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: fallbackColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(
+            Icons.qr_code_2_rounded,
+            size: 80,
+            color: iconColor,
+          ),
+        );
+
+    final uri = Uri.tryParse(imageUrl);
+    if (uri == null) return fallback();
+
+    // data:image/png;base64,... -> 解码字节后用 Image.memory 渲染
+    final data = uri.data;
+    if (data != null) {
+      final bytes = data.contentAsBytes();
+      if (bytes.isEmpty) return fallback();
+      return Image.memory(
+        bytes,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => fallback(),
+      );
+    }
+
+    return Image.network(
+      imageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => fallback(),
     );
   }
 }
