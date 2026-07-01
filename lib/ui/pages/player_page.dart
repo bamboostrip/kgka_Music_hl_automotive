@@ -434,28 +434,60 @@ String _lyricDisplayModeLabel(_LyricDisplayMode mode) {
   };
 }
 
-class _ArtworkBackground extends StatelessWidget {
+class _ArtworkBackground extends StatefulWidget {
   const _ArtworkBackground({required this.song});
 
   final Song song;
 
   @override
+  State<_ArtworkBackground> createState() => _ArtworkBackgroundState();
+}
+
+class _ArtworkBackgroundState extends State<_ArtworkBackground>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 40), // 40 seconds for a full rotation
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final coverUrl = song.coverUrl;
+    final coverUrl = widget.song.coverUrl;
+    final size = MediaQuery.sizeOf(context);
+    final maxDim = math.max(size.width, size.height);
+    final squareSize = maxDim * 1.5;
 
     return Stack(
       fit: StackFit.expand,
       children: [
         if (coverUrl != null)
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
-            child: Transform.scale(
-              scale: 1.18,
-              child: Image.network(
-                coverUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const _FallbackBackground(),
+          OverflowBox(
+            maxWidth: squareSize,
+            maxHeight: squareSize,
+            minWidth: squareSize,
+            minHeight: squareSize,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+              child: RotationTransition(
+                turns: _rotationController,
+                child: Image.network(
+                  coverUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const _FallbackBackground(),
+                ),
               ),
             ),
           )
