@@ -227,15 +227,6 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
-            Positioned(
-              top: MediaQuery.paddingOf(context).top + 10,
-              right: 16,
-              child: IconButton(
-                tooltip: '设置 API 服务器地址',
-                icon: const Icon(Icons.dns_rounded),
-                onPressed: () => _editApiBaseUrl(context),
-              ),
-            ),
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -278,6 +269,15 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   );
                 },
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 10,
+              right: 16,
+              child: IconButton(
+                tooltip: '设置 API 服务器地址',
+                icon: const Icon(Icons.dns_rounded),
+                onPressed: () => _editApiBaseUrl(context),
               ),
             ),
           ],
