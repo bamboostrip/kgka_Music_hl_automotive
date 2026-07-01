@@ -58,6 +58,78 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   bool _isLoadingAllSongs = false;
   bool _allSongsLoaded = false;
   String _searchQuery = '';
+  _SongSortMode _sortMode = _SongSortMode.defaultOrder;
+
+  String get _sortModeLabel {
+    return switch (_sortMode) {
+      _SongSortMode.defaultOrder => '默认排序',
+      _SongSortMode.byTitle => '按歌名',
+      _SongSortMode.byArtist => '按歌手',
+      _SongSortMode.byAlbum => '按专辑',
+    };
+  }
+
+  Future<void> _showSortSheet(BuildContext context) async {
+    final selected = await showModalBottomSheet<_SongSortMode>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        final colorScheme = Theme.of(sheetContext).colorScheme;
+        final options = [
+          (_SongSortMode.defaultOrder, '默认排序'),
+          (_SongSortMode.byTitle, '按歌名'),
+          (_SongSortMode.byArtist, '按歌手'),
+          (_SongSortMode.byAlbum, '按专辑'),
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '排序方式',
+                  style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Material(
+                  color: colorScheme.surfaceContainer,
+                  borderRadius: BorderRadius.circular(16),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < options.length; i++) ...[
+                        _SortOptionTile(
+                          label: options[i].$2,
+                          selected: _sortMode == options[i].$1,
+                          onTap: () =>
+                              Navigator.of(sheetContext).pop(options[i].$1),
+                        ),
+                        if (i < options.length - 1)
+                          Divider(
+                            height: 1,
+                            indent: 16,
+                            color: colorScheme.outlineVariant
+                                .withValues(alpha: .3),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null && selected != _sortMode) {
+      setState(() => _sortMode = selected);
+    }
+  }
 
   bool get _isAlbum => widget.playlist.isCollectedAlbum;
 
@@ -78,13 +150,32 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   }
 
   List<Song> get _filteredSongs {
-    if (_searchQuery.isEmpty) return _songs;
-    final q = _searchQuery.toLowerCase();
-    return _songs.where((song) {
-      return song.title.toLowerCase().contains(q) ||
-          song.artist.toLowerCase().contains(q) ||
-          (song.albumName?.toLowerCase().contains(q) ?? false);
-    }).toList();
+    List<Song> list;
+    if (_searchQuery.isEmpty) {
+      list = List<Song>.of(_songs);
+    } else {
+      final q = _searchQuery.toLowerCase();
+      list = _songs.where((song) {
+        return song.title.toLowerCase().contains(q) ||
+            song.artist.toLowerCase().contains(q) ||
+            (song.albumName?.toLowerCase().contains(q) ?? false);
+      }).toList();
+    }
+
+    switch (_sortMode) {
+      case _SongSortMode.byTitle:
+        list.sort((a, b) => a.title.compareTo(b.title));
+        break;
+      case _SongSortMode.byArtist:
+        list.sort((a, b) => a.artist.compareTo(b.artist));
+        break;
+      case _SongSortMode.byAlbum:
+        list.sort((a, b) => (a.albumName ?? '').compareTo(b.albumName ?? ''));
+        break;
+      case _SongSortMode.defaultOrder:
+        break;
+    }
+    return list;
   }
 
   void _toggleSearch() {
@@ -709,6 +800,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                   child: _Actions(
                     count: _info?.songCount ?? _songs.length,
                     loadedCount: _songs.length,
+                    sortLabel: _sortModeLabel,
+                    onSortTap: () => _showSortSheet(context),
                     onPlay: _filteredSongs.isEmpty
                         ? null
                         : () async {
@@ -1024,6 +1117,8 @@ class _Actions extends StatelessWidget {
     required this.count,
     required this.loadedCount,
     required this.onPlay,
+    required this.sortLabel,
+    required this.onSortTap,
     this.searchQuery,
     this.searchResultCount,
   });
@@ -1033,6 +1128,8 @@ class _Actions extends StatelessWidget {
   final VoidCallback? onPlay;
   final String? searchQuery;
   final int? searchResultCount;
+  final String sortLabel;
+  final VoidCallback onSortTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1043,16 +1140,44 @@ class _Actions extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              isSearching
-                  ? '搜索结果：$searchResultCount 首'
-                  : loadedCount >= count
-                  ? '$count 首歌曲'
-                  : '已加载 $loadedCount / $count 首',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    isSearching
+                        ? '搜索结果：$searchResultCount 首'
+                        : loadedCount >= count
+                        ? '$count 首歌曲'
+                        : '已加载 $loadedCount / $count 首',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!isSearching) ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: onSortTap,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: const Icon(Icons.sort_rounded, size: 16),
+                    label: Text(
+                      sortLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           if (!isSearching)
@@ -1399,6 +1524,55 @@ class _DetailError extends StatelessWidget {
             label: const Text('重试'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _SongSortMode {
+  defaultOrder,
+  byTitle,
+  byArtist,
+  byAlbum,
+}
+
+class _SortOptionTile extends StatelessWidget {
+  const _SortOptionTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: selected ? colorScheme.primary : null,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+              ),
+            ),
+            if (selected)
+              Icon(
+                Icons.check_rounded,
+                size: 20,
+                color: colorScheme.primary,
+              ),
+          ],
+        ),
       ),
     );
   }

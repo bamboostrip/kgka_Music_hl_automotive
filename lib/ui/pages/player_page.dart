@@ -1241,6 +1241,7 @@ class _TopBar extends StatelessWidget {
           isGrid: true,
           onTap: () => showSleepTimerSheet(context: context, player: player),
         ),
+
         if (player.isDesktopLyricsSupported) ...[
           SongSheetAction(
             icon: player.desktopLyricsEnabled
