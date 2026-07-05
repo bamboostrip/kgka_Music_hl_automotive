@@ -1,120 +1,91 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../models/music_models.dart';
 
 class LocalMusicController extends ChangeNotifier {
   LocalMusicController() {
-    _loadSettings();
+    _checkPermission();
   }
 
-  static const _localMusicDirKey = 'settings.local_music_dir';
+  static const _channel = MethodChannel('kgka_music_hl/local_music');
 
-  String? _localMusicDir;
+  bool _hasPermission = false;
   List<Song> _songs = [];
   bool _isScanning = false;
 
-  String? get localMusicDir => _localMusicDir;
+  bool get hasPermission => _hasPermission;
   List<Song> get songs => _songs;
   bool get isScanning => _isScanning;
 
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    _localMusicDir = prefs.getString(_localMusicDirKey);
-    if (_localMusicDir != null && _localMusicDir!.isNotEmpty) {
-      await scanLocalMusic();
+  Future<void> _checkPermission() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final granted = await _channel.invokeMethod<bool>('hasPermission') ?? false;
+      _hasPermission = granted;
+      notifyListeners();
+      if (_hasPermission) {
+        await scanLocalMusic();
+      }
+    } catch (e) {
+      debugPrint('Error checking audio permission: $e');
     }
   }
 
-  Future<void> setLocalMusicDir(String? dirPath) async {
-    _localMusicDir = dirPath?.trim();
-    final prefs = await SharedPreferences.getInstance();
-    if (_localMusicDir != null && _localMusicDir!.isNotEmpty) {
-      await prefs.setString(_localMusicDirKey, _localMusicDir!);
-      await scanLocalMusic();
-    } else {
-      await prefs.remove(_localMusicDirKey);
-      _songs = [];
+  Future<bool> requestPermission() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final granted = await _channel.invokeMethod<bool>('requestPermission') ?? false;
+      _hasPermission = granted;
       notifyListeners();
+      if (_hasPermission) {
+        await scanLocalMusic();
+      }
+      return granted;
+    } catch (e) {
+      debugPrint('Error requesting audio permission: $e');
+      return false;
     }
   }
 
   Future<void> scanLocalMusic() async {
-    final dirPath = _localMusicDir;
-    if (dirPath == null || dirPath.isEmpty) return;
+    if (!Platform.isAndroid) return;
+    if (!_hasPermission) return;
 
     _isScanning = true;
     notifyListeners();
 
-    final List<Song> list = [];
     try {
-      final dir = Directory(dirPath);
-      if (await dir.exists()) {
-        await _scanDirectory(dir, list);
-      }
-    } catch (e) {
-      debugPrint('Error scanning local music: $e');
-    }
+      final List<dynamic> result = await _channel.invokeMethod('getLocalSongs');
+      final List<Song> list = [];
 
-    _songs = list;
-    _isScanning = false;
-    notifyListeners();
-  }
+      for (final item in result) {
+        if (item is Map) {
+          final filePath = item['filePath'] as String? ?? '';
+          final title = item['title'] as String? ?? '未知歌曲';
+          final artist = item['artist'] as String? ?? '未知艺人';
+          final durationMs = item['duration'] as int?;
 
-  Future<void> _scanDirectory(Directory dir, List<Song> list) async {
-    try {
-      await for (final entity in dir.list(recursive: false, followLinks: false)) {
-        if (entity is Directory) {
-          // Avoid scanning system files or hidden folders
-          final name = entity.uri.pathSegments.isNotEmpty
-              ? (entity.uri.pathSegments.last.isEmpty && entity.uri.pathSegments.length > 1
-                  ? entity.uri.pathSegments[entity.uri.pathSegments.length - 2]
-                  : entity.uri.pathSegments.last)
-              : entity.path.split(Platform.isWindows ? '\\' : '/').last;
-          if (name.startsWith('.') || name.startsWith(r'$')) continue;
-          await _scanDirectory(entity, list);
-        } else if (entity is File) {
-          final path = entity.path;
-          final lowerPath = path.toLowerCase();
-          if (lowerPath.endsWith('.mp3') ||
-              lowerPath.endsWith('.m4a') ||
-              lowerPath.endsWith('.flac') ||
-              lowerPath.endsWith('.wav') ||
-              lowerPath.endsWith('.ogg')) {
-            
-            // Try to parse Artist - Title from file name
-            final filename = entity.uri.pathSegments.isNotEmpty 
-                ? entity.uri.pathSegments.last 
-                : path.split(Platform.isWindows ? '\\' : '/').last;
-            final dotIndex = filename.lastIndexOf('.');
-            final filenameNoExt = dotIndex != -1 ? filename.substring(0, dotIndex) : filename;
-            
-            String title = filenameNoExt;
-            String artist = '本地音乐';
-            
-            if (filenameNoExt.contains(' - ')) {
-              final parts = filenameNoExt.split(' - ');
-              if (parts.length >= 2) {
-                artist = parts[0].trim();
-                title = parts.sublist(1).join(' - ').trim();
-              }
-            }
-            
+          if (filePath.isNotEmpty) {
             list.add(Song(
-              id: path, // use file path as song ID
+              id: filePath,
               title: title,
               artist: artist,
-              hash: path, // use file path as hash
-              coverUrl: null,
-              duration: null,
+              hash: filePath,
+              coverUrl: item['albumArtUri'] as String?,
+              duration: durationMs != null ? Duration(milliseconds: durationMs) : null,
               source: SongSource.local,
             ));
           }
         }
       }
+
+      _songs = list;
     } catch (e) {
-      // Gracefully ignore directory read errors (e.g. system permissions/hidden folders)
-      debugPrint('Skipping directory ${dir.path} due to error: $e');
+      debugPrint('Error scanning local music: $e');
     }
+
+    _isScanning = false;
+    notifyListeners();
   }
 }

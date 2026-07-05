@@ -122,7 +122,6 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       extendBody: true,
       body: AdaptiveContentPadding(
-        maxWidth: 1150,
         child: mainContent,
       ),
       bottomNavigationBar: useNavRail

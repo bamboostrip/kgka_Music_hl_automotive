@@ -10,8 +10,11 @@ import 'package:flutter/material.dart';
 class AdaptiveLayout {
   const AdaptiveLayout._();
 
-  /// 平板模式下内容区域的最大宽度。
-  static const double contentMaxWidth = 680;
+  /// 普通平板内容区域的最大宽度。
+  static const double tabletMaxWidth = 800;
+
+  /// 超宽屏内容区域的最大宽度。
+  static const double wideMaxWidth = 1200;
 
   /// 是否为平板设备。
   ///
@@ -37,13 +40,41 @@ class AdaptiveLayout {
     final size = physical / view.devicePixelRatio;
     return size.shortestSide >= 600;
   }
+
+  /// 是否为超宽屏（宽高比 ≥ 2.5 或宽度 ≥ 1600dp）。
+  static bool isUltraWide(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return size.width >= 1600 || (size.height > 0 && size.width / size.height >= 2.5);
+  }
+
+  /// 根据屏幕宽度计算内容区域的最大宽度。
+  ///
+  /// - 宽度 < 600：不限制（手机）
+  /// - 600 ≤ 宽度 < 1200：限制 [tabletMaxWidth]
+  /// - 宽度 ≥ 1200：限制 [wideMaxWidth]
+  static double contentMaxWidthFor(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width < 600) return double.infinity;
+    if (width < 1200) return tabletMaxWidth;
+    return wideMaxWidth;
+  }
+
+  /// 根据屏幕宽度计算网格列数。
+  ///
+  /// 适用于歌单、专辑等网格布局。
+  static int gridColumnsFor(BuildContext context, {double minItemWidth = 160}) {
+    final maxWidth = contentMaxWidthFor(context);
+    final effectiveWidth = maxWidth == double.infinity
+        ? MediaQuery.sizeOf(context).width
+        : maxWidth;
+    return (effectiveWidth / minItemWidth).floor().clamp(2, 8);
+  }
 }
 
 /// 自适应内容内边距。
 ///
 /// 手机端：不施加任何约束，子组件直接渲染。
-/// 平板端：将内容居中并限制最大宽度为 [AdaptiveLayout.contentMaxWidth]，
-/// 避免在宽屏平板上内容横向拉伸到难以阅读的宽度。
+/// 平板/超宽端：将内容居中并限制最大宽度，避免内容横向拉伸到难以阅读的宽度。
 class AdaptiveContentPadding extends StatelessWidget {
   const AdaptiveContentPadding({
     super.key,
@@ -60,11 +91,13 @@ class AdaptiveContentPadding extends StatelessWidget {
     if (size.width < 600) {
       return child;
     }
+    final limit = maxWidth ?? AdaptiveLayout.contentMaxWidthFor(context);
+    if (limit == double.infinity) {
+      return child;
+    }
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: maxWidth ?? AdaptiveLayout.contentMaxWidth,
-        ),
+        constraints: BoxConstraints(maxWidth: limit),
         child: child,
       ),
     );

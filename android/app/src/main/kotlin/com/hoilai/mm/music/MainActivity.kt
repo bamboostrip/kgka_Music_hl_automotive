@@ -1,18 +1,24 @@
 package com.hoilai.mm.music
 
+import android.Manifest
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.view.WindowManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -28,6 +34,11 @@ class MainActivity : AudioServiceActivity() {
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int? = null
+    private var pendingPermissionResult: MethodChannel.Result? = null
+
+    companion object {
+        private const val REQUEST_READ_AUDIO = 1001
+    }
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -147,6 +158,37 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/local_music")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "hasPermission" -> {
+                        result.success(hasReadAudioPermission())
+                    }
+                    "requestPermission" -> {
+                        if (hasReadAudioPermission()) {
+                            result.success(true)
+                        } else {
+                            pendingPermissionResult = result
+                            requestAudioPermission()
+                        }
+                    }
+                    "getLocalSongs" -> {
+                        if (!hasReadAudioPermission()) {
+                            result.error("no_permission", "READ_MEDIA_AUDIO permission not granted", null)
+                            return@setMethodCallHandler
+                        }
+                        runCatching {
+                            queryLocalSongs()
+                        }.onSuccess { songs ->
+                            result.success(songs)
+                        }.onFailure { error ->
+                            result.error("query_failed", error.message, null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         desktopLyricsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "kgka_music_hl/desktop_lyrics"
@@ -257,6 +299,120 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun readAudioPermission(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+
+    private fun hasReadAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, readAudioPermission()) ==
+                PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestAudioPermission() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(readAudioPermission()),
+            REQUEST_READ_AUDIO
+        )
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_READ_AUDIO) {
+            val granted = grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+            pendingPermissionResult?.success(granted)
+            pendingPermissionResult = null
+        }
+    }
+
+    private fun queryLocalSongs(): List<Map<String, Any?>> {
+        val songs = mutableListOf<Map<String, Any?>>()
+
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.IS_MUSIC,
+        )
+
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
+
+        var cursor: Cursor? = null
+        try {
+            cursor = contentResolver.query(
+                collection,
+                projection,
+                selection,
+                null,
+                sortOrder
+            )
+
+            cursor?.let {
+                val idColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val durationColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val dataColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val albumIdColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+
+                while (it.moveToNext()) {
+                    val id = it.getLong(idColumn)
+                    val title = it.getString(titleColumn) ?: "未知歌曲"
+                    val artist = it.getString(artistColumn) ?: "未知艺人"
+                    val album = it.getString(albumColumn) ?: ""
+                    val duration = it.getLong(durationColumn)
+                    val filePath = it.getString(dataColumn) ?: ""
+                    val albumId = it.getLong(albumIdColumn)
+
+                    // 构建专辑封面 URI
+                    val albumArtUri = ContentUris.withAppendedId(
+                        Uri.parse("content://media/external/audio/albumart"),
+                        albumId
+                    )
+
+                    if (filePath.isNotEmpty()) {
+                        songs.add(
+                            mapOf(
+                                "id" to filePath,
+                                "title" to title,
+                                "artist" to artist,
+                                "album" to album,
+                                "duration" to duration,
+                                "filePath" to filePath,
+                                "albumArtUri" to albumArtUri.toString(),
+                            )
+                        )
+                    }
+                }
+            }
+        } finally {
+            cursor?.close()
+        }
+
+        return songs
     }
 
     private fun registerLyricsStateReceiver() {

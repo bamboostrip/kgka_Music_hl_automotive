@@ -1035,13 +1035,14 @@ class _PlaylistGroup extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final size = MediaQuery.sizeOf(context);
     final isWide = size.width >= 720;
+    final isUltraWide = size.width >= 1200;
 
     if (isWide) {
       return GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 340,
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: isUltraWide ? 280 : 340,
           mainAxisExtent: 72,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
@@ -215,9 +214,15 @@ class SettingsPage extends StatelessWidget {
                     _SettingsTile(
                       icon: Icons.computer_rounded,
                       iconColor: colorScheme.primary,
-                      title: '本地音乐目录',
-                      subtitle: localMusic.localMusicDir ?? '未设置',
-                      onTap: () => _selectOrClearDir(context, localMusic),
+                      title: '本地音乐',
+                      subtitle: localMusic.hasPermission
+                          ? '已扫描 ${localMusic.songs.length} 首歌曲'
+                          : '未授权访问音频文件',
+                      onTap: () {
+                        if (!localMusic.hasPermission) {
+                          localMusic.requestPermission();
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -423,73 +428,6 @@ class SettingsPage extends StatelessWidget {
           ? '已切换到 ${AppConfig.customBaseUrl}，重启后生效'
           : '已恢复默认 API 地址，重启后生效',
     );
-  }
-
-  Future<void> _selectOrClearDir(BuildContext context, LocalMusicController localMusic) async {
-    final dir = localMusic.localMusicDir;
-    if (dir == null || dir.isEmpty) {
-      await _pickLocalMusicDir(context, localMusic);
-      return;
-    }
-
-    final option = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  '当前目录: $dir',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.folder_open_rounded),
-                title: const Text('选择新目录'),
-                onTap: () => Navigator.of(context).pop(1),
-              ),
-              ListTile(
-                leading: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
-                title: Text('清除目录', style: TextStyle(color: colorScheme.error)),
-                onTap: () => Navigator.of(context).pop(2),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (!context.mounted) return;
-    if (option == 1) {
-      await _pickLocalMusicDir(context, localMusic);
-    } else if (option == 2) {
-      await localMusic.setLocalMusicDir(null);
-      Toast.success('已清除本地目录');
-    }
-  }
-
-  Future<void> _pickLocalMusicDir(BuildContext context, LocalMusicController localMusic) async {
-    try {
-      final path = await FilePicker.getDirectoryPath();
-      if (path == null) return;
-      await localMusic.setLocalMusicDir(path);
-      Toast.success('设置成功并开始扫描');
-    } catch (e) {
-      debugPrint('Error picking folder: $e');
-      Toast.error('选择文件夹失败：$e');
-    }
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
