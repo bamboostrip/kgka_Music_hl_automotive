@@ -1315,6 +1315,19 @@ class _PosterPlayerPageState extends State<_PosterPlayerPage>
   }
 }
 
+int _activeLyricIndexFor(List<LyricLine> lyrics, Duration position) {
+  if (lyrics.isEmpty) return -1;
+  var index = 0;
+  for (var i = 0; i < lyrics.length; i++) {
+    if (position >= lyrics[i].time) {
+      index = i;
+    } else {
+      break;
+    }
+  }
+  return index;
+}
+
 class _PosterLyricPreview extends StatefulWidget {
   const _PosterLyricPreview({required this.player});
 
@@ -1325,14 +1338,13 @@ class _PosterLyricPreview extends StatefulWidget {
 }
 
 class _PosterLyricPreviewState extends State<_PosterLyricPreview> {
-  late final LyricController _lyricController;
   late final Ticker _ticker;
+  Duration _position = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    _lyricController = LyricController();
-    _syncLyrics();
+    _position = widget.player.smoothPosition;
     _ticker = Ticker(_onTick);
     _syncTicker();
   }
@@ -1340,23 +1352,16 @@ class _PosterLyricPreviewState extends State<_PosterLyricPreview> {
   @override
   void didUpdateWidget(covariant _PosterLyricPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncLyrics();
+    if (!widget.player.isScrubbing) {
+      _position = widget.player.smoothPosition;
+    }
     _syncTicker();
   }
 
   @override
   void dispose() {
     _ticker.dispose();
-    _lyricController.dispose();
     super.dispose();
-  }
-
-  void _syncLyrics() {
-    final lyrics = widget.player.lyrics;
-    if (lyrics.isNotEmpty) {
-      final model = convertToFlutterLyricModel(lyrics);
-      _lyricController.loadLyricModel(model);
-    }
   }
 
   void _syncTicker() {
@@ -1375,7 +1380,7 @@ class _PosterLyricPreviewState extends State<_PosterLyricPreview> {
     if (!mounted || widget.player.isScrubbing) {
       return;
     }
-    _lyricController.setProgress(widget.player.smoothPosition);
+    setState(() => _position = widget.player.smoothPosition);
   }
 
   @override
@@ -1397,23 +1402,65 @@ class _PosterLyricPreviewState extends State<_PosterLyricPreview> {
       );
     }
 
+    final index = _activeLyricIndexFor(lyrics, _position);
+    final current = lyrics[index];
+    final next = index + 1 < lyrics.length ? lyrics[index + 1] : null;
+    final currentStyle = Theme.of(context).textTheme.titleLarge!.copyWith(
+      color: Colors.white,
+      fontSize: 22,
+      height: 1.22,
+      fontWeight: FontWeight.w900,
+    );
+    final nextStyle = Theme.of(context).textTheme.titleMedium!.copyWith(
+      color: Colors.white.withValues(alpha: .46),
+      height: 1.18,
+      fontWeight: FontWeight.w700,
+    );
+
     return SizedBox(
       height: 96,
-      child: LyricView(
-        controller: _lyricController,
-        style: LyricStyles.single.copyWith(
-          textStyle: Theme.of(context).textTheme.titleMedium!.copyWith(
-            color: Colors.white.withValues(alpha: .46),
-            height: 1.18,
-            fontWeight: FontWeight.w700,
-          ),
-          activeStyle: Theme.of(context).textTheme.titleLarge!.copyWith(
-            color: Colors.white.withValues(alpha: .34),
-            fontSize: 22,
-            height: 1.22,
-            fontWeight: FontWeight.w900,
-          ),
-          activeHighlightColor: Colors.white,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeOutCubic,
+        child: Column(
+          key: ValueKey(current.time.inMilliseconds),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              height: 36,
+              child: _MarqueeSingleLine(
+                textKey: current.time.inMilliseconds,
+                child: _LyricText(
+                  line: current,
+                  active: true,
+                  position: _position,
+                  styleOverride: currentStyle,
+                  textAlign: TextAlign.center,
+                  singleLine: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 25,
+              child: _MarqueeSingleLine(
+                textKey: current.translation != null && current.translation!.isNotEmpty
+                    ? current.time.inMilliseconds
+                    : (next?.time.inMilliseconds ?? -1),
+                child: Text(
+                  current.translation != null && current.translation!.isNotEmpty
+                      ? current.translation!
+                      : (next?.text ?? ''),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: nextStyle,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1839,6 +1886,184 @@ class _LyricViewportState extends State<_LyricViewport>
         activeHighlightColor: Colors.white,
       ),
     );
+  }
+}
+
+class _LyricText extends StatelessWidget {
+  const _LyricText({
+    required this.line,
+    required this.active,
+    required this.position,
+    this.styleOverride,
+    this.textAlign = TextAlign.start,
+    this.singleLine = false,
+  });
+
+  final LyricLine line;
+  final bool active;
+  final Duration position;
+  final TextStyle? styleOverride;
+  final TextAlign textAlign;
+  final bool singleLine;
+
+  @override
+  Widget build(BuildContext context) {
+    final style =
+        styleOverride ??
+        Theme.of(context).textTheme.headlineMedium!.copyWith(
+          color: Colors.white,
+          fontSize: active ? 34 : 27,
+          height: 1.24,
+          fontWeight: active ? FontWeight.w900 : FontWeight.w800,
+        );
+
+    if (!active || line.words.isEmpty) {
+      if (singleLine) {
+        return Text(
+          line.text,
+          textAlign: textAlign,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.visible,
+          style: style,
+        );
+      }
+      return Text(line.text, textAlign: textAlign, style: style);
+    }
+
+    if (singleLine) {
+      final painter = _KaraokeLinePainter(
+        line: line,
+        position: position,
+        style: style,
+        baseColor: Colors.white.withValues(alpha: .34),
+        activeColor: Colors.white,
+        textDirection: Directionality.of(context),
+        textAlign: textAlign,
+        maxLines: 1,
+        maxWidth: double.infinity,
+      );
+      return CustomPaint(
+        size: Size(painter.width, painter.height),
+        painter: painter,
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = _KaraokeLinePainter(
+          line: line,
+          position: position,
+          style: style,
+          baseColor: Colors.white.withValues(alpha: .34),
+          activeColor: Colors.white,
+          textDirection: Directionality.of(context),
+          textAlign: textAlign,
+          maxLines: null,
+          maxWidth: constraints.maxWidth,
+        );
+        return CustomPaint(
+          size: Size(constraints.maxWidth, painter.height),
+          painter: painter,
+        );
+      },
+    );
+  }
+}
+
+class _KaraokeLinePainter extends CustomPainter {
+  _KaraokeLinePainter({
+    required this.line,
+    required this.position,
+    required this.style,
+    required this.baseColor,
+    required this.activeColor,
+    required this.textDirection,
+    required this.textAlign,
+    required this.maxLines,
+    required this.maxWidth,
+  }) {
+    _textPainter = TextPainter(
+      text: TextSpan(
+        text: line.text,
+        style: style.copyWith(color: baseColor),
+      ),
+      textDirection: textDirection,
+      textAlign: textAlign,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
+  }
+
+  final LyricLine line;
+  final Duration position;
+  final TextStyle style;
+  final Color baseColor;
+  final Color activeColor;
+  final TextDirection textDirection;
+  final TextAlign textAlign;
+  final int? maxLines;
+  final double maxWidth;
+  late final TextPainter _textPainter;
+
+  double get width => _textPainter.width;
+  double get height => _textPainter.height;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _textPainter.paint(canvas, Offset.zero);
+
+    var start = 0;
+    for (final word in line.words) {
+      final end = start + word.text.length;
+      final progress = _wordProgress(word);
+      if (progress > 0) {
+        _paintWordProgress(canvas, start, end, progress);
+      }
+      start = end;
+    }
+  }
+
+  double _wordProgress(LyricWord word) {
+    if (position < word.time) return 0;
+    final durationMs = word.duration.inMilliseconds;
+    if (durationMs <= 0) return 1;
+    final elapsed = position.inMilliseconds - word.time.inMilliseconds;
+    return (elapsed / durationMs).clamp(0, 1).toDouble();
+  }
+
+  void _paintWordProgress(Canvas canvas, int start, int end, double progress) {
+    final selection = TextSelection(baseOffset: start, extentOffset: end);
+    final boxes = _textPainter.getBoxesForSelection(selection);
+    if (boxes.isEmpty) return;
+
+    final highlightPainter = TextPainter(
+      text: TextSpan(
+        text: line.text,
+        style: style.copyWith(color: activeColor),
+      ),
+      textDirection: textDirection,
+      textAlign: textAlign,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
+
+    for (final box in boxes) {
+      final rect = box.toRect();
+      final clipWidth = rect.width * progress.clamp(0, 1);
+      if (clipWidth <= 0) continue;
+
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(rect.left, rect.top, clipWidth, rect.height));
+      highlightPainter.paint(canvas, Offset.zero);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _KaraokeLinePainter oldDelegate) {
+    return oldDelegate.position != position ||
+        oldDelegate.line != line ||
+        oldDelegate.style != style ||
+        oldDelegate.maxWidth != maxWidth;
   }
 }
 
