@@ -1296,7 +1296,7 @@ class _RadioSectionState extends State<_RadioSection> {
   Future<void> _refresh() async {
     final future = _load();
     _cachedFuture = future;
-    setState(() => _future = future);
+    setState(() { _future = future; });
     await future;
   }
 
