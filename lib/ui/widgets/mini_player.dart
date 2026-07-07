@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../pages/player_page.dart';
 import 'artwork.dart';
@@ -17,13 +18,23 @@ class MiniPlayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: player,
-      builder: (context, _) {
-        final song = player.currentSong;
-        if (song == null) {
-          return const SizedBox.shrink();
-        }
+    final size = MediaQuery.sizeOf(context);
+    final isLandscape = size.width > size.height;
+    // 仅车机模式隐藏（由左侧播放面板替代）；普通横屏仍显示。
+    if (isLandscape && ThemeController.instance.carModeEnabled) {
+      return const SizedBox.shrink();
+    }
+
+    // MiniPlayer 响应 player 重建（进度/状态），高频更新会触发
+    // Windows AXTree 竞态崩溃，排除语义树以规避 Flutter Windows 引擎 bug
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: player,
+        builder: (context, _) {
+          final song = player.currentSong;
+          if (song == null) {
+            return const SizedBox.shrink();
+          }
 
         final progress = player.duration.inMilliseconds == 0
             ? 0.0
@@ -180,7 +191,8 @@ class MiniPlayer extends StatelessWidget {
             ),
           ),
         );
-      },
+        },
+      ),
     );
   }
 

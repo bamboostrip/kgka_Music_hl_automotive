@@ -67,6 +67,11 @@ class _LibraryPageState extends State<LibraryPage>
     );
   }
 
+  bool _isLandscape(BuildContext ctx) {
+    final size = MediaQuery.sizeOf(ctx);
+    return size.width > size.height;
+  }
+
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -167,11 +172,13 @@ class _LibraryPageState extends State<LibraryPage>
                             onPressed: _showCreatePlaylistDialog,
                             icon: const Icon(Icons.add_rounded),
                           ),
-                          IconButton(
-                            tooltip: '设置',
-                            onPressed: _openSettings,
-                            icon: const Icon(Icons.settings_rounded),
-                          ),
+                          // 车机模式顶栏已有设置按钮，隐藏此处重复按钮
+                          if (!(_isLandscape(context) && widget.theme.carModeEnabled))
+                            IconButton(
+                              tooltip: '设置',
+                              onPressed: _openSettings,
+                              icon: const Icon(Icons.settings_rounded),
+                            ),
                         ],
                       ),
                     ),

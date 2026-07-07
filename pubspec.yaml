@@ -13,6 +13,7 @@ dependencies:
   audio_session: ^0.1.25
   http: ^1.5.0
   just_audio: ^0.10.4
+  just_audio_windows: ^0.2.3
   shared_preferences: ^2.5.3
   url_launcher: ^6.3.2
   dio: ^5.7.0

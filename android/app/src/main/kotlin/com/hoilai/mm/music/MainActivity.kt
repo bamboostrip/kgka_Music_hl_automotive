@@ -16,6 +16,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -30,11 +31,15 @@ class MainActivity : AudioServiceActivity() {
     private var downloadReceiverRegistered = false
     private var lyricsStateReceiverRegistered = false
     private var desktopLyricsChannel: MethodChannel? = null
+    private var mediaKeyChannel: MethodChannel? = null
     private var bassBoost: BassBoost? = null
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    // MEDIA_NEXT 长按追踪：onKeyDown 时 startTracking，onKeyLongPress 标记
+    // 已长按，onKeyUp 时据此区分短按（下一首）和长按（暂停/播放）。
+    private var isMediaNextLongPressed = false
 
     companion object {
         private const val REQUEST_READ_AUDIO = 1001
@@ -86,6 +91,16 @@ class MainActivity : AudioServiceActivity() {
                         }
                         result.success(null)
                     }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // 车机检测：FEATURE_AUTOMOTIVE 是 Android 官方判别 Automotive 设备的 feature，
+        // 仅在车机上为 true。不使用电池/电话等启发式，避免误判插电平板。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/device")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isAutomotive" -> result.success(isAutomotiveDevice())
                     else -> result.notImplemented()
                 }
             }
@@ -194,6 +209,10 @@ class MainActivity : AudioServiceActivity() {
             "kgka_music_hl/desktop_lyrics"
         )
         registerLyricsStateReceiver()
+        mediaKeyChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kgka_music_hl/media_key"
+        )
         desktopLyricsChannel?.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "checkPermission" -> {
@@ -608,6 +627,46 @@ class MainActivity : AudioServiceActivity() {
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         startActivity(installIntent)
     }
+
+    /// 是否为 Android Automotive 车机设备。
+    /// FEATURE_AUTOMOTIVE 是官方判别标准，国产定制 AOSP 车机若未声明则为 false。
+    private fun isAutomotiveDevice(): Boolean {
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
+    }
+
+    //region 车机方向盘媒体按键处理
+    // 拦截 KEYCODE_MEDIA_NEXT：短按切下一首，长按暂停/播放。
+    // audio_service 默认只处理短按，不识别长按，因此这里自行拦截。
+    // MEDIA_PREVIOUS 和 MEDIA_PLAY_PAUSE 仍由 audio_service 默认处理。
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_NEXT && event != null && event.repeatCount == 0) {
+            isMediaNextLongPressed = false
+            event.startTracking()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_NEXT) {
+            isMediaNextLongPressed = true
+            mediaKeyChannel?.invokeMethod("togglePlay", null)
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_NEXT) {
+            if (!isMediaNextLongPressed) {
+                mediaKeyChannel?.invokeMethod("next", null)
+            }
+            isMediaNextLongPressed = false
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+    //endregion
 
     override fun onDestroy() {
         releaseEqualizer()
