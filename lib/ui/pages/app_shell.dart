@@ -47,31 +47,6 @@ class _AppShellState extends State<AppShell> {
   var _lastHomeTab = 1; // Tracks the last active Home sub-tab (1 for Recommend, 2 for Radio)
   final _navigatorKey = GlobalKey<NavigatorState>();
 
-  // 车机方向盘 MEDIA_NEXT 按键通道：短按下一首，长按暂停/播放。
-  // 由 MainActivity.kt 的 onKeyDown/onKeyLongPress/onKeyUp 触发。
-  static const _mediaKeyChannel = MethodChannel('kgka_music_hl/media_key');
-
-  @override
-  void initState() {
-    super.initState();
-    _mediaKeyChannel.setMethodCallHandler((call) async {
-      switch (call.method) {
-        case 'next':
-          widget.player.next();
-          break;
-        case 'togglePlay':
-          widget.player.togglePlay();
-          break;
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _mediaKeyChannel.setMethodCallHandler(null);
-    super.dispose();
-  }
-
   int _getPortraitIndex() {
     return _index == 0 ? 1 : 0;
   }

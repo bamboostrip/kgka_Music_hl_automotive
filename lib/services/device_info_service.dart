@@ -15,8 +15,6 @@ class DeviceInfoService {
   }
 
   /// 是否为 Android Automotive 车机。
-  ///
-  /// 仅判断 FEATURE_AUTOMOTIVE，不会误判插电平板。
   Future<bool> isAutomotive() async {
     if (!isSupportedPlatform) return false;
     try {
@@ -27,4 +25,5 @@ class DeviceInfoService {
       return false;
     }
   }
+
 }

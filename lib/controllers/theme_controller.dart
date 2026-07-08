@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/device_info_service.dart';
+import '../ui/adaptive_layout.dart';
 
 /// 全局个性化设置控制器。
 ///
@@ -56,6 +57,7 @@ class ThemeController extends ChangeNotifier {
 
   bool? _lastAppliedIsTablet;
   bool? _lastAppliedLandscapeEnabled;
+  bool? _lastAppliedCarModeEnabled;
 
   Color get seedColor => _seedColor;
   bool get backgroundEnabled => _backgroundEnabled;
@@ -96,6 +98,7 @@ class ThemeController extends ChangeNotifier {
     if (opacity != null) {
       _backgroundOpacity = opacity.clamp(0.0, 0.8);
     }
+    applyOrientations(AdaptiveLayout.isTabletByPlatform());
     notifyListeners();
   }
 
@@ -134,19 +137,22 @@ class ThemeController extends ChangeNotifier {
     _carModeEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_carModeEnabledKey, enabled);
+    applyOrientations(AdaptiveLayout.isTabletByPlatform());
     notifyListeners();
   }
 
   /// 动态应用屏幕方向锁定/解锁。
   void applyOrientations(bool isTablet) {
     if (_lastAppliedIsTablet == isTablet &&
-        _lastAppliedLandscapeEnabled == _landscapeEnabled) {
+        _lastAppliedLandscapeEnabled == _landscapeEnabled &&
+        _lastAppliedCarModeEnabled == _carModeEnabled) {
       return;
     }
     _lastAppliedIsTablet = isTablet;
     _lastAppliedLandscapeEnabled = _landscapeEnabled;
+    _lastAppliedCarModeEnabled = _carModeEnabled;
 
-    if (isTablet || _landscapeEnabled) {
+    if (isTablet || _landscapeEnabled || _carModeEnabled) {
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,

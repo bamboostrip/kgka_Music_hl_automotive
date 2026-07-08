@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -995,6 +994,8 @@ class _LandscapeRightPanel extends StatelessWidget {
             Expanded(
               child: _LandscapeLyricPanel(
                 player: player,
+                songHash: song?.hash ?? '',
+                lyrics: player.lyrics,
                 compact: compact || veryTight,
               ),
             ),
@@ -1016,9 +1017,16 @@ class _LandscapeRightPanel extends StatelessWidget {
 }
 
 class _LandscapeLyricPanel extends StatefulWidget {
-  const _LandscapeLyricPanel({required this.player, required this.compact});
+  const _LandscapeLyricPanel({
+    required this.player,
+    required this.songHash,
+    required this.lyrics,
+    required this.compact,
+  });
 
   final PlayerController player;
+  final String songHash;
+  final List<LyricLine> lyrics;
   final bool compact;
 
   @override
@@ -1028,10 +1036,6 @@ class _LandscapeLyricPanel extends StatefulWidget {
 class _LandscapeLyricPanelState extends State<_LandscapeLyricPanel> {
   late final LyricController _lyricController;
   late final Ticker _ticker;
-  // flutter_lyric 内部通过 isSelectingNotifier 标记用户是否在拖动歌词。
-  // LyricView 是 CustomPaint 自绘，不产生 ScrollNotification，外层
-  // NotificationListener 无效；改为监听 isSelectingNotifier 控制 ticker，
-  // 用户拖动时停止 setProgress，避免与 flutter_lyric 内部 fling/恢复竞态。
   bool _isUserSelecting = false;
 
   @override
@@ -1050,10 +1054,8 @@ class _LandscapeLyricPanelState extends State<_LandscapeLyricPanel> {
   @override
   void didUpdateWidget(covariant _LandscapeLyricPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 只有歌词内容真正变化时才重新加载。
-    // 如果无条件地在每次 didUpdateWidget（每帧）调用 _syncLyrics()，
-    // loadLyricModel 会完全重置 controller 内部滚动状态，导致用户滑动时视图每帧跳回当前播放行。
-    if (!listEquals(oldWidget.player.lyrics, widget.player.lyrics)) {
+    if (oldWidget.songHash != widget.songHash ||
+        oldWidget.lyrics != widget.lyrics) {
       _syncLyrics();
     }
     _syncTicker();
@@ -1073,7 +1075,7 @@ class _LandscapeLyricPanelState extends State<_LandscapeLyricPanel> {
   }
 
   void _syncLyrics() {
-    final lyrics = widget.player.lyrics;
+    final lyrics = widget.lyrics;
     if (lyrics.isNotEmpty) {
       final model = convertToFlutterLyricModel(lyrics);
       _lyricController.loadLyricModel(model);
@@ -1083,7 +1085,7 @@ class _LandscapeLyricPanelState extends State<_LandscapeLyricPanel> {
   void _syncTicker() {
     final shouldTick =
         widget.player.isPlaying &&
-        widget.player.lyrics.isNotEmpty &&
+        widget.lyrics.isNotEmpty &&
         !widget.player.isScrubbing &&
         !_isUserSelecting;
     if (shouldTick && !_ticker.isActive) {
@@ -1103,7 +1105,7 @@ class _LandscapeLyricPanelState extends State<_LandscapeLyricPanel> {
   @override
   Widget build(BuildContext context) {
     final player = widget.player;
-    final lyrics = widget.player.lyrics;
+    final lyrics = widget.lyrics;
     if (lyrics.isEmpty) {
       return Align(
         alignment: Alignment.centerLeft,
