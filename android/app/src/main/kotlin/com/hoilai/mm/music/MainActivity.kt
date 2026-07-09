@@ -18,6 +18,7 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.os.Handler
+import android.util.Log
 import android.os.Looper
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
@@ -34,12 +35,17 @@ class MainActivity : AudioServiceActivity() {
     private var downloadReceiverRegistered = false
     private var lyricsStateReceiverRegistered = false
     private var desktopLyricsChannel: MethodChannel? = null
+    // audio_effects channel 引用,供响度分析中途反向 invokeMethod 推进度给 Dart。
+    private var audioEffectsChannel: MethodChannel? = null
     private var bassBoost: BassBoost? = null
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var loudnessEnhancerSessionId: Int? = null
+    // 当前响度分析的取消标志。切歌时调用 cancelLoudnessAnalysis 置 true,
+    // 让解码循环立即结束,避免旧歌曲分析空跑占 CPU。
+    @Volatile private var loudnessAnalysisCancelled: Boolean = false
     private var pendingPermissionResult: MethodChannel.Result? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -121,6 +127,7 @@ class MainActivity : AudioServiceActivity() {
             }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/audio_effects")
+            .also { audioEffectsChannel = it }
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "getEqualizerConfig" -> {
@@ -164,13 +171,40 @@ class MainActivity : AudioServiceActivity() {
                     "analyzeLoudness" -> {
                         val url = call.argument<String>("url")
                         val maxDurationMs = call.argument<Int>("maxDurationMs") ?: 1800000
+                        val progressIntervalMs = call.argument<Int>("progressIntervalMs") ?: 500
                         if (url.isNullOrBlank()) {
                             result.error("invalid_url", "url is null or empty", null)
                             return@setMethodCallHandler
                         }
+                        Log.i("Loudness", "channel analyzeLoudness 收到 url=$url interval=${progressIntervalMs}ms")
+                        // 每次新分析重置取消标志。切歌时 Dart 侧调 cancelLoudnessAnalysis
+                        // 置 true,解码循环检测到后立即抛异常结束,不再空跑。
+                        loudnessAnalysisCancelled = false
+                        val channel = audioEffectsChannel
                         thread {
                             try {
-                                val analyzed = LoudnessAnalyzer.analyze(url, maxDurationMs)
+                                val analyzed = LoudnessAnalyzer.analyze(
+                                    url,
+                                    maxDurationMs,
+                                    progressIntervalMs,
+                                    isCancelled = { loudnessAnalysisCancelled },
+                                    onProgress = { lufs, analyzedMs ->
+                                        // 反向 invokeMethod 把中途 LUFS 推给 Dart,
+                                        // Dart 侧用序号守卫决定是否应用。切到主线程调用
+                                        // (Flutter MethodChannel 要求主线程)。
+                                        if (channel != null && !loudnessAnalysisCancelled) {
+                                            mainHandler.post {
+                                                channel.invokeMethod(
+                                                    "onLoudnessProgress",
+                                                    mapOf(
+                                                        "lufs" to lufs,
+                                                        "analyzedMs" to analyzedMs
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    },
+                                )
                                 mainHandler.post {
                                     result.success(
                                         mapOf(
@@ -182,21 +216,36 @@ class MainActivity : AudioServiceActivity() {
                                 }
                             } catch (e: Exception) {
                                 mainHandler.post {
-                                    result.error("analyze_failed", e.message, null)
+                                    if (loudnessAnalysisCancelled) {
+                                        // 取消不算失败,返回 success(false) 让 Dart 侧
+                                        // 走"已丢弃"路径(序号守卫也会拦截)。
+                                        result.success(null)
+                                    } else {
+                                        result.error("analyze_failed", e.message, null)
+                                    }
                                 }
                             }
                         }
+                    }
+                    "cancelLoudnessAnalysis" -> {
+                        // 切歌时调用,让正在跑的解码循环立即结束。
+                        Log.i("Loudness", "channel cancelLoudnessAnalysis 取消在途分析")
+                        loudnessAnalysisCancelled = true
+                        result.success(true)
                     }
                     "configureLoudnessGain" -> {
                         val audioSessionId = call.argument<Int>("audioSessionId")
                         val enabled = call.argument<Boolean>("enabled") ?: false
                         val gainMb = call.argument<Int>("gainMb") ?: 0
+                        Log.i("Loudness", "channel configureLoudnessGain enabled=$enabled gainMb=$gainMb session=$audioSessionId")
 
                         runCatching {
                             configureLoudnessGain(audioSessionId, enabled, gainMb)
                         }.onSuccess { supported ->
+                            Log.i("Loudness", "configureLoudnessGain 成功 supported=$supported gainMb=$gainMb")
                             result.success(supported)
                         }.onFailure { error ->
+                            Log.e("Loudness", "configureLoudnessGain 失败 gainMb=$gainMb", error)
                             releaseLoudnessGain()
                             result.error("loudness_gain_failed", error.message, null)
                         }

@@ -16,10 +16,25 @@ struct LoudnessResult {
 ///
 /// AVAssetReader 输出已混成单声道,故用单通道滤波后求平方(等价于 BS.1770
 /// 单声道情形)。零额外依赖、零权限(网络流复用已有 ATS 配置)。
+///
+/// 支持渐进式:解码过程中每 progressIntervalMs 调一次 onProgress 推送
+/// "截至当前"的 integrated LUFS,供 Dart 侧渐进式应用增益。
 enum LoudnessAnalyzer {
-    /// - Parameter maxDurationMs: 最多分析的时长,默认 30 分钟(防异常长文件的安全上限;
-    ///   正常歌曲会在解码到 EOS 前结束,得到标准 EBU R128 integrated loudness)。
-    static func analyze(url: URL, maxDurationMs: Int = 1800000) throws -> LoudnessResult {
+    /// - Parameters:
+    ///   - maxDurationMs: 最多分析的时长,默认 30 分钟(防异常长文件的安全上限;
+    ///     正常歌曲会在解码到 EOS 前结束,得到标准 EBU R128 integrated loudness)。
+    ///   - progressIntervalMs: 中途推送进度的间隔(ms)。每解码满此时长,调一次
+    ///     onProgress 推送"截至当前"的 LUFS。<=0 表示不推中途进度。默认 500ms。
+    ///   - isCancelled: 由调用方持有的取消标志,返回 true 时立即结束解码循环。
+    ///     切歌时调用方置 true,避免空跑浪费 CPU。
+    ///   - onProgress: 中途进度回调 (lufs, analyzedMs)。不包含最终值。
+    static func analyze(
+        url: URL,
+        maxDurationMs: Int = 1800000,
+        progressIntervalMs: Int = 500,
+        isCancelled: () -> Bool = { false },
+        onProgress: (Double, Int) -> Void = { _, _ in }
+    ) throws -> LoudnessResult {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .audio).first else {
             throw NSError(
@@ -50,8 +65,25 @@ enum LoudnessAnalyzer {
 
         let sampleRate = 48000
         let meter = GatedLoudnessMeter(sampleRate: sampleRate, channels: 1, maxDurationMs: maxDurationMs)
+        // 中途进度推送:每解码满 progressIntervalMs 的音频推一次"截至当前"的 LUFS。
+        let progressSamples: Int64 = progressIntervalMs > 0
+            ? Int64(sampleRate) * Int64(progressIntervalMs) / 1000
+            : Int64.max
+        var nextProgressAt: Int64 = progressSamples
+        // 墙钟时间限流:解码远快于实时,纯按解码音频时长会导致推送间隔压缩到 ~20ms,
+        // 刷屏且无意义。加一层墙钟限制:两次推送间隔不少于 progressWallIntervalMs。
+        let progressWallIntervalMs: Int64 = 200
+        var lastProgressWallMs: Int64 = 0
 
         while reader.status == .reading {
+            // 切歌/取消:立即跳出循环,不再解码。
+            if isCancelled() {
+                reader.cancelReading()
+                throw NSError(
+                    domain: "loudness", code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "analysis cancelled"]
+                )
+            }
             guard let sampleBuffer = output.copyNextSampleBuffer() else { break }
             guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
                 continue
@@ -66,6 +98,22 @@ enum LoudnessAnalyzer {
             var stop = false
             ptr.withMemoryRebound(to: Float.self, capacity: frameCount) { floatPtr in
                 stop = !meter.feed(floatPtr, count: frameCount)
+            }
+            // 推中途进度:integratedLufs() 在任何时刻都能基于已累积的 block
+            // 算出"截至当前"的响度,算法上正确(非近似)。
+            // 双重限流:(1)解码音频时长满 progressIntervalMs (2)墙钟间隔满
+            // progressWallIntervalMs。后者防止快速解码导致推送过密。
+            if progressSamples != .max && meter.sampleCount >= nextProgressAt {
+                let nowWallMs = Int64(Date().timeIntervalSince1970 * 1000)
+                if nowWallMs - lastProgressWallMs >= progressWallIntervalMs {
+                    let lufs = meter.integratedLufs()
+                    if !lufs.isNaN && !lufs.isInfinite {
+                        let analyzedMs = Int(meter.sampleCount * 1000 / Int64(sampleRate))
+                        onProgress(lufs, analyzedMs)
+                    }
+                    lastProgressWallMs = nowWallMs
+                }
+                nextProgressAt = meter.sampleCount + progressSamples
             }
             if stop { break }
         }

@@ -151,6 +151,17 @@ class PlayerController extends ChangeNotifier {
   int _loudnessSerial = 0;
   // 当前歌曲实际播放 URL,供"开关开启时分析当前歌曲"复用,避免重新解析。
   String? _currentLoudnessUrl;
+  // 渡口效应缓解:分析开始后前 3s(墙钟时间)的中途增益做 EMA 低通滤波。
+  // 问题:渡口等歌前奏安静,初步 LUFS 偏低 → 增益被推到 +6dB 极限,
+  // 随分析推进 LUFS 回升 → 增益砸回 +1.69dB,用户听到大幅跳变。
+  // 方案:墙钟时间 3s 内的中途增益做 EMA(α=0.3),平滑掉前奏导致的剧烈跳变。
+  // 用墙钟而非音频时长:解码 27x 快,3s 音频 ~110ms 就解码完,按音频时长滤波
+  // 窗口在用户听到第一个进度时就已关闭。按墙钟则覆盖用户实际听到的前 3 秒。
+  // 最终值(isFinal)不滤波,保证精度。
+  // _emaGainDb 为 null 表示尚未初始化(首次中途值直接采用,不滤波)。
+  double? _emaGainDb;
+  // 分析开始的墙钟时间戳,用于判断是否在 EMA 滤波窗口内。
+  DateTime? _emaStartWallTime;
 
   AudioPlayer get audioPlayer => _audioHandler.audioPlayer;
 
@@ -323,6 +334,9 @@ class PlayerController extends ChangeNotifier {
     _lastDesktopLyricIndex = -1;
     notifyListeners();
     unawaited(_syncDesktopLyricsVisibility());
+    // 切歌:取消上一首可能在途的响度分析,避免旧分析空跑占 CPU。
+    // 序号守卫也会丢弃旧结果,但取消能立即停掉原生解码线程。
+    unawaited(_loudness.cancelAnalysis());
 
     try {
       String url;
@@ -1396,7 +1410,14 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// 切歌时并行分析响度,完成后应用增益(不阻塞 loadSong/播放)。
-  /// 用 [_loudnessSerial] 守护:若分析期间又切了歌,本次结果会被丢弃。
+  /// 渐进式:原生解码过程中每 500ms 推一次中途 LUFS,这里收到后立即算增益
+  /// 并渐变应用,用户 0.5s 即可听到大致均衡。全曲分析完成后用精确值做最后
+  /// 一次微调并写缓存。
+  ///
+  /// 用 [_loudnessSerial] 守护:若分析期间又切了歌,本次结果(包括中途进度)
+  /// 会被丢弃。切歌时 [playSong] 会调 [LoudnessService.cancelAnalysis] 取消
+  /// 旧分析,避免空跑占 CPU。
+  ///
   /// 仅在缓存未命中(需原生解码分析)时触发渐变应用;缓存命中已由
   /// 调用方(loadSong 前)instant 应用,这里 [analyzeAndComputeGain] 会
   /// 再次命中并返回相同值,gain 与 [_pendingGainDb] 一致则跳过重复应用。
@@ -1405,18 +1426,90 @@ class PlayerController extends ChangeNotifier {
     required String url,
   }) async {
     final serial = ++_loudnessSerial;
+    // 重置 EMA 滤波状态:每首新歌从零开始滤波,记录墙钟起点。
+    _emaGainDb = null;
+    _emaStartWallTime = DateTime.now();
+    LoudnessService.log('controller analyze 开始 serial=$serial hash=${song.hash.length > 8 ? song.hash.substring(0, 8) : song.hash}');
     final gain = await _loudness.analyzeAndComputeGain(
       songHash: song.hash,
       url: url,
+      onProgress: (gainDb, lufs, analyzedMs, isFinal) {
+        // 切歌守卫:序号不匹配说明期间已切到其它歌曲,丢弃本次中途进度。
+        if (serial != _loudnessSerial) {
+          LoudnessService.log('controller PROGRESS 丢弃 serial=$serial≠$_loudnessSerial (已切歌)');
+          return;
+        }
+        // 渡口效应缓解:分析开始后前 3s(墙钟时间)的中途增益做 EMA 低通滤波。
+        // 用墙钟而非音频时长:解码 27x 快,3s 音频 ~110ms 就解码完,按音频时长
+        // 滤波窗口在用户听到第一个进度时就已关闭。按墙钟则覆盖用户实际听到的
+        // 前 3 秒播放。最终值(isFinal)不滤波,保证精度。
+        var appliedGain = gainDb;
+        final wallElapsedMs = _emaStartWallTime == null
+            ? LoudnessService.earlyProgressWallMs + 1
+            : DateTime.now().difference(_emaStartWallTime!).inMilliseconds;
+        if (!isFinal && wallElapsedMs < LoudnessService.earlyProgressWallMs) {
+          final prev = _emaGainDb;
+          if (prev == null) {
+            // 首次中途值直接采用(无历史可平均),初始化 EMA 状态。
+            _emaGainDb = gainDb;
+          } else {
+            // EMA: α=0.3 → 新值权重 30%,历史 70%。对 +6→+1.69 跳变
+            // 平滑到 +3.90(首次)→ +3.0(二次),用户可感但不再突兀。
+            _emaGainDb = LoudnessService.emaAlpha * gainDb +
+                (1 - LoudnessService.emaAlpha) * prev;
+            appliedGain = _emaGainDb!;
+            LoudnessService.log('controller PROGRESS(mid,EMA) raw=${gainDb.toStringAsFixed(2)}dB smoothed=${appliedGain.toStringAsFixed(2)}dB wall=${wallElapsedMs}ms<${LoudnessService.earlyProgressWallMs}ms');
+          }
+        }
+        // 中途进度(isFinal=false):若新增益与当前应用增益差异超过阈值,
+        // 渐变应用(用户无感)。差异太小(<0.3dB)则跳过,避免频繁 ramp。
+        // 最终值(isFinal=true):总是应用(可能差异小但需定稿)。
+        final currentGain = _pendingGainDb;
+        final diff = currentGain == null
+            ? double.infinity
+            : (appliedGain - currentGain).abs();
+        if (isFinal) {
+          LoudnessService.log('controller PROGRESS(final) gain=${appliedGain.toStringAsFixed(2)}dB diff=${diff == double.infinity ? "∞" : diff.toStringAsFixed(2)}dB → 应用(ramp)');
+        } else if (diff >= LoudnessService.progressGainThreshold) {
+          LoudnessService.log('controller PROGRESS(mid) gain=${appliedGain.toStringAsFixed(2)}dB diff=${diff.toStringAsFixed(2)}dB≥${LoudnessService.progressGainThreshold} → 应用(ramp)');
+        } else {
+          LoudnessService.log('controller PROGRESS(mid) gain=${appliedGain.toStringAsFixed(2)}dB diff=${diff.toStringAsFixed(2)}dB<${LoudnessService.progressGainThreshold} → 跳过(差异太小)');
+          return;
+        }
+        _pendingGainDb = appliedGain;
+        // 中途值用渐变(ramp),最终值也用渐变(平滑收敛)。
+        // 缓存命中的 instant 应用已在 playSong 里处理,不走到这里。
+        unawaited(_applyLoudnessGain(instant: false));
+        notifyListeners();
+      },
     );
-    // 切歌守卫:序号不匹配说明期间已切到其它歌曲,丢弃本次结果
-    if (serial != _loudnessSerial) return;
-    final needsRamp = gain != null && gain != _pendingGainDb;
-    _pendingGainDb = gain;
-    // gain 为 null(分析失败/未启用)→ reset;否则:缓存命中已 instant 应用
-    // 过且值不变则跳过,新分析结果才渐变应用。
-    await _applyLoudnessGain(instant: !needsRamp && gain != null);
-    notifyListeners(); // 刷新 UI 上的 LUFS/增益显示
+    // 切歌守卫:序号不匹配说明期间已切到其它歌曲,丢弃本次最终结果
+    if (serial != _loudnessSerial) {
+      LoudnessService.log('controller analyze 最终结果丢弃 serial=$serial≠$_loudnessSerial (已切歌)');
+      return;
+    }
+    // 最终值已在 onProgress(isFinal=true) 里应用过,这里只处理:
+    // - gain 为 null(分析失败/未启用/被取消)→ reset
+    // - 缓存命中(gain 与 _pendingGainDb 一致)→ 跳过
+    if (gain == null) {
+      LoudnessService.log('controller analyze 返回 null (失败/取消/未启用)');
+      if (_pendingGainDb != null) {
+        _pendingGainDb = null;
+        await _applyLoudnessGain(instant: false);
+        notifyListeners();
+      }
+      return;
+    }
+    // 缓存命中场景:onProgress 不会被调用(查缓存直接返回),
+    // _pendingGainDb 可能仍为 null(首次)或旧值。这里补一次 instant 应用。
+    if (gain != _pendingGainDb) {
+      LoudnessService.log('controller analyze 缓存命中补应用 gain=${gain.toStringAsFixed(2)}dB (instant)');
+      _pendingGainDb = gain;
+      await _applyLoudnessGain(instant: true);
+      notifyListeners();
+    } else {
+      LoudnessService.log('controller analyze 完成 gain=${gain.toStringAsFixed(2)}dB 已应用,无需补应用');
+    }
   }
 
   /// 应用当前歌曲的响度增益(sessionId 变化或分析完成时调用)。
@@ -1447,6 +1540,7 @@ class PlayerController extends ChangeNotifier {
     } else {
       _pendingGainDb = null;
       _loudnessSerial++; // 使任何在途分析结果失效
+      unawaited(_loudness.cancelAnalysis()); // 停掉原生解码线程
     }
     notifyListeners();
   }
@@ -1458,6 +1552,7 @@ class PlayerController extends ChangeNotifier {
   /// 清完后若响度开启,重置当前歌曲增益回原始音量,下次切歌重新分析。
   Future<void> clearLoudnessCache() async {
     _loudnessSerial++; // 使任何在途分析结果失效
+    unawaited(_loudness.cancelAnalysis()); // 停掉原生解码线程
     _pendingGainDb = null;
     await _loudness.clearCache();
     if (_loudness.isEnabled) {
@@ -1593,6 +1688,7 @@ class PlayerController extends ChangeNotifier {
         strength: bassBoostStrength,
       ),
     );
+    unawaited(_loudness.cancelAnalysis());
     unawaited(_loudness.releaseNative());
     _audioHandler.detachTransportControls();
     _desktopLyrics.setVisibilityChangedHandler(null);

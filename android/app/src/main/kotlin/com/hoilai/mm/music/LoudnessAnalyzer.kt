@@ -3,6 +3,7 @@ package com.hoilai.mm.music
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.util.Log
 import java.nio.ByteOrder
 import kotlin.math.log10
 import kotlin.math.pow
@@ -21,6 +22,8 @@ import kotlin.math.pow
  */
 internal object LoudnessAnalyzer {
 
+    private const val TAG = "Loudness"
+
     /** 分析结果。 */
     data class Result(val lufs: Double, val sampleRate: Int, val analyzedMs: Int)
 
@@ -30,9 +33,24 @@ internal object LoudnessAnalyzer {
      * @param url 网络或本地 URL(http(s):// 或文件路径)。
      * @param maxDurationMs 最多分析的时长(从头开始),默认 30 分钟(安全上限,
      *        正常歌曲会在解码到 EOS 前结束,得到标准 integrated loudness)。
-     * @return [Result];分析失败抛出异常。
+     * @param progressIntervalMs 中途推送进度的间隔(ms)。每解码满此时长,
+     *        调一次 [onProgress] 推送"截至当前"的 integrated LUFS,供 Dart 侧
+     *        渐进式应用增益(0.5s 即可有初步值,不必等全曲分析完)。
+     *        默认 500ms。<=0 表示不推中途进度。
+     * @param isCancelled 由调用方持有的取消标志,返回 true 时立即结束解码循环。
+     *        切歌时调用方置 true,避免空跑浪费 CPU。
+     * @param onProgress 中途进度回调,参数:(lufs, analyzedMs)。仅在解码过程中
+     *        每 [progressIntervalMs] 调用一次,不包含最终值(最终值由返回值给出)。
+     *        回调在后台线程触发,调用方需自行切线程。
+     * @return [Result];分析失败或被取消抛出异常。
      */
-    fun analyze(url: String, maxDurationMs: Int = 1800000): Result {
+    fun analyze(
+        url: String,
+        maxDurationMs: Int = 1800000,
+        progressIntervalMs: Int = 500,
+        isCancelled: () -> Boolean = { false },
+        onProgress: (Double, Int) -> Unit = { _, _ -> },
+    ): Result {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(url)
@@ -70,8 +88,25 @@ internal object LoudnessAnalyzer {
             val meter = GatedLoudnessMeter(sampleRate, channels, maxDurationMs)
             val info = MediaCodec.BufferInfo()
             var sawInputEos = false
+            // 中途进度推送:每解码满 progressIntervalMs 的音频推一次"截至当前"的 LUFS。
+            // progressIntervalMs <= 0 时不推送(兼容旧的一次性模式)。
+            val progressSamples = if (progressIntervalMs > 0)
+                sampleRate.toLong() * progressIntervalMs / 1000 else Long.MAX_VALUE
+            var nextProgressAt = progressSamples
+            val startTimeMs = System.currentTimeMillis()
+            // 墙钟时间限流:解码远快于实时(27x),纯按解码音频时长会导致推送间隔
+            // 压缩到 ~20ms(日志实测),刷屏且无意义。加一层墙钟限制:无论解码多快,
+            // 两次推送间隔不少于 progressWallIntervalMs。最后一次推送不受限(保证收尾)。
+            val progressWallIntervalMs = 200L
+            var lastProgressWallMs = 0L
+            Log.i(TAG, "analyze 开始 sr=$sampleRate ch=$channels url=$url")
 
             while (true) {
+                // 切歌/取消:立即跳出循环,不再解码。避免旧歌曲分析空跑占 CPU。
+                if (isCancelled()) {
+                    Log.i(TAG, "analyze 取消 (isCancelled) 已解码 ${meter.sampleCount} samples")
+                    throw IllegalStateException("analysis cancelled")
+                }
                 if (!sawInputEos) {
                     val inputIndex = codec.dequeueInputBuffer(10_000)
                     if (inputIndex >= 0) {
@@ -103,6 +138,26 @@ internal object LoudnessAnalyzer {
                         }
                     }
                     codec.releaseOutputBuffer(outputIndex, false)
+                    // 推中途进度:integratedLufs() 在任何时刻都能基于已累积的 block
+                    // 算出"截至当前"的响度,算法上正确(非近似)。让 Dart 侧 0.5s 即可
+                    // 拿到初步增益渐变应用,不必等全曲分析完。
+                    // 双重限流:(1)解码音频时长满 progressIntervalMs (2)墙钟间隔满
+                    // progressWallIntervalMs。后者防止快速解码导致推送过密。
+                    if (progressSamples != Long.MAX_VALUE &&
+                        meter.sampleCount >= nextProgressAt
+                    ) {
+                        val nowWall = System.currentTimeMillis()
+                        if (nowWall - lastProgressWallMs >= progressWallIntervalMs) {
+                            val lufs = meter.integratedLufs()
+                            if (!lufs.isNaN() && !lufs.isInfinite()) {
+                                val analyzedMs = (meter.sampleCount * 1000 / sampleRate).toInt()
+                                Log.i(TAG, "analyze 进度 lufs=${"%.2f".format(lufs)} analyzed=${analyzedMs}ms samples=${meter.sampleCount}")
+                                onProgress(lufs, analyzedMs)
+                            }
+                            lastProgressWallMs = nowWall
+                        }
+                        nextProgressAt = meter.sampleCount + progressSamples
+                    }
                     if (stop || info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                         break
                     }
@@ -114,6 +169,8 @@ internal object LoudnessAnalyzer {
                 throw IllegalStateException("no samples decoded from $url")
             }
             val analyzedMs = (meter.sampleCount * 1000 / sampleRate).toInt()
+            val elapsedMs = System.currentTimeMillis() - startTimeMs
+            Log.i(TAG, "analyze 完成 lufs=${"%.2f".format(lufs)} analyzed=${analyzedMs}ms 耗时=${elapsedMs}ms url=$url")
             return Result(lufs, sampleRate, analyzedMs)
         } finally {
             runCatching { codec.stop() }
