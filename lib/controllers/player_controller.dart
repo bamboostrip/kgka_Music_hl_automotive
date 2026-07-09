@@ -13,6 +13,7 @@ import '../models/music_models.dart';
 import '../services/audio_effects_service.dart';
 import '../services/cache_service.dart';
 import '../services/desktop_lyrics_service.dart';
+import '../services/loudness_service.dart';
 import '../services/music_api.dart';
 import '../services/music_audio_handler.dart';
 import '../services/playback_history_service.dart';
@@ -132,8 +133,10 @@ class PlayerController extends ChangeNotifier {
       unawaited(_refreshEqualizerConfig());
       unawaited(_applyEqualizer());
       unawaited(_applyBassBoost());
+      unawaited(_applyLoudnessGain());
     });
     unawaited(_setupAudioSessionListeners());
+    unawaited(_loudness.init());
   }
 
   final MusicApi _api;
@@ -142,6 +145,12 @@ class PlayerController extends ChangeNotifier {
   final DesktopLyricsService _desktopLyrics = DesktopLyricsService();
   final PlaybackHistoryService _historyService = PlaybackHistoryService();
   final PlaybackStatsService _statsService = PlaybackStatsService();
+  final LoudnessService _loudness = LoudnessService();
+  double? _pendingGainDb; // 当前歌曲分析得到的待应用增益(dB)
+  // 切歌竞态守卫:每次发起分析递增,回调比对序号,不一致则丢弃旧结果。
+  int _loudnessSerial = 0;
+  // 当前歌曲实际播放 URL,供"开关开启时分析当前歌曲"复用,避免重新解析。
+  String? _currentLoudnessUrl;
 
   AudioPlayer get audioPlayer => _audioHandler.audioPlayer;
 
@@ -207,6 +216,8 @@ class PlayerController extends ChangeNotifier {
   bool get isScrubbing => _isScrubbing;
   bool get isAudioEffectsSupported => _audioEffects.isAudioEffectsSupported;
   bool get isBassBoostSupported => _audioEffects.isBassBoostSupported;
+  bool get loudnessEnabled => _loudness.isEnabled;
+  bool get isLoudnessAnalysisSupported => _loudness.isAnalysisSupported;
   String get audioEffectsLabel {
     if (!isAudioEffectsSupported) {
       return '当前平台暂不支持';
@@ -335,6 +346,15 @@ class PlayerController extends ChangeNotifier {
         url = playUrl.url;
         networkUrl = playUrl.url;
       }
+      // 响度均衡:先查缓存,命中则首播前即应用正确增益(instant,无跳变);
+      // 未命中则播放中分析,完成后渐变(ramp)应用。
+      _currentLoudnessUrl = url;
+      final pre = _loudness.gainFromCache(song.hash);
+      if (pre.fromCache) {
+        _pendingGainDb = pre.gainDb;
+        unawaited(_applyLoudnessGain(instant: true));
+      }
+      unawaited(_analyzeAndApplyLoudness(song: song, url: url));
       await _audioHandler.loadSong(
         song: song,
         url: url,
@@ -842,6 +862,15 @@ class PlayerController extends ChangeNotifier {
         url = playUrl.url;
         networkUrl = playUrl.url;
       }
+      // 响度均衡:切换音质/重载后 URL 可能变化。先查缓存命中即 instant 应用,
+      // 未命中则播放中分析后渐变(序号守卫会丢弃旧结果)。
+      _currentLoudnessUrl = url;
+      final pre = _loudness.gainFromCache(song.hash);
+      if (pre.fromCache) {
+        _pendingGainDb = pre.gainDb;
+        unawaited(_applyLoudnessGain(instant: true));
+      }
+      unawaited(_analyzeAndApplyLoudness(song: song, url: url));
       await _audioHandler.loadSong(
         song: song,
         url: url,
@@ -1366,6 +1395,80 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
+  /// 切歌时并行分析响度,完成后应用增益(不阻塞 loadSong/播放)。
+  /// 用 [_loudnessSerial] 守护:若分析期间又切了歌,本次结果会被丢弃。
+  /// 仅在缓存未命中(需原生解码分析)时触发渐变应用;缓存命中已由
+  /// 调用方(loadSong 前)instant 应用,这里 [analyzeAndComputeGain] 会
+  /// 再次命中并返回相同值,gain 与 [_pendingGainDb] 一致则跳过重复应用。
+  Future<void> _analyzeAndApplyLoudness({
+    required Song song,
+    required String url,
+  }) async {
+    final serial = ++_loudnessSerial;
+    final gain = await _loudness.analyzeAndComputeGain(
+      songHash: song.hash,
+      url: url,
+    );
+    // 切歌守卫:序号不匹配说明期间已切到其它歌曲,丢弃本次结果
+    if (serial != _loudnessSerial) return;
+    final needsRamp = gain != null && gain != _pendingGainDb;
+    _pendingGainDb = gain;
+    // gain 为 null(分析失败/未启用)→ reset;否则:缓存命中已 instant 应用
+    // 过且值不变则跳过,新分析结果才渐变应用。
+    await _applyLoudnessGain(instant: !needsRamp && gain != null);
+    notifyListeners(); // 刷新 UI 上的 LUFS/增益显示
+  }
+
+  /// 应用当前歌曲的响度增益(sessionId 变化或分析完成时调用)。
+  /// [instant]=true 直接设置(缓存命中首播);false 走渐变(播放中分析完成)。
+  Future<void> _applyLoudnessGain({bool instant = false}) async {
+    await _loudness.applyGain(
+      audioPlayer: audioPlayer,
+      audioSessionId: _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
+      gainDb: _pendingGainDb,
+      instant: instant,
+    );
+  }
+
+  /// 开关响度均衡。
+  Future<void> setLoudnessEnabled(bool enabled) async {
+    await _loudness.setEnabled(
+      enabled: enabled,
+      audioPlayer: audioPlayer,
+      audioSessionId: _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
+    );
+    if (enabled) {
+      // 开启后,对当前歌曲立即分析并应用(用已解析的真实 URL,避免重新请求)
+      final song = currentSong;
+      final url = _currentLoudnessUrl;
+      if (song != null && url != null && url.isNotEmpty) {
+        unawaited(_analyzeAndApplyLoudness(song: song, url: url));
+      }
+    } else {
+      _pendingGainDb = null;
+      _loudnessSerial++; // 使任何在途分析结果失效
+    }
+    notifyListeners();
+  }
+
+  /// 响度分析缓存条目数(供设置页展示)。
+  int get loudnessCacheCount => _loudness.cacheCount;
+
+  /// 清空响度分析缓存(设置页"缓存管理"调用)。
+  /// 清完后若响度开启,重置当前歌曲增益回原始音量,下次切歌重新分析。
+  Future<void> clearLoudnessCache() async {
+    _loudnessSerial++; // 使任何在途分析结果失效
+    _pendingGainDb = null;
+    await _loudness.clearCache();
+    if (_loudness.isEnabled) {
+      await _loudness.resetGain(
+        audioPlayer: audioPlayer,
+        audioSessionId: _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
+      );
+    }
+    notifyListeners();
+  }
+
   void _syncListeningTimeTracker() {
     final shouldTrack =
         addListeningTimeEnabled && isPlaying && currentSong != null;
@@ -1490,6 +1593,7 @@ class PlayerController extends ChangeNotifier {
         strength: bassBoostStrength,
       ),
     );
+    unawaited(_loudness.releaseNative());
     _audioHandler.detachTransportControls();
     _desktopLyrics.setVisibilityChangedHandler(null);
     unawaited(_audioHandler.close());

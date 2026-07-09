@@ -123,6 +123,17 @@ class SettingsPage extends StatelessWidget {
                         player: player,
                       ),
                     ),
+                    if (player.isLoudnessAnalysisSupported) ...[
+                      _SettingsDivider(),
+                      _SettingsSwitchTile(
+                        icon: Icons.volume_up_rounded,
+                        iconColor: colorScheme.primary,
+                        title: '响度均衡',
+                        subtitle: '自动平衡歌曲音量,避免忽大忽小',
+                        value: player.loudnessEnabled,
+                        onChanged: player.setLoudnessEnabled,
+                      ),
+                    ],
                     _SettingsDivider(),
                     _SettingsTile(
                       icon: Icons.bar_chart_rounded,
@@ -352,6 +363,7 @@ class SettingsPage extends StatelessWidget {
         return _CacheManagementSheet(
           cache: cache,
           downloads: downloads,
+          player: player,
         );
       },
     );
@@ -650,10 +662,11 @@ class _SettingsDivider extends StatelessWidget {
 
 /// 缓存管理 BottomSheet。
 class _CacheManagementSheet extends StatefulWidget {
-  const _CacheManagementSheet({this.cache, this.downloads});
+  const _CacheManagementSheet({this.cache, this.downloads, this.player});
 
   final CacheService? cache;
   final DownloadController? downloads;
+  final PlayerController? player;
 
   @override
   State<_CacheManagementSheet> createState() => _CacheManagementSheetState();
@@ -784,6 +797,33 @@ class _CacheManagementSheetState extends State<_CacheManagementSheet> {
                     }
                   : null,
             ),
+            if (widget.player != null &&
+                widget.player!.isLoudnessAnalysisSupported) ...[
+              const SizedBox(height: 10),
+              _CacheItem(
+                icon: Icons.equalizer_rounded,
+                title: '响度分析缓存',
+                size: '${widget.player!.loudnessCacheCount} 首',
+                onClear: widget.player!.loudnessCacheCount > 0
+                    ? () async {
+                        setState(() => _clearing = true);
+                        try {
+                          await widget.player!.clearLoudnessCache();
+                          if (mounted) {
+                            Toast.success('响度分析缓存已清理');
+                          }
+                        } catch (_) {
+                          if (mounted) {
+                            Toast.error('清理失败');
+                          }
+                        }
+                        if (mounted) {
+                          setState(() => _clearing = false);
+                        }
+                      }
+                    : null,
+              ),
+            ],
             const SizedBox(height: 20),
             if (_clearing) const Center(child: CircularProgressIndicator()),
           ],

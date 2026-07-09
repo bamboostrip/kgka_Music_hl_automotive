@@ -16,6 +16,9 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
+import android.os.Handler
+import android.os.Looper
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -24,6 +27,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.ryanheise.audioservice.AudioServiceActivity
 import java.io.File
+import kotlin.concurrent.thread
 
 class MainActivity : AudioServiceActivity() {
     private val updateDownloads = mutableMapOf<Long, String>()
@@ -34,7 +38,10 @@ class MainActivity : AudioServiceActivity() {
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var loudnessEnhancerSessionId: Int? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
         private const val REQUEST_READ_AUDIO = 1001
@@ -153,6 +160,50 @@ class MainActivity : AudioServiceActivity() {
                             releaseBassBoost()
                             result.error("bass_boost_failed", error.message, null)
                         }
+                    }
+                    "analyzeLoudness" -> {
+                        val url = call.argument<String>("url")
+                        val maxDurationMs = call.argument<Int>("maxDurationMs") ?: 1800000
+                        if (url.isNullOrBlank()) {
+                            result.error("invalid_url", "url is null or empty", null)
+                            return@setMethodCallHandler
+                        }
+                        thread {
+                            try {
+                                val analyzed = LoudnessAnalyzer.analyze(url, maxDurationMs)
+                                mainHandler.post {
+                                    result.success(
+                                        mapOf(
+                                            "lufs" to analyzed.lufs,
+                                            "sampleRate" to analyzed.sampleRate,
+                                            "analyzedMs" to analyzed.analyzedMs
+                                        )
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                mainHandler.post {
+                                    result.error("analyze_failed", e.message, null)
+                                }
+                            }
+                        }
+                    }
+                    "configureLoudnessGain" -> {
+                        val audioSessionId = call.argument<Int>("audioSessionId")
+                        val enabled = call.argument<Boolean>("enabled") ?: false
+                        val gainMb = call.argument<Int>("gainMb") ?: 0
+
+                        runCatching {
+                            configureLoudnessGain(audioSessionId, enabled, gainMb)
+                        }.onSuccess { supported ->
+                            result.success(supported)
+                        }.onFailure { error ->
+                            releaseLoudnessGain()
+                            result.error("loudness_gain_failed", error.message, null)
+                        }
+                    }
+                    "releaseLoudnessGain" -> {
+                        releaseLoudnessGain()
+                        result.success(true)
                     }
                     else -> result.notImplemented()
                 }
@@ -534,6 +585,54 @@ class MainActivity : AudioServiceActivity() {
         bassBoostSessionId = null
     }
 
+    /**
+     * 配置响度增益(基于已分析的 LUFS 差值)。
+     * 使用 Android [LoudnessEnhancer] 仅放大轻歌(增益范围 0~1500 mB);
+     * 响歌衰减由 Dart 侧 [AudioPlayer.setVolume] 完成,LoudnessEnhancer 不支持负增益。
+     * 仿照 [configureBassBoost] 范式:sessionId 不变则复用,否则释放重建。
+     */
+    private fun configureLoudnessGain(
+        audioSessionId: Int?,
+        enabled: Boolean,
+        gainMb: Int
+    ): Boolean {
+        if (!enabled) {
+            releaseLoudnessGain()
+            return true
+        }
+        if (audioSessionId == null || audioSessionId <= 0) {
+            return false
+        }
+
+        val effect = if (loudnessEnhancerSessionId == audioSessionId &&
+            loudnessEnhancer != null
+        ) {
+            loudnessEnhancer!!
+        } else {
+            releaseLoudnessGain()
+            LoudnessEnhancer(audioSessionId).also {
+                loudnessEnhancer = it
+                loudnessEnhancerSessionId = audioSessionId
+            }
+        }
+
+        // LoudnessEnhancer 仅支持正向放大(setTargetGain 文档限定 "amplified"),
+        // 负值衰减属未定义行为,故下限为 0;响歌衰减由 Dart 侧 setVolume 完成。
+        val clampedGain = gainMb.coerceIn(0, 1500)
+        effect.setTargetGain(clampedGain)
+        effect.enabled = true
+        return true
+    }
+
+    private fun releaseLoudnessGain() {
+        loudnessEnhancer?.runCatching {
+            enabled = false
+            release()
+        }
+        loudnessEnhancer = null
+        loudnessEnhancerSessionId = null
+    }
+
     private fun enqueueApkDownload(url: String, fileName: String) {
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle("KA Music 更新包")
@@ -612,6 +711,7 @@ class MainActivity : AudioServiceActivity() {
     override fun onDestroy() {
         releaseEqualizer()
         releaseBassBoost()
+        releaseLoudnessGain()
         if (downloadReceiverRegistered) {
             unregisterReceiver(downloadReceiver)
             downloadReceiverRegistered = false
