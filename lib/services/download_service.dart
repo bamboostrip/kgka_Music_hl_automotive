@@ -272,12 +272,13 @@ class DownloadService {
     }
   }
 
-  /// LRU 清理播放缓存至 [AppConfig.playCacheMaxBytes] 以下。
+  /// LRU 清理播放缓存至 [maxBytes]（默认 [AppConfig.playCacheMaxBytes]）以下。
   ///
   /// [entries] 为当前缓存索引（按 cachedAt 升序排列）。
   /// [excludePaths] 中的文件跳过清理（如正在播放的文件）。
   Future<void> prunePlayCache(
     List<({String cacheKey, String filePath, DateTime cachedAt})> entries, {
+    int? maxBytes,
     Set<String> excludePaths = const {},
   }) async {
     int totalSize = 0;
@@ -288,14 +289,16 @@ class DownloadService {
       totalSize += size;
     }
 
-    if (totalSize <= AppConfig.playCacheMaxBytes) return;
+    final limit = maxBytes ?? AppConfig.playCacheMaxBytes;
+    if (limit < 0) return; // 小于 0 代表无限制
+    if (totalSize <= limit) return;
 
     // 按 cachedAt 升序删除最旧条目
     final sorted = List.of(entries)
       ..sort((a, b) => a.cachedAt.compareTo(b.cachedAt));
 
     for (final entry in sorted) {
-      if (totalSize <= AppConfig.playCacheMaxBytes) break;
+      if (totalSize <= limit) break;
       if (excludePaths.contains(entry.filePath)) continue;
       final size = fileSizes[entry.filePath] ?? 0;
       await deleteFile(entry.filePath);

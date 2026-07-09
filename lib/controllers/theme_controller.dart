@@ -100,6 +100,12 @@ class ThemeController extends ChangeNotifier {
     }
     applyOrientations(AdaptiveLayout.isTabletByPlatform());
     notifyListeners();
+
+    // 预缓存自定义背景图，避免页面切换时出现纯色闪烁
+    if (_backgroundEnabled && _backgroundImagePath != null) {
+      final provider = FileImage(File(_backgroundImagePath!));
+      provider.resolve(ImageConfiguration.empty);
+    }
   }
 
   /// 设置全局种子色。

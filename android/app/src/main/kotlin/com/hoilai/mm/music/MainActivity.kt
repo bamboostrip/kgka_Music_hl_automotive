@@ -16,6 +16,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.DynamicsProcessing
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -34,6 +35,8 @@ class MainActivity : AudioServiceActivity() {
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int? = null
+    private var dynamicsProcessing: DynamicsProcessing? = null
+    private var dynamicsProcessingSessionId: Int? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
 
     companion object {
@@ -163,6 +166,19 @@ class MainActivity : AudioServiceActivity() {
                             result.error("bass_boost_failed", error.message, null)
                         }
                     }
+                    "configureVolumeNormalization" -> {
+                        val audioSessionId = call.argument<Int>("audioSessionId")
+                        val enabled = call.argument<Boolean>("enabled") ?: false
+
+                        runCatching {
+                            configureVolumeNormalization(audioSessionId, enabled)
+                        }.onSuccess { supported ->
+                            result.success(supported)
+                        }.onFailure { error ->
+                            releaseDynamicsProcessing()
+                            result.error("volume_normalization_failed", error.message, null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -192,6 +208,34 @@ class MainActivity : AudioServiceActivity() {
                             result.success(songs)
                         }.onFailure { error ->
                             result.error("query_failed", error.message, null)
+                        }
+                    }
+                    "getAlbumArt" -> {
+                        val albumId = call.argument<Number>("albumId")?.toLong()
+                        if (albumId == null || albumId <= 0) {
+                            result.success(null)
+                            return@setMethodCallHandler
+                        }
+                        runCatching {
+                            getAlbumArtBytes(albumId)
+                        }.onSuccess { bytes ->
+                            result.success(bytes)
+                        }.onFailure { error ->
+                            result.error("album_art_failed", error.message, null)
+                        }
+                    }
+                    "getEmbeddedLyrics" -> {
+                        val filePath = call.argument<String>("filePath")
+                        if (filePath.isNullOrEmpty()) {
+                            result.success(null)
+                            return@setMethodCallHandler
+                        }
+                        runCatching {
+                            getEmbeddedLyrics(filePath)
+                        }.onSuccess { lyrics ->
+                            result.success(lyrics)
+                        }.onFailure { error ->
+                            result.error("lyrics_failed", error.message, null)
                         }
                     }
                     else -> result.notImplemented()
@@ -543,6 +587,89 @@ class MainActivity : AudioServiceActivity() {
         bassBoostSessionId = null
     }
 
+    private fun configureVolumeNormalization(audioSessionId: Int?, enabled: Boolean): Boolean {
+        if (!enabled) {
+            releaseDynamicsProcessing()
+            return true
+        }
+        if (audioSessionId == null || audioSessionId <= 0) {
+            return false
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return false
+        }
+
+        try {
+            val effect = if (dynamicsProcessingSessionId == audioSessionId && dynamicsProcessing != null) {
+                dynamicsProcessing!!
+            } else {
+                releaseDynamicsProcessing()
+
+                val config = DynamicsProcessing.Config.Builder(
+                    DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                    2, // channels
+                    false, // preEq
+                    0,
+                    true, // mbc
+                    1, // 1 band compressor
+                    false, // postEq
+                    0,
+                    true // limiter
+                ).build()
+
+                DynamicsProcessing(0, audioSessionId, config).also {
+                    dynamicsProcessing = it
+                    dynamicsProcessingSessionId = audioSessionId
+                }
+            }
+
+            val mbcBand = DynamicsProcessing.MbcBand(
+                true, // enabled
+                20000.0f, // cutoffFrequency
+                50.0f, // attackTime
+                300.0f, // releaseTime
+                4.0f, // ratio
+                -15.0f, // threshold
+                2.0f, // kneeWidth
+                -60.0f, // noiseGateThreshold
+                1.0f, // expanderRatio
+                2.0f, // preGain
+                0.0f // postGain
+            )
+
+            val limiter = DynamicsProcessing.Limiter(
+                true, // inUse
+                true, // enabled
+                0, // linkGroup
+                1.0f, // attackTime
+                100.0f, // releaseTime
+                10.0f, // ratio
+                -1.0f, // threshold
+                0.0f // postGain
+            )
+
+            for (c in 0 until 2) {
+                effect.setMbcBandByChannelIndex(c, 0, mbcBand)
+                effect.setLimiterByChannelIndex(c, limiter)
+            }
+
+            effect.enabled = true
+            return true
+        } catch (e: Exception) {
+            releaseDynamicsProcessing()
+            return false
+        }
+    }
+
+    private fun releaseDynamicsProcessing() {
+        dynamicsProcessing?.runCatching {
+            enabled = false
+            release()
+        }
+        dynamicsProcessing = null
+        dynamicsProcessingSessionId = null
+    }
+
     private fun enqueueApkDownload(url: String, fileName: String) {
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle("KA Music 更新包")
@@ -623,6 +750,31 @@ class MainActivity : AudioServiceActivity() {
     /// 会判为 false，需用户在设置→个性化手动开启车机模式。
     private fun isAutomotiveDevice(): Boolean {
         return packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
+    }
+
+    private fun getAlbumArtBytes(albumId: Long): ByteArray? {
+        val uri = ContentUris.withAppendedId(
+            Uri.parse("content://media/external/audio/albumart"),
+            albumId
+        )
+        return try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun getEmbeddedLyrics(filePath: String): String? {
+        return try {
+            val retriever = android.media.MediaMetadataRetriever()
+            retriever.setDataSource(filePath)
+            // METADATA_KEY_LYRICS = 26，API 29+ 才有常量名，直接用数字 key 兼容旧版本
+            val lyrics = retriever.extractMetadata(26)
+            retriever.release()
+            lyrics
+        } catch (e: Exception) {
+            null
+        }
     }
 
     override fun onDestroy() {

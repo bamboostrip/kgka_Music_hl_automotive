@@ -81,15 +81,29 @@ class DownloadController extends ChangeNotifier {
 
   static const _downloadsIndexKey = 'ka_music_downloads_index';
   static const _playCacheIndexKey = 'ka_music_play_cache_index';
+  static const _playCacheLimitKey = 'settings.play_cache_limit';
 
   final Map<String, DownloadEntry> _downloads = {}; // key = hash
   final Map<String, PlayCacheEntry> _playCache = {}; // key = hash_quality
   bool _initialized = false;
 
+  int _playCacheLimit = 300 * 1024 * 1024; // 默认 300MB
+  int get playCacheLimit => _playCacheLimit;
+
+  Future<void> setPlayCacheLimit(int limitInBytes) async {
+    _playCacheLimit = limitInBytes;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_playCacheLimitKey, limitInBytes);
+    notifyListeners();
+    await _prunePlayCache(excludePaths: const {});
+  }
+
   /// 启动时加载索引并校验文件存在性。
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+    final prefs = await SharedPreferences.getInstance();
+    _playCacheLimit = prefs.getInt(_playCacheLimitKey) ?? (300 * 1024 * 1024);
     await _loadDownloads();
     await _loadPlayCache();
     // 启动时 LRU 清理播放缓存
@@ -387,12 +401,10 @@ class DownloadController extends ChangeNotifier {
         .toList()
       ..sort((a, b) => a.cachedAt.compareTo(b.cachedAt));
 
-    final beforePaths = _playCache.values
-        .map((e) => e.filePath)
-        .toSet();
     await _service.prunePlayCache(
       entries,
-      excludePaths: {...excludePaths, ...beforePaths.difference(excludePaths)},
+      maxBytes: _playCacheLimit,
+      excludePaths: excludePaths,
     );
 
     // 清理后校验索引，移除已删除的条目

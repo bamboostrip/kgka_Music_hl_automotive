@@ -1,13 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/app_version.dart';
 import 'music_api.dart';
 
 class AppUpdateService {
   AppUpdateService(this._api);
-
-  static const MethodChannel _channel = MethodChannel('kgka_music_hl/update');
 
   final MusicApi _api;
 
@@ -28,25 +26,21 @@ class AppUpdateService {
   }
 
   Future<void> downloadAndInstall(AppVersionInfo version) async {
-    if (!isSupportedPlatform) {
-      throw UnsupportedError('当前平台不支持应用内更新');
-    }
     if (!version.hasDownloadUrl) {
       throw StateError('更新包下载地址为空');
     }
 
-    await _channel.invokeMethod<void>('downloadAndInstallApk', {
-      'url': version.downloadUrl,
-      'fileName': _safeApkName(version.versionName),
-    });
-  }
+    final uri = Uri.tryParse(version.downloadUrl);
+    if (uri == null) {
+      throw StateError('更新包下载地址无效');
+    }
 
-  String _safeApkName(String versionName) {
-    final cleanVersion = versionName.replaceAll(
-      RegExp(r'[^0-9A-Za-z._-]'),
-      '_',
+    final success = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
     );
-    final suffix = cleanVersion.isEmpty ? 'latest' : cleanVersion;
-    return 'ka_music_$suffix.apk';
+    if (!success) {
+      throw StateError('无法在浏览器中打开下载链接');
+    }
   }
 }

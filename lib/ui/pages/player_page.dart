@@ -460,6 +460,8 @@ class _ArtworkBackgroundState extends State<_ArtworkBackground>
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // 始终显示渐变兜底背景，避免封面加载期间出现纯黑背景
+          const _FallbackBackground(),
           if (coverUrl != null)
             OverflowBox(
               maxWidth: squareSize,
@@ -474,13 +476,11 @@ class _ArtworkBackgroundState extends State<_ArtworkBackground>
                     coverUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) =>
-                        const _FallbackBackground(),
+                        const SizedBox.shrink(),
                   ),
                 ),
               ),
-            )
-          else
-            const _FallbackBackground(),
+            ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -1874,7 +1874,13 @@ class _LyricViewportState extends State<_LyricViewport>
   void _syncLyrics() {
     final lyrics = widget.lyrics;
     if (lyrics.isNotEmpty) {
-      final model = convertToFlutterLyricModel(lyrics);
+      final showTranslation = widget.displayMode == _LyricDisplayMode.lyricsWithTranslation;
+      final showRomanization = widget.displayMode == _LyricDisplayMode.lyricsWithRomanization;
+      final model = convertToFlutterLyricModel(
+        lyrics,
+        showTranslation: showTranslation,
+        showRomanization: showRomanization,
+      );
       _lyricController.loadLyricModel(model);
     }
   }
@@ -1883,7 +1889,8 @@ class _LyricViewportState extends State<_LyricViewport>
   void didUpdateWidget(covariant _LyricViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.songHash != widget.songHash ||
-        oldWidget.lyrics != widget.lyrics) {
+        oldWidget.lyrics != widget.lyrics ||
+        oldWidget.displayMode != widget.displayMode) {
       _syncLyrics();
     }
     _syncTicker();

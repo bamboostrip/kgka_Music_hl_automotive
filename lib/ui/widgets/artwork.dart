@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class Artwork extends StatelessWidget {
   const Artwork({
@@ -19,20 +20,28 @@ class Artwork extends StatelessWidget {
     final imageUrl = url;
     final child = imageUrl == null
         ? _Fallback(icon: icon)
-        : Image.network(
-            imageUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => _Fallback(icon: icon),
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) {
-                return child;
-              }
-              return _ShimmerBox(
+        : imageUrl.startsWith('content://')
+            ? _ContentUriImage(
+                uri: imageUrl,
                 size: size,
                 borderRadius: borderRadius,
+                icon: icon,
+              )
+            : Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _Fallback(icon: icon),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) {
+                    return child;
+                  }
+                  return _ShimmerBox(
+                    size: size,
+                    borderRadius: borderRadius,
+                  );
+                },
               );
-            },
-          );
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
@@ -40,6 +49,71 @@ class Artwork extends StatelessWidget {
           ? SizedBox.square(dimension: size, child: child)
           : SizedBox.expand(child: child),
     );
+  }
+}
+
+/// 加载 content:// URI 的图片（用于本地音乐专辑封面）。
+class _ContentUriImage extends StatefulWidget {
+  const _ContentUriImage({
+    required this.uri,
+    required this.size,
+    required this.borderRadius,
+    required this.icon,
+  });
+
+  final String uri;
+  final double size;
+  final double borderRadius;
+  final IconData icon;
+
+  @override
+  State<_ContentUriImage> createState() => _ContentUriImageState();
+}
+
+class _ContentUriImageState extends State<_ContentUriImage> {
+  static const _channel = MethodChannel('kgka_music_hl/local_music');
+  Uint8List? _bytes;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  Future<void> _loadImage() async {
+    try {
+      // 从 content URI 中提取 albumId
+      final uri = widget.uri;
+      final albumId = int.tryParse(uri.split('/').last);
+      if (albumId == null || albumId <= 0) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final bytes = await _channel.invokeMethod<Uint8List>(
+        'getAlbumArt',
+        {'albumId': albumId},
+      );
+      if (mounted) {
+        setState(() {
+          _bytes = bytes;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return _ShimmerBox(size: widget.size, borderRadius: widget.borderRadius);
+    }
+    if (_bytes == null) {
+      return _Fallback(icon: widget.icon);
+    }
+    return Image.memory(_bytes!, fit: BoxFit.cover);
   }
 }
 

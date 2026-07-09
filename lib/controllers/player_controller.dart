@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,6 +19,7 @@ import '../services/music_audio_handler.dart';
 import '../services/playback_history_service.dart';
 import '../services/playback_stats_service.dart';
 import 'download_controller.dart';
+import 'local_music_controller.dart';
 
 enum PlaybackMode { playlistLoop, shuffle, singleLoop }
 
@@ -46,6 +48,10 @@ class PlayerController extends ChangeNotifier {
   static const _desktopLyricsSettingsKey = 'settings.desktop_lyrics_settings';
   static const _smartQualitySettingKey = 'settings.smart_quality_enabled';
   static const _autoPlayOnStartupSettingKey = 'settings.auto_play_on_startup';
+  static const _autoPlayOnDeviceConnectedSettingKey =
+      'settings.auto_play_on_device_connected';
+  static const _volumeNormalizationEnabledSettingKey =
+      'settings.volume_normalization_enabled';
   static const _listenTimeReportInterval = Duration(minutes: 30);
   static const _listenTimeCheckInterval = Duration(minutes: 1);
   static const _defaultEqualizerLevels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -82,6 +88,9 @@ class PlayerController extends ChangeNotifier {
 
   /// 缓存服务（由 main.dart 在创建后注入，用于歌词等缓存）。
   CacheService? cacheService;
+
+  /// 本地音乐控制器（由 main.dart 在创建后注入，用于读取内嵌歌词等）。
+  LocalMusicController? localMusic;
 
   PlayerController(this._api, this._audioHandler) {
     unawaited(_restoreSettings());
@@ -136,6 +145,7 @@ class PlayerController extends ChangeNotifier {
       unawaited(_refreshEqualizerConfig());
       unawaited(_applyEqualizer());
       unawaited(_applyBassBoost());
+      unawaited(_applyVolumeNormalization());
     });
     unawaited(_setupAudioSessionListeners());
   }
@@ -158,6 +168,8 @@ class PlayerController extends ChangeNotifier {
   late final StreamSubscription<int?> _androidAudioSessionSub;
   StreamSubscription<AudioInterruptionEvent>? _interruptionSub;
   StreamSubscription<void>? _becomingNoisySub;
+  StreamSubscription<Set<AudioDevice>>? _devicesSub;
+  Set<AudioDevice>? _previousDevices;
   final Stopwatch _positionClock = Stopwatch();
   final _random = math.Random();
   Timer? _completionFallbackTimer;
@@ -200,6 +212,8 @@ class PlayerController extends ChangeNotifier {
   double bassBoostStrength = 0.45;
   bool audioInterruptionEnabled = true;
   bool autoResumeAfterInterruption = false;
+  bool autoPlayOnDeviceConnected = false;
+  bool volumeNormalizationEnabled = false;
   bool desktopLyricsEnabled = false;
   DesktopLyricsSettings desktopLyricsSettings = const DesktopLyricsSettings();
   Timer? _autoResumeTimer;
@@ -319,6 +333,8 @@ class PlayerController extends ChangeNotifier {
     lyrics = const [];
     _lastDesktopLyricIndex = -1;
     notifyListeners();
+    // 预缓存封面图，避免打开播放页时出现纯色背景闪烁
+    _precacheCover(song);
     unawaited(_syncDesktopLyricsVisibility());
 
     try {
@@ -373,6 +389,15 @@ class PlayerController extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// 预缓存歌曲封面到 Flutter ImageCache，打开播放页时可立即显示。
+  void _precacheCover(Song song) {
+    final coverUrl = song.coverUrl;
+    if (coverUrl == null || coverUrl.isEmpty) return;
+    if (coverUrl.startsWith('content://')) return; // 本地封面走原生加载，不预缓存
+    final provider = NetworkImage(coverUrl);
+    provider.resolve(ImageConfiguration.empty);
   }
 
   /// 解析播放地址。
@@ -513,6 +538,25 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 开关连接新音频设备自动播放功能。
+  Future<void> setAutoPlayOnDeviceConnected(bool enabled) async {
+    if (autoPlayOnDeviceConnected == enabled) return;
+    autoPlayOnDeviceConnected = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoPlayOnDeviceConnectedSettingKey, enabled);
+    notifyListeners();
+  }
+
+  /// 开关音量均衡功能。
+  Future<void> setVolumeNormalizationEnabled(bool enabled) async {
+    if (volumeNormalizationEnabled == enabled) return;
+    volumeNormalizationEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_volumeNormalizationEnabledSettingKey, enabled);
+    await _applyVolumeNormalization();
+    notifyListeners();
+  }
+
   /// 读取本地播放统计。
   Future<PlaybackStats> getPlaybackStats() => _statsService.getStats();
 
@@ -632,6 +676,7 @@ class PlayerController extends ChangeNotifier {
     final cacheKey = 'cache_lyric_${song.hash}';
 
     if (song.source == SongSource.local) {
+      // 1. 优先尝试同名 .lrc 文件
       try {
         final songFile = File(song.id);
         final dotIndex = songFile.path.lastIndexOf('.');
@@ -655,8 +700,25 @@ class PlayerController extends ChangeNotifier {
           return;
         }
       } catch (e) {
-        debugPrint('Failed to load local lyrics: $e');
+        debugPrint('Failed to load local .lrc lyrics: $e');
       }
+
+      // 2. 尝试从音频文件内嵌元数据读取歌词
+      try {
+        final embedded = await localMusic?.getEmbeddedLyrics(song.id);
+        if (embedded != null && embedded.isNotEmpty) {
+          final lines = parseLyrics(embedded);
+          if (currentSong?.hash == song.hash) {
+            lyrics = lines;
+            notifyListeners();
+            _syncDesktopLyrics();
+          }
+          return;
+        }
+      } catch (e) {
+        debugPrint('Failed to load embedded lyrics: $e');
+      }
+
       if (currentSong?.hash == song.hash) {
         lyrics = const [];
         notifyListeners();
@@ -946,6 +1008,41 @@ class PlayerController extends ChangeNotifier {
             }
           });
         }
+      });
+      _previousDevices = await session.getDevices();
+      _devicesSub = session.devicesStream.listen((devices) {
+        if (_previousDevices != null) {
+          final addedDevices = devices.difference(_previousDevices!);
+          if (addedDevices.isNotEmpty) {
+            // ignore: experimental_member_use
+            final hasNewAudioDevice = addedDevices.any((d) =>
+                // ignore: experimental_member_use
+                d.type == AudioDeviceType.bluetoothA2dp ||
+                // ignore: experimental_member_use
+                d.type == AudioDeviceType.bluetoothLe ||
+                // ignore: experimental_member_use
+                d.type == AudioDeviceType.bluetoothSco ||
+                // ignore: experimental_member_use
+                d.type == AudioDeviceType.wiredHeadset ||
+                // ignore: experimental_member_use
+                d.type == AudioDeviceType.wiredHeadphones ||
+                // ignore: experimental_member_use
+                d.type == AudioDeviceType.carAudio);
+
+            if (hasNewAudioDevice &&
+                autoPlayOnDeviceConnected &&
+                currentSong != null &&
+                !isPlaying) {
+              _autoResumeTimer?.cancel();
+              _autoResumeTimer = Timer(const Duration(milliseconds: 500), () {
+                if (!isPlaying && currentSong != null) {
+                  unawaited(_audioHandler.play());
+                }
+              });
+            }
+          }
+        }
+        _previousDevices = devices;
       });
     } catch (_) {
       // AudioSession not available on this platform
@@ -1302,6 +1399,12 @@ class PlayerController extends ChangeNotifier {
     autoResumeAfterInterruption =
         prefs.getBool(_autoResumeAfterInterruptionSettingKey) ??
         autoResumeAfterInterruption;
+    autoPlayOnDeviceConnected =
+        prefs.getBool(_autoPlayOnDeviceConnectedSettingKey) ??
+        autoPlayOnDeviceConnected;
+    volumeNormalizationEnabled =
+        prefs.getBool(_volumeNormalizationEnabledSettingKey) ??
+        volumeNormalizationEnabled;
     playbackSpeed = prefs.getDouble(_playbackSpeedSettingKey) ?? playbackSpeed;
     desktopLyricsEnabled =
         prefs.getBool(_desktopLyricsEnabledSettingKey) ?? desktopLyricsEnabled;
@@ -1322,6 +1425,7 @@ class PlayerController extends ChangeNotifier {
     unawaited(_refreshEqualizerConfig());
     unawaited(_applyEqualizer());
     unawaited(_applyBassBoost());
+    unawaited(_applyVolumeNormalization());
     notifyListeners();
   }
 
@@ -1398,6 +1502,18 @@ class PlayerController extends ChangeNotifier {
           _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
       enabled: bassBoostEnabled,
       strength: bassBoostStrength,
+    );
+  }
+
+  Future<void> _applyVolumeNormalization() async {
+    if (!isAudioEffectsSupported) {
+      return;
+    }
+
+    await _audioEffects.configureVolumeNormalization(
+      audioSessionId:
+          _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
+      enabled: volumeNormalizationEnabled,
     );
   }
 
@@ -1508,6 +1624,7 @@ class PlayerController extends ChangeNotifier {
     _androidAudioSessionSub.cancel();
     _interruptionSub?.cancel();
     _becomingNoisySub?.cancel();
+    _devicesSub?.cancel();
     _completionFallbackTimer?.cancel();
     unawaited(
       _audioEffects.configureEqualizer(
@@ -1523,6 +1640,13 @@ class PlayerController extends ChangeNotifier {
             _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
         enabled: false,
         strength: bassBoostStrength,
+      ),
+    );
+    unawaited(
+      _audioEffects.configureVolumeNormalization(
+        audioSessionId:
+            _androidAudioSessionId ?? audioPlayer.androidAudioSessionId,
+        enabled: false,
       ),
     );
     _audioHandler.detachTransportControls();

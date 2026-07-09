@@ -92,7 +92,8 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
     _localMusic = LocalMusicController();
     _player = PlayerController(_api, widget.audioHandler)
       ..downloadController = _downloads
-      ..cacheService = _cacheService;
+      ..cacheService = _cacheService
+      ..localMusic = _localMusic;
     _theme = widget.themeController;
     _auth.restore();
     _downloads.initialize();
@@ -178,52 +179,103 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
 ///
 /// 当用户启用了自定义背景图时，在所有页面内容下方显示背景图，
 /// 并叠加半透明遮罩（由 [ThemeController.backgroundOpacity] 控制）。
-class _AppBackground extends StatelessWidget {
+class _AppBackground extends StatefulWidget {
   const _AppBackground({required this.themeController, required this.child});
 
   final ThemeController themeController;
   final Widget child;
 
   @override
+  State<_AppBackground> createState() => _AppBackgroundState();
+}
+
+class _AppBackgroundState extends State<_AppBackground> {
+  FileImage? _imageProvider;
+  String? _cachedPath;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.themeController.addListener(_onThemeChanged);
+    _updateProvider();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheBackground();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AppBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.themeController != widget.themeController) {
+      oldWidget.themeController.removeListener(_onThemeChanged);
+      widget.themeController.addListener(_onThemeChanged);
+      _updateProvider();
+      _precacheBackground();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.themeController.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  void _onThemeChanged() {
+    _updateProvider();
+    _precacheBackground();
+    setState(() {});
+  }
+
+  void _updateProvider() {
+    final path = widget.themeController.backgroundImagePath;
+    if (path != null && path != _cachedPath) {
+      _cachedPath = path;
+      _imageProvider = FileImage(File(path));
+    }
+  }
+
+  void _precacheBackground() {
+    if (_imageProvider != null) {
+      precacheImage(_imageProvider!, context);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: themeController,
-      builder: (context, _) {
-        final path = themeController.backgroundImagePath;
-        final enabled = themeController.backgroundEnabled;
+    final enabled = widget.themeController.backgroundEnabled;
+    final path = widget.themeController.backgroundImagePath;
 
-        if (!enabled || path == null) {
-          return child;
-        }
+    if (!enabled || path == null || _imageProvider == null) {
+      return widget.child;
+    }
 
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final overlayColor = isDark
-            ? const Color(0xFF06070A)
-            : Colors.white;
-        final opacity = themeController.backgroundOpacity;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final overlayColor = isDark ? const Color(0xFF06070A) : Colors.white;
+    final opacity = widget.themeController.backgroundOpacity;
 
-        return Stack(
-          children: [
-            // 背景图层
-            Positioned.fill(
-              child: Image.file(
-                File(path),
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            ),
-            // 半透明遮罩（opacity 越大遮罩越透明，背景图越明显）
-            Positioned.fill(
-              child: ColoredBox(
-                color: overlayColor.withValues(alpha: 1.0 - opacity),
-              ),
-            ),
-            // 页面内容
-            child,
-          ],
-        );
-      },
+    return Stack(
+      children: [
+        // 背景图层（复用同一个 FileImage provider，避免重复解码）
+        Positioned.fill(
+          child: Image(
+            image: _imageProvider!,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        ),
+        // 半透明遮罩（opacity 越大遮罩越透明，背景图越明显）
+        Positioned.fill(
+          child: ColoredBox(
+            color: overlayColor.withValues(alpha: 1.0 - opacity),
+          ),
+        ),
+        // 页面内容
+        widget.child,
+      ],
     );
   }
 }

@@ -121,7 +121,7 @@ Future<void> showAppUpdateDialog({
           if (!dialogContext.mounted) {
             return;
           }
-          Toast.info('更新包下载中，完成后会打开安装界面');
+          Toast.info('正在跳转至浏览器下载更新包');
           if (!force) {
             Navigator.of(dialogContext).pop();
           }

@@ -2,7 +2,14 @@ import 'package:flutter_lyric/core/lyric_model.dart' as fl;
 import '../models/music_models.dart' as models;
 
 /// 将项目内部的 [models.LyricLine] 列表转换为 flutter_lyric 的 [fl.LyricModel]。
-fl.LyricModel convertToFlutterLyricModel(List<models.LyricLine> lyrics) {
+///
+/// [showTranslation] 控制是否显示翻译文本。
+/// [showRomanization] 控制是否显示音译文本（优先级低于翻译）。
+fl.LyricModel convertToFlutterLyricModel(
+  List<models.LyricLine> lyrics, {
+  bool showTranslation = true,
+  bool showRomanization = false,
+}) {
   final lines = <fl.LyricLine>[];
 
   for (var i = 0; i < lyrics.length; i++) {
@@ -27,11 +34,19 @@ fl.LyricModel convertToFlutterLyricModel(List<models.LyricLine> lyrics) {
       }).toList();
     }
 
+    // 根据显示模式决定翻译文本
+    String? translationText;
+    if (showTranslation && line.translation != null && line.translation!.isNotEmpty) {
+      translationText = line.translation;
+    } else if (showRomanization && line.romanization != null && line.romanization!.isNotEmpty) {
+      translationText = line.romanization;
+    }
+
     lines.add(fl.LyricLine(
       start: start,
       end: end,
       text: line.text,
-      translation: line.translation,
+      translation: translationText,
       words: words,
     ));
   }

@@ -14,6 +14,9 @@ class LocalMusicController extends ChangeNotifier {
   List<Song> _songs = [];
   bool _isScanning = false;
 
+  /// 专辑封面缓存（albumId -> bytes）
+  final Map<String, Uint8List> _albumArtCache = {};
+
   bool get hasPermission => _hasPermission;
   List<Song> get songs => _songs;
   bool get isScanning => _isScanning;
@@ -87,5 +90,40 @@ class LocalMusicController extends ChangeNotifier {
 
     _isScanning = false;
     notifyListeners();
+  }
+
+  /// 获取本地歌曲的专辑封面字节数据（带缓存）。
+  Future<Uint8List?> getAlbumArt(String albumId) async {
+    if (!Platform.isAndroid) return null;
+    if (_albumArtCache.containsKey(albumId)) {
+      return _albumArtCache[albumId];
+    }
+    try {
+      final bytes = await _channel.invokeMethod<Uint8List>(
+        'getAlbumArt',
+        {'albumId': int.tryParse(albumId)},
+      );
+      if (bytes != null) {
+        _albumArtCache[albumId] = bytes;
+      }
+      return bytes;
+    } catch (e) {
+      debugPrint('Error getting album art: $e');
+      return null;
+    }
+  }
+
+  /// 获取本地歌曲的内嵌歌词。
+  Future<String?> getEmbeddedLyrics(String filePath) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await _channel.invokeMethod<String>(
+        'getEmbeddedLyrics',
+        {'filePath': filePath},
+      );
+    } catch (e) {
+      debugPrint('Error getting embedded lyrics: $e');
+      return null;
+    }
   }
 }

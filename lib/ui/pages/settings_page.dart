@@ -122,6 +122,24 @@ class SettingsPage extends StatelessWidget {
                       onChanged: player.setAutoPlayOnStartupEnabled,
                     ),
                     _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.bluetooth_audio_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '连接新音频设备自动播放',
+                      subtitle: '连接蓝牙或耳机时自动恢复播放',
+                      value: player.autoPlayOnDeviceConnected,
+                      onChanged: player.setAutoPlayOnDeviceConnected,
+                    ),
+                    _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.volume_up_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '音量均衡',
+                      subtitle: '降低各首歌曲音量差异，自动控制音量',
+                      value: player.volumeNormalizationEnabled,
+                      onChanged: player.setVolumeNormalizationEnabled,
+                    ),
+                    _SettingsDivider(),
                     _SettingsTile(
                       icon: Icons.graphic_eq_rounded,
                       iconColor: colorScheme.primary,
@@ -725,6 +743,75 @@ class _CacheManagementSheetState extends State<_CacheManagementSheet> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
+  String _formatLimit(int? bytes) {
+    if (bytes == null) return '300 MB';
+    if (bytes < 0) return '无限制';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).round()} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).round()} GB';
+  }
+
+  Future<void> _selectCacheLimit(BuildContext context) async {
+    final downloads = widget.downloads;
+    if (downloads == null) return;
+
+    final currentLimit = downloads.playCacheLimit;
+    final options = [
+      (label: '100 MB', value: 100 * 1024 * 1024),
+      (label: '300 MB', value: 300 * 1024 * 1024),
+      (label: '500 MB', value: 500 * 1024 * 1024),
+      (label: '1 GB', value: 1024 * 1024 * 1024),
+      (label: '2 GB', value: 2 * 1024 * 1024 * 1024),
+      (label: '5 GB', value: 5 * 1024 * 1024 * 1024),
+      (label: '无限制', value: -1),
+    ];
+
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('设置播放缓存上限'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: options.map((opt) {
+                return RadioListTile<int>(
+                  title: Text(opt.label),
+                  value: opt.value,
+                  groupValue: currentLimit,
+                  onChanged: (val) {
+                    Navigator.of(dialogContext).pop(val);
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (selected != null && mounted) {
+      setState(() => _clearing = true);
+      try {
+        await downloads.setPlayCacheLimit(selected);
+        await _loadSizes();
+        Toast.success('已修改缓存上限');
+      } catch (_) {
+        Toast.error('修改失败');
+      }
+      if (mounted) {
+        setState(() => _clearing = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -801,6 +888,43 @@ class _CacheManagementSheetState extends State<_CacheManagementSheet> {
                       }
                     }
                   : null,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.rule_rounded, size: 22, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '播放缓存上限',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          _formatLimit(widget.downloads?.playCacheLimit),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _selectCacheLimit(context),
+                    child: const Text('修改'),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             if (_clearing) const Center(child: CircularProgressIndicator()),
