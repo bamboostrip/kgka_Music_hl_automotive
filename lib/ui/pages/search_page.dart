@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../../services/search_history_service.dart';
@@ -14,6 +15,7 @@ import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
 import 'artist_detail_page.dart';
+import 'dart:math' as math;
 
 class SearchPage extends StatefulWidget {
   const SearchPage({
@@ -189,9 +191,98 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  Widget _buildCarSearchHeader(BuildContext context, ColorScheme colorScheme) {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 46,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: .54),
+              borderRadius: BorderRadius.circular(23),
+            ),
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _onSubmit(),
+              style: Theme.of(context).textTheme.bodyLarge,
+              decoration: InputDecoration(
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                suffixIcon: _controller.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          _controller.clear();
+                          _focusNode.requestFocus();
+                        },
+                      )
+                    : null,
+                hintText: '搜索歌曲，歌手',
+                hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 11),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        ElevatedButton(
+          onPressed: _onSubmit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(23),
+            ),
+          ),
+          child: const Text(
+            '搜索',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final isLandscape = size.width > size.height;
     final colorScheme = Theme.of(context).colorScheme;
+    // 车机式搜索栏仅在车机模式开启时使用，普通横屏用标准布局。
+    final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+
+    if (isCarMode) {
+      return Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+            child: Column(
+              children: [
+                _buildCarSearchHeader(context, colorScheme),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: widget.auth,
+                    builder: (context, _) => _buildBody(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -272,13 +363,8 @@ class _SearchPageState extends State<SearchPage> {
       children: [
         // 平台切换栏（仅搜索状态下显示）
         if (text.isNotEmpty || _searched)
-          _PlatformSelector(
-            platform: _platform,
-            onChanged: _switchPlatform,
-          ),
-        Expanded(
-          child: _buildContent(context, text),
-        ),
+          _PlatformSelector(platform: _platform, onChanged: _switchPlatform),
+        Expanded(child: _buildContent(context, text)),
       ],
     );
   }
@@ -306,6 +392,85 @@ class _SearchPageState extends State<SearchPage> {
       if (_hotLoading) {
         return const _HotSearchSkeleton();
       }
+
+      final size = MediaQuery.sizeOf(context);
+      final isLandscape = size.width > size.height;
+      // 三列热搜布局是车机专属，普通横屏走下面的标准布局。
+      final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+
+      if (isCarMode) {
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+          children: [
+            if (_searchHistory.isNotEmpty) ...[
+              Row(
+                children: [
+                  Text(
+                    '搜索历史',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      await _historyService.clear();
+                      _loadSearchHistory();
+                      if (mounted) {
+                        Toast.show('已清空搜索历史', type: ToastType.info);
+                      }
+                    },
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _searchHistory.map((keyword) {
+                  return _HistoryChip(
+                    keyword: keyword,
+                    onTap: () => _onKeywordTap(keyword),
+                    onDelete: () async {
+                      await _historyService.remove(keyword);
+                      _loadSearchHistory();
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+            ],
+            if (_hotCategories.isNotEmpty) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (
+                    var i = 0;
+                    i < math.min(3, _hotCategories.length);
+                    i++
+                  ) ...[
+                    Expanded(
+                      child: _CarHotSearchColumn(
+                        category: _hotCategories[i],
+                        onTap: _onKeywordTap,
+                      ),
+                    ),
+                    if (i < math.min(3, _hotCategories.length) - 1)
+                      const SizedBox(width: 24),
+                  ],
+                ],
+              ),
+            ],
+          ],
+        );
+      }
+
       // 历史记录 + 热搜面板共存于一个可滚动列表
       return ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 160),
@@ -317,9 +482,9 @@ class _SearchPageState extends State<SearchPage> {
                   child: Text(
                     '搜索历史',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 20,
-                        ),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                    ),
                   ),
                 ),
                 GestureDetector(
@@ -406,19 +571,21 @@ class _PlatformSelector extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: platform == p
                       ? colorScheme.primary
-                      : colorScheme.surfaceContainerHighest.withValues(alpha: .5),
+                      : colorScheme.surfaceContainerHighest.withValues(
+                          alpha: .5,
+                        ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   p == _SearchPlatform.kugou ? '酷狗' : '网易云',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: platform == p
-                            ? colorScheme.onPrimary
-                            : colorScheme.onSurfaceVariant,
-                        fontWeight: platform == p
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                      ),
+                    color: platform == p
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: platform == p
+                        ? FontWeight.w800
+                        : FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -963,16 +1130,18 @@ class _SearchResults extends StatelessWidget {
                                   ),
                                   if (player.downloadController != null)
                                     SongSheetAction(
-                                      icon: player.downloadController!.isDownloaded(song)
+                                      icon:
+                                          player.downloadController!
+                                              .isDownloaded(song)
                                           ? Icons.download_done_rounded
                                           : Icons.download_rounded,
-                                      title: player.downloadController!.isDownloaded(song)
+                                      title:
+                                          player.downloadController!
+                                              .isDownloaded(song)
                                           ? '已下载'
                                           : '下载',
-                                      onTap: () => player.downloadController!.download(
-                                        song,
-                                        player.audioQuality,
-                                      ),
+                                      onTap: () => player.downloadController!
+                                          .download(song, player.audioQuality),
                                     ),
                                 ],
                               );
@@ -989,15 +1158,17 @@ class _SearchResults extends StatelessWidget {
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: colorScheme.outlineVariant
-                                    .withValues(alpha: .5),
+                                color: colorScheme.outlineVariant.withValues(
+                                  alpha: .5,
+                                ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 song.source == SongSource.netease
                                     ? '网易云'
                                     : '外部',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
                                       color: colorScheme.onSurfaceVariant,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -1085,9 +1256,9 @@ class _HistoryChip extends StatelessWidget {
             children: [
               Text(
                 keyword,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(width: 4),
               GestureDetector(
@@ -1105,6 +1276,73 @@ class _HistoryChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CarHotSearchColumn extends StatelessWidget {
+  const _CarHotSearchColumn({required this.category, required this.onTap});
+
+  final SearchHotCategory category;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          category.name,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w900,
+            color: colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: math.min(6, category.keywords.length),
+          itemBuilder: (context, index) {
+            final item = category.keywords[index];
+            final rank = index + 1;
+            return InkWell(
+              onTap: () => onTap(item.keyword),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        '$rank',
+                        style: TextStyle(
+                          fontWeight: rank <= 3
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: rank <= 3
+                              ? Colors.redAccent
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        item.keyword,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

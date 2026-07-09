@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../config/app_config.dart';
@@ -17,6 +19,11 @@ import 'album_shop_page.dart';
 import 'artist_detail_page.dart';
 import 'playlist_detail_page.dart';
 import 'search_page.dart';
+import '../../controllers/theme_controller.dart';
+import '../../controllers/download_controller.dart';
+import '../../controllers/local_music_controller.dart';
+import 'playback_history_page.dart';
+import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -25,12 +32,22 @@ class HomePage extends StatefulWidget {
     required this.auth,
     required this.player,
     required this.cache,
+    required this.theme,
+    required this.downloads,
+    required this.localMusic,
+    this.sectionIndex = 0,
+    this.onTabSwitch,
   });
 
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
   final CacheService cache;
+  final ThemeController theme;
+  final DownloadController downloads;
+  final LocalMusicController localMusic;
+  final int sectionIndex;
+  final ValueChanged<int>? onTabSwitch;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -38,6 +55,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static _HomeData? _cachedData;
+  static bool _hasAutoPlayed = false;
 
   Future<_HomeData>? _future;
   late final AppUpdateService _updateService;
@@ -49,10 +67,12 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _sectionIndex = widget.sectionIndex;
     _updateService = AppUpdateService(widget.api);
     final cached = _cachedData;
     if (cached != null) {
       _future = Future.value(cached);
+      _checkAndAutoPlay(cached);
       // 有缓存数据，立即显示并后台静默刷新
       _silentRefresh();
     } else if (!widget.auth.isRestoring) {
@@ -63,6 +83,14 @@ class _HomePageState extends State<HomePage> {
     widget.auth.addListener(_handleAuthChanged);
     if (AppUpdateService.isSupportedPlatform) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
+    }
+  }
+
+  @override
+  void didUpdateWidget(HomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sectionIndex != widget.sectionIndex) {
+      _sectionIndex = widget.sectionIndex;
     }
   }
 
@@ -81,6 +109,34 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _future = _load();
       });
+    }
+  }
+
+  void _checkAndAutoPlay(_HomeData data) {
+    if (widget.player.autoPlayOnStartupEnabled &&
+        !_hasAutoPlayed &&
+        widget.player.currentSong == null) {
+      _hasAutoPlayed = true;
+      final songs = data.daily.songs;
+      if (songs.isNotEmpty) {
+        // 必须推迟到首帧构建完成后执行：_checkAndAutoPlay 会在 initState
+        // 阶段被同步调用，此时直接调用 playSong 会触发 notifyListeners()，
+        // 违反 Flutter "build 阶段不能触发 setState/notifyListeners" 规则。
+        // 叠加 Windows 平台 just_audio 的 WinRT MediaPlayer COM 线程在应用
+        // 启动早期尚未完全就绪，立即 setUrl()/play() 会与 UI 渲染竞争，
+        // 导致 "Lost connection to device" 进程崩溃。
+        // Windows 上额外延迟 300ms 让 native 层完全稳定后再启动播放。
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final delay = Platform.isWindows
+              ? const Duration(milliseconds: 300)
+              : Duration.zero;
+          Future<void>.delayed(delay, () {
+            if (!mounted) return;
+            widget.player.playSong(songs.first, queue: songs);
+          });
+        });
+      }
     }
   }
 
@@ -108,6 +164,7 @@ class _HomePageState extends State<HomePage> {
         'albums': data.albums.map((a) => a.toCache()).toList(),
       });
       if (!mounted) return;
+      _checkAndAutoPlay(data);
       setState(() {
         _future = Future.value(data);
       });
@@ -133,6 +190,7 @@ class _HomePageState extends State<HomePage> {
       'playlists': data.playlists.map((p) => p.toCache()).toList(),
       'albums': data.albums.map((a) => a.toCache()).toList(),
     });
+    _checkAndAutoPlay(data);
     return data;
   }
 
@@ -146,6 +204,7 @@ class _HomePageState extends State<HomePage> {
     if (cached != null) {
       final data = _homeDataFromCache(cached.data);
       _cachedData = data;
+      _checkAndAutoPlay(data);
       setState(() {
         _future = Future.value(data);
       });
@@ -271,6 +330,22 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          api: widget.api,
+          auth: widget.auth,
+          player: widget.player,
+          theme: widget.theme,
+          downloads: widget.downloads,
+          cache: widget.cache,
+          localMusic: widget.localMusic,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_HomeData>(
@@ -302,7 +377,12 @@ class _HomePageState extends State<HomePage> {
                     albums: data.albums,
                     sectionIndex: _sectionIndex,
                     onSectionChanged: (value) {
-                      setState(() => _sectionIndex = value);
+                      if (value == -1) {
+                        widget.onTabSwitch?.call(0); // Switch to My tab
+                      } else {
+                        setState(() => _sectionIndex = value);
+                        widget.onTabSwitch?.call(value == 0 ? 1 : 2);
+                      }
                     },
                     onDailyPlay: () {
                       final songs = data.daily.songs;
@@ -322,6 +402,7 @@ class _HomePageState extends State<HomePage> {
                     onUpdateClose: () {
                       setState(() => _updateBannerDismissed = true);
                     },
+                    onSettingsTap: _openSettings,
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -382,6 +463,7 @@ class _RecommendHeader extends StatelessWidget {
     required this.updateVersion,
     required this.onUpdateTap,
     required this.onUpdateClose,
+    required this.onSettingsTap,
   });
 
   final AuthController auth;
@@ -396,10 +478,22 @@ class _RecommendHeader extends StatelessWidget {
   final AppVersionInfo? updateVersion;
   final VoidCallback onUpdateTap;
   final VoidCallback onUpdateClose;
+  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.sizeOf(context);
+    final isLandscape = size.width > size.height;
+    // 车机模式专属样式仅在开启时生效，普通横屏不受影响。
+    final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+    // 车机宽屏：三个快捷入口在卡片右侧；车机非宽屏：入口在卡片下方。
+    final isUltraWide =
+        isCarMode &&
+        size.width >= 1150 &&
+        size.height >= 600 &&
+        (size.width / size.height) > 2.0;
+
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -414,23 +508,26 @@ class _RecommendHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 10, 0, 12),
+              padding: EdgeInsets.fromLTRB(18, isCarMode ? 4 : 10, 0, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(right: 18),
-                child: _TopTabs(
-                  auth: auth,
-                  index: sectionIndex,
-                  onChanged: onSectionChanged,
+              if (!isCarMode) ...[
+                Padding(
+                  padding: const EdgeInsets.only(right: 18),
+                  child: _TopTabs(
+                    auth: auth,
+                    index: sectionIndex,
+                    onChanged: onSectionChanged,
+                    onSettingsTap: onSettingsTap,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.only(right: 18),
-                child: _SmartSearch(api: api, auth: auth, player: player),
-              ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.only(right: 18),
+                  child: _SmartSearch(api: api, auth: auth, player: player),
+                ),
+              ],
               if (updateVersion != null) ...[
                 const SizedBox(height: 10),
                 Padding(
@@ -444,12 +541,46 @@ class _RecommendHeader extends StatelessWidget {
               ],
               if (sectionIndex == 0) ...[
                 const SizedBox(height: 14),
-                _FeatureShelf(
-                  daily: daily,
-                  albums: albums,
-                  onDailyPlay: onDailyPlay,
-                  onAlbumTap: onAlbumTap,
-                ),
+                if (isUltraWide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: _FeatureShelf(
+                          daily: daily,
+                          albums: albums,
+                          onDailyPlay: onDailyPlay,
+                          onAlbumTap: onAlbumTap,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: _CarQuickStatsPills(
+                          auth: auth,
+                          player: player,
+                          onSwitchToMyTab: () => onSectionChanged(-1),
+                          api: api,
+                          isSideBySide: true,
+                        ),
+                      ),
+                    ],
+                  )
+                else ...[
+                  _FeatureShelf(
+                    daily: daily,
+                    albums: albums,
+                    onDailyPlay: onDailyPlay,
+                    onAlbumTap: onAlbumTap,
+                  ),
+                  if (isCarMode)
+                    _CarQuickStatsPills(
+                      auth: auth,
+                      player: player,
+                      onSwitchToMyTab: () => onSectionChanged(-1),
+                      api: api,
+                    ),
+                ],
               ],
             ],
           ),
@@ -479,11 +610,13 @@ class _TopTabs extends StatelessWidget {
     required this.auth,
     required this.index,
     required this.onChanged,
+    required this.onSettingsTap,
   });
 
   final AuthController auth;
   final int index;
   final ValueChanged<int> onChanged;
+  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -540,9 +673,9 @@ class _TopTabs extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '菜单',
-              onPressed: () {},
-              icon: const Icon(Icons.menu_rounded),
+              tooltip: '设置',
+              onPressed: onSettingsTap,
+              icon: const Icon(Icons.settings_rounded),
             ),
           ],
         );
@@ -651,16 +784,23 @@ class _FeatureShelf extends StatelessWidget {
                   child: albums.isNotEmpty
                       ? _FeatureCard(
                           title: '新碟上架',
-                          subtitle: '${albums.first.singerName} · ${albums.first.albumName}',
+                          subtitle:
+                              '${albums.first.singerName} · ${albums.first.albumName}',
                           imageUrl: albums.first.coverUrl,
-                          gradient: const [Color(0xFF454A92), Color(0xFF78CAFF)],
+                          gradient: const [
+                            Color(0xFF454A92),
+                            Color(0xFF78CAFF),
+                          ],
                           onTap: onAlbumTap,
                         )
                       : _FeatureCard(
                           title: '新碟上架',
                           subtitle: '暂无新专辑',
                           imageUrl: null,
-                          gradient: const [Color(0xFF454A92), Color(0xFF78CAFF)],
+                          gradient: const [
+                            Color(0xFF454A92),
+                            Color(0xFF78CAFF),
+                          ],
                           onTap: () {},
                         ),
                 ),
@@ -796,7 +936,6 @@ class _SongSection extends StatefulWidget {
 }
 
 class _SongSectionState extends State<_SongSection> {
-  static const _perPage = 5;
   late final PageController _pageController;
   int _page = 0;
 
@@ -812,17 +951,11 @@ class _SongSectionState extends State<_SongSection> {
     super.dispose();
   }
 
-  int get _pageCount => (widget.songs.length / _perPage).ceil();
-
   @override
   Widget build(BuildContext context) {
     if (widget.songs.isEmpty) {
       return const SizedBox.shrink();
     }
-
-    final size = MediaQuery.sizeOf(context);
-    final isWide = size.width >= 720;
-    final rowCount = isWide ? (_perPage / 2).ceil() : _perPage;
 
     return AnimatedBuilder(
       animation: widget.auth,
@@ -845,104 +978,108 @@ class _SongSectionState extends State<_SongSection> {
                 ),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: rowCount * 76.0,
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: _pageCount,
-                  onPageChanged: (i) => setState(() => _page = i),
-                  itemBuilder: (context, pageIndex) {
-                    final start = pageIndex * _perPage;
-                    final end = (start + _perPage).clamp(0, widget.songs.length);
-                    final pageSongs = widget.songs.sublist(start, end);
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final maxWidth = constraints.maxWidth;
+                  final int crossAxisCount;
+                  final int itemsPerPage;
+                  if (maxWidth >= 1050) {
+                    crossAxisCount = 3;
+                    itemsPerPage = 6;
+                  } else if (maxWidth >= 650) {
+                    crossAxisCount = 2;
+                    itemsPerPage = 6;
+                  } else {
+                    crossAxisCount = 1;
+                    itemsPerPage = 5;
+                  }
 
-                    if (isWide) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
+                  final rowCount = (itemsPerPage / crossAxisCount).ceil();
+                  final pageCount = (widget.songs.length / itemsPerPage).ceil();
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: rowCount * 76.0,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: pageCount,
+                          onPageChanged: (i) => setState(() => _page = i),
+                          itemBuilder: (context, pageIndex) {
+                            final start = pageIndex * itemsPerPage;
+                            final end = (start + itemsPerPage).clamp(
+                              0,
+                              widget.songs.length,
+                            );
+                            final pageSongs = widget.songs.sublist(start, end);
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                for (var i = 0; i < pageSongs.length; i += 2)
-                                  _HomeSongRow(
-                                    song: pageSongs[i],
-                                    queue: widget.songs,
-                                    onPlay: widget.onPlay,
-                                    isLiked: widget.isLiked(pageSongs[i]),
-                                    onLikeTap: () => widget.onLikeTap(pageSongs[i]),
-                                    auth: widget.auth,
-                                    player: widget.player,
-                                    onViewArtist: () => widget.onViewArtist(pageSongs[i]),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (pageSongs.length > 1) ...[
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  for (var i = 1; i < pageSongs.length; i += 2)
-                                    _HomeSongRow(
-                                      song: pageSongs[i],
-                                      queue: widget.songs,
-                                      onPlay: widget.onPlay,
-                                      isLiked: widget.isLiked(pageSongs[i]),
-                                      onLikeTap: () => widget.onLikeTap(pageSongs[i]),
-                                      auth: widget.auth,
-                                      player: widget.player,
-                                      onViewArtist: () => widget.onViewArtist(pageSongs[i]),
+                                for (
+                                  int col = 0;
+                                  col < crossAxisCount;
+                                  col++
+                                ) ...[
+                                  if (col > 0) const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        for (
+                                          int i = col;
+                                          i < pageSongs.length;
+                                          i += crossAxisCount
+                                        )
+                                          _HomeSongRow(
+                                            song: pageSongs[i],
+                                            queue: widget.songs,
+                                            onPlay: widget.onPlay,
+                                            isLiked: widget.isLiked(
+                                              pageSongs[i],
+                                            ),
+                                            onLikeTap: () =>
+                                                widget.onLikeTap(pageSongs[i]),
+                                            auth: widget.auth,
+                                            player: widget.player,
+                                            onViewArtist: () => widget
+                                                .onViewArtist(pageSongs[i]),
+                                          ),
+                                      ],
                                     ),
+                                  ),
                                 ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        for (final song in pageSongs)
-                          _HomeSongRow(
-                            song: song,
-                            queue: widget.songs,
-                            onPlay: widget.onPlay,
-                            isLiked: widget.isLiked(song),
-                            onLikeTap: () => widget.onLikeTap(song),
-                            auth: widget.auth,
-                            player: widget.player,
-                            onViewArtist: () => widget.onViewArtist(song),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              if (_pageCount > 1) ...[
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_pageCount, (i) {
-                    final active = i == _page;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: active ? 16 : 6,
-                      height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: active
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context)
-                                .colorScheme
-                                .outline
-                                .withValues(alpha: .3),
-                        borderRadius: BorderRadius.circular(99),
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    );
-                  }),
-                ),
-              ],
+                      if (pageCount > 1) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(pageCount, (i) {
+                            final active = i == _page;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: active ? 16 : 6,
+                              height: 6,
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              decoration: BoxDecoration(
+                                color: active
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outline
+                                          .withValues(alpha: .3),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         );
@@ -976,147 +1113,155 @@ class _HomeSongRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return AnimatedBuilder(
-      animation: player,
-      builder: (context, _) {
-        final active =
-            song.hash.isNotEmpty && player.currentSong?.hash == song.hash;
-        final activeColor = colorScheme.primary;
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => onPlay(song, queue),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    Artwork(url: song.coverUrl, size: 58, borderRadius: 8),
-                    if (active)
-                      Positioned(
-                        right: 5,
-                        bottom: 5,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surface.withValues(alpha: .88),
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(3),
-                            child: NowPlayingBadge(
-                              active: active,
-                              playing: player.isPlaying,
-                              color: activeColor,
-                              size: 14,
+    // 主页歌曲行响应 player 重建（播放进度/状态），高频更新会触发
+    // Windows AXTree 竞态崩溃，排除语义树以规避 Flutter Windows 引擎 bug
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: player,
+        builder: (context, _) {
+          final active =
+              song.hash.isNotEmpty && player.currentSong?.hash == song.hash;
+          final activeColor = colorScheme.primary;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onPlay(song, queue),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Stack(
+                    children: [
+                      Artwork(url: song.coverUrl, size: 58, borderRadius: 8),
+                      if (active)
+                        Positioned(
+                          right: 5,
+                          bottom: 5,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surface.withValues(alpha: .88),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(3),
+                              child: NowPlayingBadge(
+                                active: active,
+                                playing: player.isPlaying,
+                                color: activeColor,
+                                size: 14,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        song.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: active ? activeColor : null,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        song.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: active
-                              ? activeColor.withValues(alpha: .72)
-                              : colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: onLikeTap,
-                  icon: Icon(
-                    isLiked
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    color: isLiked ? Colors.redAccent : colorScheme.outline,
-                    size: 27,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          song.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: active ? activeColor : null,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          song.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: active
+                                    ? activeColor.withValues(alpha: .72)
+                                    : colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
-                  visualDensity: VisualDensity.compact,
-                ),
-                IconButton(
-                  tooltip: '更多',
-                  onPressed: () {
-                    showSongActionSheet(
-                      context: context,
-                      song: song,
-                      actions: [
-                        SongSheetAction(
-                          icon: Icons.queue_music_rounded,
-                          title: '下一首播放',
-                          onTap: () => addSongToQueueWithFeedback(
-                            context: context,
-                            player: player,
-                            song: song,
-                          ),
-                        ),
-                        SongSheetAction(
-                          icon: Icons.playlist_add_rounded,
-                          title: '添加到歌单',
-                          onTap: () => showAddToPlaylistSheet(
-                            context: context,
-                            auth: auth,
-                            song: song,
-                          ),
-                        ),
-                        SongSheetAction(
-                          icon: Icons.person_rounded,
-                          title: '查看歌手',
-                          onTap: onViewArtist,
-                        ),
-                        if (player.downloadController != null)
+                  const SizedBox(width: 10),
+                  IconButton(
+                    onPressed: onLikeTap,
+                    icon: Icon(
+                      isLiked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: isLiked ? Colors.redAccent : colorScheme.outline,
+                      size: 27,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    tooltip: '更多',
+                    onPressed: () {
+                      showSongActionSheet(
+                        context: context,
+                        song: song,
+                        actions: [
                           SongSheetAction(
-                            icon: player.downloadController!.isDownloaded(song)
-                                ? Icons.download_done_rounded
-                                : Icons.download_rounded,
-                            title: player.downloadController!.isDownloaded(song)
-                                ? '已下载'
-                                : '下载',
-                            onTap: () => player.downloadController!.download(
-                              song,
-                              player.audioQuality,
+                            icon: Icons.queue_music_rounded,
+                            title: '下一首播放',
+                            onTap: () => addSongToQueueWithFeedback(
+                              context: context,
+                              player: player,
+                              song: song,
                             ),
                           ),
-                      ],
-                    );
-                  },
-                  icon: const Icon(Icons.more_horiz_rounded),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
+                          SongSheetAction(
+                            icon: Icons.playlist_add_rounded,
+                            title: '添加到歌单',
+                            onTap: () => showAddToPlaylistSheet(
+                              context: context,
+                              auth: auth,
+                              song: song,
+                            ),
+                          ),
+                          SongSheetAction(
+                            icon: Icons.person_rounded,
+                            title: '查看歌手',
+                            onTap: onViewArtist,
+                          ),
+                          if (player.downloadController != null)
+                            SongSheetAction(
+                              icon:
+                                  player.downloadController!.isDownloaded(song)
+                                  ? Icons.download_done_rounded
+                                  : Icons.download_rounded,
+                              title:
+                                  player.downloadController!.isDownloaded(song)
+                                  ? '已下载'
+                                  : '下载',
+                              onTap: () => player.downloadController!.download(
+                                song,
+                                player.audioQuality,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                    icon: const Icon(Icons.more_horiz_rounded),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -1131,6 +1276,49 @@ class _PlaylistRail extends StatelessWidget {
   Widget build(BuildContext context) {
     if (playlists.isEmpty) {
       return const SizedBox.shrink();
+    }
+
+    final size = MediaQuery.sizeOf(context);
+    final isLandscape = size.width > size.height;
+    // 推荐歌单网格布局是车机专属，普通横屏用横向列表。
+    final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+
+    if (isCarMode) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: _SectionHeader(
+                title: '推荐歌单',
+                action: const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              itemCount: playlists.length,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 160,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 14,
+                childAspectRatio: 0.60,
+              ),
+              itemBuilder: (context, index) {
+                final playlist = playlists[index];
+                return _PlaylistCard(
+                  playlist: playlist,
+                  onTap: () => onTap(playlist),
+                );
+              },
+            ),
+          ],
+        ),
+      );
     }
 
     return Padding(
@@ -1157,6 +1345,7 @@ class _PlaylistRail extends StatelessWidget {
                 return _PlaylistCard(
                   playlist: playlist,
                   onTap: () => onTap(playlist),
+                  width: 128,
                 );
               },
             ),
@@ -1194,22 +1383,28 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _PlaylistCard extends StatelessWidget {
-  const _PlaylistCard({required this.playlist, required this.onTap});
+  const _PlaylistCard({
+    required this.playlist,
+    required this.onTap,
+    this.width,
+  });
 
   final PlaylistSummary playlist;
   final VoidCallback onTap;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 128,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Column(
+    Widget content = LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = width ?? constraints.maxWidth;
+        final size = cardWidth.isInfinite ? 128.0 : cardWidth;
+
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Artwork(url: playlist.coverUrl, size: 128, borderRadius: 10),
+            Artwork(url: playlist.coverUrl, size: size, borderRadius: 10),
             const SizedBox(height: 9),
             SizedBox(
               height: 42,
@@ -1232,8 +1427,25 @@ class _PlaylistCard extends StatelessWidget {
               ),
             ),
           ],
+        );
+      },
+    );
+
+    if (width != null) {
+      return SizedBox(
+        width: width,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: content,
         ),
-      ),
+      );
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: content,
     );
   }
 }
@@ -1296,7 +1508,9 @@ class _RadioSectionState extends State<_RadioSection> {
   Future<void> _refresh() async {
     final future = _load();
     _cachedFuture = future;
-    setState(() { _future = future; });
+    setState(() {
+      _future = future;
+    });
     await future;
   }
 
@@ -1331,6 +1545,11 @@ class _RadioSectionState extends State<_RadioSection> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final isLandscape = screenSize.width > screenSize.height;
+    // 电台双卡+网格布局是车机专属，普通横屏用原布局。
+    final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+
     return FutureBuilder<_RadioData>(
       future: _future,
       builder: (context, snapshot) {
@@ -1346,6 +1565,103 @@ class _RadioSectionState extends State<_RadioSection> {
           );
         }
         final radio = data ?? _RadioData.empty;
+
+        if (isCarMode) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+                  child: _SectionHeader(
+                    title: '推荐电台',
+                    action: IconButton.filledTonal(
+                      tooltip: '刷新',
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh_rounded),
+                      style: IconButton.styleFrom(
+                        fixedSize: const Size.square(42),
+                        shape: const CircleBorder(),
+                      ),
+                    ),
+                  ),
+                ),
+                if (radio.recommended.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: SizedBox(
+                      height: 190,
+                      child: radio.recommended.length >= 2
+                          // 有两个及以上推荐时，并排展示两张大卡
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: _RadioHeroCard(
+                                    station: radio.recommended[0],
+                                    loading:
+                                        _loadingStationId ==
+                                        radio.recommended[0].id,
+                                    onTap: () =>
+                                        _playStation(radio.recommended[0]),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: _RadioHeroCard(
+                                    station: radio.recommended[1],
+                                    loading:
+                                        _loadingStationId ==
+                                        radio.recommended[1].id,
+                                    onTap: () =>
+                                        _playStation(radio.recommended[1]),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : _RadioHeroCard(
+                              station: radio.recommended.first,
+                              loading:
+                                  _loadingStationId ==
+                                  radio.recommended.first.id,
+                              onTap: () =>
+                                  _playStation(radio.recommended.first),
+                            ),
+                    ),
+                  ),
+                if (radio.recommended.length > 2) ...[
+                  const SizedBox(height: 14),
+                  _RadioStationGrid(
+                    stations: radio.recommended.skip(2).toList(),
+                    loadingStationId: _loadingStationId,
+                    onTap: _playStation,
+                  ),
+                ],
+                for (final group in radio.groups) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: _SectionHeader(
+                      title: group.name,
+                      action: Icon(
+                        Icons.radio_rounded,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _RadioStationGrid(
+                    stations: group.stations,
+                    loadingStationId: _loadingStationId,
+                    onTap: _playStation,
+                  ),
+                ],
+                if (radio.recommended.isEmpty && radio.groups.isEmpty)
+                  const _RadioEmpty(),
+              ],
+            ),
+          );
+        }
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
@@ -1525,6 +1841,45 @@ class _RadioStationRail extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _RadioStationGrid extends StatelessWidget {
+  const _RadioStationGrid({
+    required this.stations,
+    required this.loadingStationId,
+    required this.onTap,
+  });
+
+  final List<FmStation> stations;
+  final String? loadingStationId;
+  final ValueChanged<FmStation> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (stations.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      itemCount: stations.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 160,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 14,
+        childAspectRatio: 0.72,
+      ),
+      itemBuilder: (context, index) {
+        final station = stations[index];
+        return _RadioStationCard(
+          station: station,
+          loading: loadingStationId == station.id,
+          onTap: () => onTap(station),
+        );
+      },
     );
   }
 }
@@ -1915,4 +2270,178 @@ String _playCount(int? value) {
     return '${(value / 10000).toStringAsFixed(1)} 万次播放';
   }
   return '$value 次播放';
+}
+
+class _CarQuickStatsPills extends StatefulWidget {
+  const _CarQuickStatsPills({
+    required this.auth,
+    required this.player,
+    required this.onSwitchToMyTab,
+    required this.api,
+    this.isSideBySide = false,
+  });
+
+  final AuthController auth;
+  final PlayerController player;
+  final VoidCallback onSwitchToMyTab;
+  final MusicApi api;
+  final bool isSideBySide;
+
+  @override
+  State<_CarQuickStatsPills> createState() => _CarQuickStatsPillsState();
+}
+
+class _CarQuickStatsPillsState extends State<_CarQuickStatsPills> {
+  int _historyCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistoryCount();
+  }
+
+  Future<void> _loadHistoryCount() async {
+    try {
+      final count = await widget.player.getPlaybackHistoryCount();
+      if (mounted) {
+        setState(() {
+          _historyCount = count;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(top: widget.isSideBySide ? 0 : 20, right: 18),
+      child: Row(
+        children: [
+          Expanded(
+            child: _PillCard(
+              title: '已播歌曲',
+              value: '$_historyCount',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PlaybackHistoryPage(
+                    api: widget.api,
+                    auth: widget.auth,
+                    player: widget.player,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _PillCard(
+              title: '收藏歌曲',
+              value: '${widget.auth.likedCount}',
+              onTap: () {
+                if (widget.auth.likedPlaylist != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PlaylistDetailPage(
+                        api: widget.api,
+                        auth: widget.auth,
+                        player: widget.player,
+                        playlist: widget.auth.likedPlaylist!,
+                      ),
+                    ),
+                  );
+                } else {
+                  Toast.info('暂无收藏歌单');
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _PillCard(
+              title: '自建歌单',
+              value: '${widget.auth.createdPlaylists.length}',
+              onTap: widget.onSwitchToMyTab,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PillCard extends StatelessWidget {
+  const _PillCard({
+    required this.title,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String title;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: isDark
+          ? colorScheme.surfaceContainer
+          : Colors.white.withValues(alpha: 0.9),
+      borderRadius: BorderRadius.circular(28),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1DB954), // Spotify Green
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: colorScheme.onSurface,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

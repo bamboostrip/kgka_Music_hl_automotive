@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -698,7 +700,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       body: AdaptiveContentPadding(
         child: Stack(
         children: [
-          CustomScrollView(
+          // Windows 平台滚动时 sliver item 回收重建会产生大量语义节点更新，
+          // 触发 Flutter Windows 引擎 AXTree 更新 bug（console 提示
+          // "Failed to update ui::AXTree"）。在 Windows 上排除语义树消除提示，
+          // 移动端保留无障碍功能。
+          ExcludeSemantics(
+            excluding: !Platform.isWindows,
+            child: CustomScrollView(
             controller: _scrollController,
             slivers: [
               SliverAppBar(
@@ -875,6 +883,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                 ],
               ],
             ],
+          ),
           ),
           Positioned(
             left: 0,
@@ -1319,12 +1328,14 @@ class _SongRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return AnimatedBuilder(
-      animation: player,
-      builder: (context, _) {
-        final active = player.currentSong?.hash == song.hash;
-        final activeColor = colorScheme.primary;
-        return InkWell(
+    // 歌曲行响应 player 重建，高频更新会触发 Windows AXTree 竞态崩溃
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: player,
+        builder: (context, _) {
+          final active = player.currentSong?.hash == song.hash;
+          final activeColor = colorScheme.primary;
+          return InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: AnimatedContainer(
@@ -1484,7 +1495,8 @@ class _SongRow extends StatelessWidget {
             ),
           ),
         );
-      },
+        },
+      ),
     );
   }
 }

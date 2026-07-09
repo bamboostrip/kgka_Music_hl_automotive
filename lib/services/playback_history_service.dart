@@ -55,6 +55,21 @@ class PlaybackHistoryService {
     }
   }
 
+  /// 读取历史记录总数（仅解析 JSON 长度，不反序列化 Song 对象）。
+  ///
+  /// 用于 UI 上的计数展示，避免为了取 length 而反序列化全部 Song。
+  /// 返回值受 [_maxRecords] 上限约束。
+  Future<int> count() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw == null) return 0;
+    try {
+      return (jsonDecode(raw) as List).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// 清空播放历史。
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();

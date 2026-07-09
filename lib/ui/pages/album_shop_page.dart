@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
@@ -93,6 +94,13 @@ class _AlbumShopPageState extends State<AlbumShopPage> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final size = MediaQuery.sizeOf(context);
+    // 多列自适应是车机横屏专属；普通横屏/竖屏保持原项目固定 2 列。
+    final isCarLandscape =
+        size.width > size.height && ThemeController.instance.carModeEnabled;
+    final crossAxisCount = isCarLandscape
+        ? (size.width / 180).floor().clamp(2, 5)
+        : 2;
 
     return Scaffold(
       extendBody: true,
@@ -111,8 +119,8 @@ class _AlbumShopPageState extends State<AlbumShopPage> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
                 sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
                     childAspectRatio: 0.72,

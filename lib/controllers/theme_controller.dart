@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/device_info_service.dart';
+import '../ui/adaptive_layout.dart';
 
 /// 全局个性化设置控制器。
 ///
@@ -27,6 +29,10 @@ class ThemeController extends ChangeNotifier {
   static const _bgImagePathKey = 'theme.bg_image_path';
   static const _bgOpacityKey = 'theme.bg_opacity';
   static const _landscapeEnabledKey = 'theme.landscape_enabled';
+  static const _carModeEnabledKey = 'theme.car_mode_enabled';
+
+  /// 车机模式下文字放大倍数（远距离观看更清晰）。
+  static const double carModeFontScaleFactor = 1.12;
 
   /// 预设种子色列表。
   static const presetColors = <_PresetColor>[
@@ -45,18 +51,31 @@ class ThemeController extends ChangeNotifier {
   String? _backgroundImagePath;
   double _backgroundOpacity = 0.15;
   bool _landscapeEnabled = false;
+  bool _carModeEnabled = false;
+  // 车机检测结果缓存（设备不变，启动时检测一次）。
+  bool _isAutomotiveDevice = false;
 
   bool? _lastAppliedIsTablet;
   bool? _lastAppliedLandscapeEnabled;
+  bool? _lastAppliedCarModeEnabled;
 
   Color get seedColor => _seedColor;
   bool get backgroundEnabled => _backgroundEnabled;
   String? get backgroundImagePath => _backgroundImagePath;
   double get backgroundOpacity => _backgroundOpacity;
   bool get landscapeEnabled => _landscapeEnabled;
+  bool get carModeEnabled => _carModeEnabled;
+  bool get isAutomotiveDevice => _isAutomotiveDevice;
 
   /// 是否使用了非默认种子色。
   bool get hasCustomSeedColor => _seedColor != const Color(0xFF1478FF);
+
+  /// 检测是否为 Android Automotive 车机并缓存结果。
+  /// 设备类型不变，启动时调用一次即可。须在 [load] 之前调用，
+  /// 以便首次安装时据检测结果决定车机模式默认值。
+  Future<void> detectAutomotive(DeviceInfoService deviceInfo) async {
+    _isAutomotiveDevice = await deviceInfo.isAutomotive();
+  }
 
   /// 加载持久化设置。
   Future<void> load() async {
@@ -68,10 +87,18 @@ class ThemeController extends ChangeNotifier {
     _backgroundEnabled = prefs.getBool(_bgEnabledKey) ?? false;
     _backgroundImagePath = prefs.getString(_bgImagePathKey);
     _landscapeEnabled = prefs.getBool(_landscapeEnabledKey) ?? false;
+    // 首次安装（键不存在）：检测到车机则默认开启车机模式；
+    // 否则默认关闭。用户手动开关过后键一定存在，永不覆盖用户选择。
+    if (prefs.containsKey(_carModeEnabledKey)) {
+      _carModeEnabled = prefs.getBool(_carModeEnabledKey) ?? false;
+    } else {
+      _carModeEnabled = _isAutomotiveDevice;
+    }
     final opacity = prefs.getDouble(_bgOpacityKey);
     if (opacity != null) {
       _backgroundOpacity = opacity.clamp(0.0, 0.8);
     }
+    applyOrientations(AdaptiveLayout.isTabletByPlatform());
     notifyListeners();
   }
 
@@ -103,16 +130,29 @@ class ThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 开启/关闭车机模式：横屏时启用左侧播放面板 + 顶栏布局，并放大文字。
+  /// 关闭时回到普通横屏（NavigationRail），竖屏始终不受影响。
+  Future<void> setCarModeEnabled(bool enabled) async {
+    if (_carModeEnabled == enabled) return;
+    _carModeEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_carModeEnabledKey, enabled);
+    applyOrientations(AdaptiveLayout.isTabletByPlatform());
+    notifyListeners();
+  }
+
   /// 动态应用屏幕方向锁定/解锁。
   void applyOrientations(bool isTablet) {
     if (_lastAppliedIsTablet == isTablet &&
-        _lastAppliedLandscapeEnabled == _landscapeEnabled) {
+        _lastAppliedLandscapeEnabled == _landscapeEnabled &&
+        _lastAppliedCarModeEnabled == _carModeEnabled) {
       return;
     }
     _lastAppliedIsTablet = isTablet;
     _lastAppliedLandscapeEnabled = _landscapeEnabled;
+    _lastAppliedCarModeEnabled = _carModeEnabled;
 
-    if (isTablet || _landscapeEnabled) {
+    if (isTablet || _landscapeEnabled || _carModeEnabled) {
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,

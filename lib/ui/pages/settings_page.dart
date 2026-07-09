@@ -113,6 +113,15 @@ class SettingsPage extends StatelessWidget {
                       onChanged: player.setSmartQualityEnabled,
                     ),
                     _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.power_settings_new_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '开机自启播放',
+                      subtitle: '打开应用时自动加载并播放推荐歌单',
+                      value: player.autoPlayOnStartupEnabled,
+                      onChanged: player.setAutoPlayOnStartupEnabled,
+                    ),
+                    _SettingsDivider(),
                     _SettingsTile(
                       icon: Icons.graphic_eq_rounded,
                       iconColor: colorScheme.primary,
@@ -287,6 +296,15 @@ class SettingsPage extends StatelessWidget {
                       onChanged: (value) {
                         theme.setLandscapeEnabled(value, AdaptiveLayout.isTablet(context));
                       },
+                    ),
+                    _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.directions_car_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '车机模式',
+                      subtitle: '横屏时使用左侧播放面板布局并放大文字',
+                      value: theme.carModeEnabled,
+                      onChanged: (value) => theme.setCarModeEnabled(value),
                     ),
                   ],
                 ),

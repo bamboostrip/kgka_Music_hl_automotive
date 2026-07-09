@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/theme_controller.dart';
+
 /// 自适应布局工具类。
 ///
 /// 平板检测基于 Material Design 的 breakpoint：
@@ -53,8 +55,18 @@ class AdaptiveLayout {
   /// - 600 ≤ 宽度 < 1200：限制 [tabletMaxWidth]
   /// - 宽度 ≥ 1200：限制 [wideMaxWidth]
   static double contentMaxWidthFor(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+    final size = MediaQuery.sizeOf(context);
+    final width = size.width;
     if (width < 600) return double.infinity;
+
+    // 取消宽度限制是车机横屏专属（让内容铺满宽屏）；
+    // 普通横屏/平板仍按原逻辑限制内容最大宽度，避免行宽过长难读。
+    final isCarLandscape =
+        size.width > size.height && ThemeController.instance.carModeEnabled;
+    if (isCarLandscape) {
+      return double.infinity;
+    }
+
     if (width < 1200) return tabletMaxWidth;
     return wideMaxWidth;
   }
