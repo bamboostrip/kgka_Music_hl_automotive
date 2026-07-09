@@ -42,9 +42,11 @@ class PlayerController extends ChangeNotifier {
   static const _autoResumeAfterInterruptionSettingKey =
       'settings.auto_resume_after_interruption';
   static const _playbackSpeedSettingKey = 'settings.playback_speed';
-  static const _desktopLyricsEnabledSettingKey = 'settings.desktop_lyrics_enabled';
+  static const _desktopLyricsEnabledSettingKey =
+      'settings.desktop_lyrics_enabled';
   static const _desktopLyricsSettingsKey = 'settings.desktop_lyrics_settings';
   static const _smartQualitySettingKey = 'settings.smart_quality_enabled';
+  static const _autoPlayOnStartupSettingKey = 'settings.auto_play_on_startup';
   static const _listenTimeReportInterval = Duration(minutes: 30);
   static const _listenTimeCheckInterval = Duration(minutes: 1);
   static const _defaultEqualizerLevels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -123,7 +125,9 @@ class PlayerController extends ChangeNotifier {
       state,
     ) {
       if (state == ProcessingState.completed) {
-        unawaited(_handleCompleted());
+        if (!_isChangingSource) {
+          unawaited(_handleCompleted());
+        }
       }
     });
     _androidAudioSessionSub = audioPlayer.androidAudioSessionIdStream.listen((
@@ -198,10 +202,13 @@ class PlayerController extends ChangeNotifier {
   bool isPlaying = false;
   bool isBuffering = false;
   bool isPreparing = false;
+  bool _isChangingSource = false;
   bool addListeningTimeEnabled = true;
   AudioQuality audioQuality = AudioQuality.standard;
+
   /// 是否开启音质智能切换（播放失败时自动降级重试）。
   bool smartQualityEnabled = false;
+  bool autoPlayOnStartupEnabled = false;
   double playbackSpeed = 1.0;
   bool equalizerEnabled = false;
   List<int> equalizerLevels = List<int>.of(_defaultEqualizerLevels);
@@ -323,6 +330,7 @@ class PlayerController extends ChangeNotifier {
     _completionFallbackTimer?.cancel();
     _completedSongHash = null;
     isPreparing = true;
+    _isChangingSource = true;
     errorMessage = null;
     currentSong = song;
     if (queue != null && queue.isNotEmpty) {
@@ -353,8 +361,8 @@ class PlayerController extends ChangeNotifier {
             song.isCloudDrive
                 ? '云盘歌曲暂时没有可播放地址'
                 : song.source == SongSource.netease
-                    ? '网易云歌曲暂时没有可播放地址'
-                    : '这首歌暂时没有可播放地址',
+                ? '网易云歌曲暂时没有可播放地址'
+                : '这首歌暂时没有可播放地址',
           );
         }
         url = playUrl.url;
@@ -393,6 +401,7 @@ class PlayerController extends ChangeNotifier {
       isPreparing = false;
       notifyListeners();
     } finally {
+      _isChangingSource = false;
       if (isPreparing) {
         isPreparing = false;
         notifyListeners();
@@ -529,6 +538,15 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 开关开机自启播放歌曲功能。
+  Future<void> setAutoPlayOnStartupEnabled(bool enabled) async {
+    if (autoPlayOnStartupEnabled == enabled) return;
+    autoPlayOnStartupEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoPlayOnStartupSettingKey, enabled);
+    notifyListeners();
+  }
+
   /// 读取本地播放统计。
   Future<PlaybackStats> getPlaybackStats() => _statsService.getStats();
 
@@ -538,6 +556,9 @@ class PlayerController extends ChangeNotifier {
   /// 读取播放历史。
   Future<List<Song>> getPlaybackHistory({int limit = 100}) =>
       _historyService.getHistory(limit: limit);
+
+  /// 读取播放历史总数（轻量计数，不反序列化 Song 对象）。
+  Future<int> getPlaybackHistoryCount() => _historyService.count();
 
   /// 清空播放历史。
   Future<void> clearPlaybackHistory() => _historyService.clear();
@@ -648,7 +669,8 @@ class PlayerController extends ChangeNotifier {
       try {
         final songFile = File(song.id);
         final dotIndex = songFile.path.lastIndexOf('.');
-        final lrcPath = '${dotIndex != -1 ? songFile.path.substring(0, dotIndex) : songFile.path}.lrc';
+        final lrcPath =
+            '${dotIndex != -1 ? songFile.path.substring(0, dotIndex) : songFile.path}.lrc';
         final file = File(lrcPath);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
@@ -688,7 +710,9 @@ class PlayerController extends ChangeNotifier {
               .toList(),
           ttl: const Duration(days: 30),
         );
-        if (cached != null && !listEquals(lyrics, cached.data) && currentSong?.hash == song.hash) {
+        if (cached != null &&
+            !listEquals(lyrics, cached.data) &&
+            currentSong?.hash == song.hash) {
           lyrics = cached.data;
           notifyListeners();
           _syncDesktopLyrics();
@@ -706,9 +730,11 @@ class PlayerController extends ChangeNotifier {
       }
       // 写缓存（空歌词也缓存，避免重复请求）
       if (cache != null) {
-        unawaited(cache.write(cacheKey, {
-          'lines': fresh.map((l) => l.toCache()).toList(),
-        }));
+        unawaited(
+          cache.write(cacheKey, {
+            'lines': fresh.map((l) => l.toCache()).toList(),
+          }),
+        );
       }
     } catch (_) {
       if (currentSong?.hash == song.hash && lyrics.isEmpty) {
@@ -793,6 +819,16 @@ class PlayerController extends ChangeNotifier {
         notifyListeners();
         unawaited(_audioHandler.pause());
         return;
+      }
+
+      // Windows 上 just_audio_windows 的 WinRT MediaPlayer 在触发 completed
+      // 事件时，native 回调仍在后台线程执行。若立即调用 setUrl() 加载新音源，
+      // 会与 COM 平台线程产生竞态，导致 "Lost connection to device" 进程崩溃。
+      // 延迟 100ms 让 native 层完成 completed 状态的清理，再切换到下一首。
+      if (Platform.isWindows) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        // 延迟后重新检查状态，避免在延迟期间用户手动切歌
+        if (_completedSongHash != currentSong?.hash) return;
       }
 
       if (playbackMode == PlaybackMode.singleLoop) {
@@ -921,29 +957,22 @@ class PlayerController extends ChangeNotifier {
           // 若开启了"阻止打断"，立即恢复播放以对抗暂停。
           if (!audioInterruptionEnabled && isPlaying && currentSong != null) {
             _autoResumeTimer?.cancel();
-            _autoResumeTimer = Timer(
-              const Duration(milliseconds: 300),
-              () {
-                if (!isPlaying && currentSong != null) {
-                  unawaited(_audioHandler.play());
-                }
-              },
-            );
+            _autoResumeTimer = Timer(const Duration(milliseconds: 300), () {
+              if (!isPlaying && currentSong != null) {
+                unawaited(_audioHandler.play());
+              }
+            });
           }
         } else {
           // 打断结束：若开启了"自动恢复"或"阻止打断"，恢复播放。
-          if ((autoResumeAfterInterruption ||
-                  (!audioInterruptionEnabled)) &&
+          if ((autoResumeAfterInterruption || (!audioInterruptionEnabled)) &&
               currentSong != null) {
             _autoResumeTimer?.cancel();
-            _autoResumeTimer = Timer(
-              const Duration(milliseconds: 500),
-              () {
-                if (!isPlaying && currentSong != null) {
-                  unawaited(_audioHandler.play());
-                }
-              },
-            );
+            _autoResumeTimer = Timer(const Duration(milliseconds: 500), () {
+              if (!isPlaying && currentSong != null) {
+                unawaited(_audioHandler.play());
+              }
+            });
           }
         }
       });
@@ -954,14 +983,11 @@ class PlayerController extends ChangeNotifier {
         }
         if (autoResumeAfterInterruption && currentSong != null) {
           _autoResumeTimer?.cancel();
-          _autoResumeTimer = Timer(
-            const Duration(milliseconds: 500),
-            () {
-              if (!isPlaying && currentSong != null) {
-                unawaited(_audioHandler.play());
-              }
-            },
-          );
+          _autoResumeTimer = Timer(const Duration(milliseconds: 500), () {
+            if (!isPlaying && currentSong != null) {
+              unawaited(_audioHandler.play());
+            }
+          });
         }
       });
     } catch (_) {
@@ -1057,7 +1083,10 @@ class PlayerController extends ChangeNotifier {
 
     final song = currentSong;
     if (song == null) return;
-    final shown = await _desktopLyrics.show(title: song.title, artist: song.artist);
+    final shown = await _desktopLyrics.show(
+      title: song.title,
+      artist: song.artist,
+    );
     if (shown) {
       _syncDesktopLyrics();
       _syncDesktopPlayState();
@@ -1161,10 +1190,15 @@ class PlayerController extends ChangeNotifier {
     return null;
   }
 
-  Future<void> updateDesktopLyricsSettings(DesktopLyricsSettings settings) async {
+  Future<void> updateDesktopLyricsSettings(
+    DesktopLyricsSettings settings,
+  ) async {
     desktopLyricsSettings = settings;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_desktopLyricsSettingsKey, jsonEncode(settings.toMap()));
+    await prefs.setString(
+      _desktopLyricsSettingsKey,
+      jsonEncode(settings.toMap()),
+    );
     notifyListeners();
     await _desktopLyrics.updateSettings(settings);
   }
@@ -1291,6 +1325,8 @@ class PlayerController extends ChangeNotifier {
     );
     smartQualityEnabled =
         prefs.getBool(_smartQualitySettingKey) ?? smartQualityEnabled;
+    autoPlayOnStartupEnabled =
+        prefs.getBool(_autoPlayOnStartupSettingKey) ?? autoPlayOnStartupEnabled;
     equalizerEnabled =
         prefs.getBool(_equalizerEnabledSettingKey) ?? equalizerEnabled;
     equalizerPresetName =
@@ -1305,12 +1341,11 @@ class PlayerController extends ChangeNotifier {
         prefs.getDouble(_bassBoostStrengthSettingKey) ?? bassBoostStrength;
     audioInterruptionEnabled =
         prefs.getBool(_audioInterruptionEnabledSettingKey) ??
-            audioInterruptionEnabled;
+        audioInterruptionEnabled;
     autoResumeAfterInterruption =
         prefs.getBool(_autoResumeAfterInterruptionSettingKey) ??
-            autoResumeAfterInterruption;
-    playbackSpeed =
-        prefs.getDouble(_playbackSpeedSettingKey) ?? playbackSpeed;
+        autoResumeAfterInterruption;
+    playbackSpeed = prefs.getDouble(_playbackSpeedSettingKey) ?? playbackSpeed;
     desktopLyricsEnabled =
         prefs.getBool(_desktopLyricsEnabledSettingKey) ?? desktopLyricsEnabled;
     final dlSettingsRaw = prefs.getString(_desktopLyricsSettingsKey);

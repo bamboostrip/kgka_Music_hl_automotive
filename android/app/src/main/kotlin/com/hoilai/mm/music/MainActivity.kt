@@ -103,6 +103,15 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
+        // 车机检测：isAutomotive 判别车机。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/device")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isAutomotive" -> result.success(isAutomotiveDevice())
+                    else -> result.notImplemented()
+                }
+            }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/update")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -755,6 +764,13 @@ class MainActivity : AudioServiceActivity() {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         startActivity(installIntent)
+    }
+
+    /// 是否为 Android Automotive 车机设备。
+    /// 仅依赖官方 FEATURE_AUTOMOTIVE 标记：国产定制 AOSP 车机通常未声明，
+    /// 会判为 false，需用户在设置→个性化手动开启车机模式。
+    private fun isAutomotiveDevice(): Boolean {
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
     }
 
     override fun onDestroy() {

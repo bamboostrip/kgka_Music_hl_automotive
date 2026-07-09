@@ -12,6 +12,7 @@ import 'controllers/local_music_controller.dart';
 import 'controllers/theme_controller.dart';
 import 'core/api_client.dart';
 import 'services/cache_service.dart';
+import 'services/device_info_service.dart';
 import 'services/download_service.dart';
 import 'services/music_audio_handler.dart';
 import 'services/music_api.dart';
@@ -37,6 +38,8 @@ Future<void> main() async {
   );
 
   final themeController = ThemeController();
+  // 先检测车机，再加载设置：首次安装时据检测结果决定车机模式默认值。
+  await themeController.detectAutomotive(const DeviceInfoService());
   await themeController.load();
 
   runApp(KaMusicApp(
