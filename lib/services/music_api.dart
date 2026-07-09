@@ -781,7 +781,6 @@ class MusicApi {
     );
     _debugLyricLogObject('$format lyric response keys', result.keys.toList());
 
-    final translationContent = asString(result['decodedTranslation']);
     final candidates = [
       asString(result['decodedContent']),
       asString(result['rawContent']),
@@ -798,16 +797,7 @@ class MusicApi {
         '$format content[$index] score=${_lyricContentScore(content)} length=${content.length}',
         content,
       );
-      if (translationContent != null) {
-        _debugLyricContent(
-          '$format decodedTranslation length=${translationContent.length}',
-          translationContent,
-        );
-      }
-      final lines = parseLyrics(
-        content,
-        translationContent: translationContent,
-      );
+      final lines = parseLyrics(content);
       _debugLyricLog('$format content[$index] parsed lines=${lines.length}');
       if (lines.isNotEmpty) {
         return lines;
@@ -877,7 +867,7 @@ List<PlaylistSummary> _orderUserPlaylistsForDisplay(
   return [...playlists.take(2), ...playlists.skip(2).toList().reversed];
 }
 
-List<LyricLine> parseLyrics(String? content, {String? translationContent}) {
+List<LyricLine> parseLyrics(String? content) {
   if (content == null || content.trim().isEmpty) {
     return const [];
   }
@@ -895,7 +885,6 @@ List<LyricLine> parseLyrics(String? content, {String? translationContent}) {
   }
 
   final variants = _parseLyricVariants(
-    translationContent: translationContent,
     originalContent: normalized,
   );
   return _mergeLyricVariants(parsed, variants);
@@ -1080,32 +1069,21 @@ int _lyricContentScore(String content) {
 }
 
 _ParsedLyricVariants _parseLyricVariants({
-  required String? translationContent,
   required String originalContent,
 }) {
-  final decodedTranslation = _parseTimedVariant(translationContent);
+  // decodedTranslation 是纯文本，没有行号/时间戳信息，无法与主歌词逐行对应。
+  // 翻译/音译只从 decodedContent 中的 [language:...] 标签解析，
+  // 其 lyricContent 下标与主歌词行序严格一致。
   final krcVariants = _parseKrcLanguageVariants(originalContent);
   return _ParsedLyricVariants(
-    translation: !decodedTranslation.isEmpty
-        ? decodedTranslation
-        : krcVariants.translation,
+    translation: krcVariants.translation,
     romanization: krcVariants.romanization,
-  );
-}
-
-_TimedLyricVariant _parseTimedVariant(String? content) {
-  final lines = parseLyrics(content);
-  return _TimedLyricVariant(
-    byTime: {
-      for (final line in lines)
-        if (line.text.isNotEmpty) line.time.inMilliseconds: line.text,
-    },
   );
 }
 
 _ParsedLyricVariants _parseKrcLanguageVariants(String content) {
   final match = RegExp(
-    r'^\[language:([A-Za-z0-9+/=]+)\]',
+    r'^\[language:([A-Za-z0-9+/\-_]+=*)\]',
     multiLine: true,
   ).firstMatch(content);
   final encoded = match?.group(1);
@@ -1114,7 +1092,14 @@ _ParsedLyricVariants _parseKrcLanguageVariants(String content) {
   }
 
   try {
-    final decoded = utf8.decode(base64.decode(encoded));
+    // [language:...] 标签中的 Base64 可能使用 URL-safe 变体，需要转换
+    var normalized = encoded.replaceAll('-', '+').replaceAll('_', '/');
+    final mod4 = normalized.length % 4;
+    if (mod4 > 0) {
+      normalized += '=' * (4 - mod4);
+    }
+    final decoded = utf8.decode(base64.decode(normalized));
+    _debugLyricContent('language tag decoded', decoded);
     final json = jsonDecode(decoded);
     final translationByTime = <int, String>{};
     final translationByIndex = <String>[];
@@ -1127,6 +1112,13 @@ _ParsedLyricVariants _parseKrcLanguageVariants(String content) {
       romanizationByTime: romanizationByTime,
       romanizationByIndex: romanizationByIndex,
     );
+    _debugLyricLog('language: transByIndex=${translationByIndex.length} transByTime=${translationByTime.length} romanByIndex=${romanizationByIndex.length} romanByTime=${romanizationByTime.length}');
+    for (var i = 0; i < translationByIndex.length; i++) {
+      final t = translationByIndex[i];
+      if (t.isNotEmpty) {
+        _debugLyricLog('language trans[$i]: "$t"');
+      }
+    }
     return _ParsedLyricVariants(
       translation: _TimedLyricVariant(
         byTime: translationByTime,
@@ -1243,15 +1235,16 @@ List<LyricLine> _mergeLyricVariants(
   final merged = <LyricLine>[];
   for (var index = 0; index < lines.length; index++) {
     final line = lines[index];
+    final byTime = variants.translation.byTime[line.time.inMilliseconds];
+    final nearest = _nearestLyricVariant(
+      line.time.inMilliseconds,
+      variants.translation.byTime,
+    );
+    final indexed = indexedTranslations[index];
+    final trans = byTime ?? nearest ?? indexed;
     merged.add(
       line.copyWith(
-        translation:
-            variants.translation.byTime[line.time.inMilliseconds] ??
-            _nearestLyricVariant(
-              line.time.inMilliseconds,
-              variants.translation.byTime,
-            ) ??
-            indexedTranslations[index],
+        translation: trans,
         romanization:
             variants.romanization.byTime[line.time.inMilliseconds] ??
             _nearestLyricVariant(
@@ -1261,6 +1254,9 @@ List<LyricLine> _mergeLyricVariants(
             indexedRomanizations[index],
       ),
     );
+    if (trans != null && trans.isNotEmpty) {
+      _debugLyricLog('merge[$index]: "${line.text}" → "$trans" (byTime=$byTime nearest=$nearest indexed=$indexed)');
+    }
   }
   return merged;
 }
@@ -1274,192 +1270,33 @@ Map<int, String> _indexedLyricVariants(
   }
 
   final result = <int, String>{};
-  final targetLooksChinese = _variantLooksChinese(variant.byIndex);
-  var variantIndex = 0;
 
-  for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    if (variantIndex >= variant.byIndex.length) {
-      break;
-    }
-    if (!_shouldConsumeIndexedVariantLine(
-      lines,
-      lineIndex,
-      targetLooksChinese: targetLooksChinese,
-    )) {
-      continue;
-    }
+  // 计算偏移量：
+  // 如果翻译数组开头有空条目（对应制作人员信息行），则直接按索引对应。
+  // 如果没有空条目（翻译只包含实际歌词），则需要偏移。
+  final leadingEmpty = variant.byIndex
+      .takeWhile((t) => t.trim().isEmpty)
+      .length;
+  final offset = leadingEmpty > 0
+      ? 0
+      : (lines.length - variant.byIndex.length).clamp(0, lines.length);
 
-    final text = variant.byIndex[variantIndex].trim();
-    variantIndex++;
+  _debugLyricLog('indexedVariants: lines=${lines.length} variants=${variant.byIndex.length} leadingEmpty=$leadingEmpty offset=$offset');
+
+  for (var i = 0; i < variant.byIndex.length; i++) {
+    final lineIndex = i + offset;
+    if (lineIndex >= lines.length) break;
+
+    final text = variant.byIndex[i].trim();
     if (text.isEmpty || _sameLyricText(lines[lineIndex].text, text)) {
       continue;
     }
     result[lineIndex] = text;
+    _debugLyricLog('indexedVariants[$i→$lineIndex]: "${lines[lineIndex].text}" → "$text"');
   }
 
+  _debugLyricLog('indexedVariants: assigned=${result.length} entries');
   return result;
-}
-
-bool _shouldConsumeIndexedVariantLine(
-  List<LyricLine> lines,
-  int index, {
-  required bool targetLooksChinese,
-}) {
-  final text = lines[index].text.trim();
-  if (text.isEmpty ||
-      _isDecorativeLyricText(text) ||
-      _isLyricMetadataText(text)) {
-    return false;
-  }
-  if (_looksLikeLeadingTitleCredit(lines, index)) {
-    return false;
-  }
-  if (targetLooksChinese && _lineAlreadyLooksChinese(text)) {
-    return false;
-  }
-  return true;
-}
-
-bool _looksLikeLeadingTitleCredit(List<LyricLine> lines, int index) {
-  if (index > 2) {
-    return false;
-  }
-  final text = lines[index].text;
-  final looksLikeTitle =
-      RegExp(r'\s[-–—]\s').hasMatch(text) || text.contains('/');
-  if (!looksLikeTitle) {
-    return false;
-  }
-  return lines
-      .skip(index + 1)
-      .take(6)
-      .any((line) => _isLyricMetadataText(line.text));
-}
-
-bool _isLyricMetadataText(String text) {
-  final normalized = text.trim();
-  final colonIndex = normalized.indexOf(RegExp(r'[:：]'));
-  if (colonIndex < 0 || colonIndex > 24) {
-    return false;
-  }
-
-  final prefix = normalized.substring(0, colonIndex).trim().toLowerCase();
-  if (prefix.isEmpty) {
-    return false;
-  }
-
-  const prefixes = {
-    '词',
-    '曲',
-    '作词',
-    '作曲',
-    '词曲',
-    '编曲',
-    '演唱',
-    '歌手',
-    '艺人',
-    '原唱',
-    '翻唱',
-    '制作',
-    '制作人',
-    '出品',
-    '发行',
-    '企划',
-    '监制',
-    '统筹',
-    '版权',
-    '录音',
-    '录音师',
-    '录音室',
-    '混音',
-    '混音师',
-    '混音室',
-    '母带',
-    '母带师',
-    '母带室',
-    '和声',
-    '配唱',
-    '吉他',
-    '贝斯',
-    '鼓',
-    '键盘',
-    '弦乐',
-    '人声',
-    'op',
-    'sp',
-    'cp',
-    'isrc',
-    'upc',
-    'vocal',
-    'vocals',
-    'lyric',
-    'lyrics',
-    'lyricist',
-    'composer',
-    'arranger',
-    'producer',
-    'produced by',
-    'mix',
-    'mixing',
-    'mixed',
-    'master',
-    'mastering',
-    'mastered',
-    'recording',
-    'guitar',
-    'bass',
-    'drums',
-    'keyboard',
-    'publisher',
-    'copyright',
-  };
-  return prefixes.contains(prefix);
-}
-
-bool _isDecorativeLyricText(String text) {
-  var meaningful = 0;
-  for (final rune in text.runes) {
-    if (_isHanRune(rune) ||
-        _isKanaRune(rune) ||
-        _isHangulRune(rune) ||
-        _isLatinRune(rune)) {
-      meaningful++;
-    }
-  }
-  return meaningful == 0;
-}
-
-bool _variantLooksChinese(List<String> values) {
-  var han = 0;
-  var otherLetters = 0;
-  for (final value in values.take(12)) {
-    for (final rune in value.runes) {
-      if (_isHanRune(rune)) {
-        han++;
-      } else if (_isKanaRune(rune) ||
-          _isHangulRune(rune) ||
-          _isLatinRune(rune)) {
-        otherLetters++;
-      }
-    }
-  }
-  return han >= 3 && han >= otherLetters;
-}
-
-bool _lineAlreadyLooksChinese(String text) {
-  var han = 0;
-  var kanaOrHangul = 0;
-  var latin = 0;
-  for (final rune in text.runes) {
-    if (_isHanRune(rune)) {
-      han++;
-    } else if (_isKanaRune(rune) || _isHangulRune(rune)) {
-      kanaOrHangul++;
-    } else if (_isLatinRune(rune)) {
-      latin++;
-    }
-  }
-  return han >= 2 && kanaOrHangul == 0 && latin == 0;
 }
 
 bool _sameLyricText(String a, String b) {
