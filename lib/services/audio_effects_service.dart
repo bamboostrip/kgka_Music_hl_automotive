@@ -141,25 +141,4 @@ class AudioEffectsService {
     }
   }
 
-  Future<bool> configureVolumeNormalization({
-    required int? audioSessionId,
-    required bool enabled,
-  }) async {
-    if (!isAudioEffectsSupported) {
-      return false;
-    }
-
-    try {
-      final result = await _channel.invokeMethod<bool>('configureVolumeNormalization', {
-        'audioSessionId': audioSessionId,
-        'enabled': enabled,
-      });
-      return result ?? false;
-    } on PlatformException catch (error) {
-      debugPrint('[KA Music][audio-effects] VolumeNormalization failed: $error');
-      return false;
-    } on MissingPluginException {
-      return false;
-    }
-  }
 }

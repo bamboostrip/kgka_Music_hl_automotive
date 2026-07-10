@@ -16,7 +16,10 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
-import android.media.audiofx.DynamicsProcessing
+import android.media.audiofx.LoudnessEnhancer
+import android.os.Handler
+import android.util.Log
+import android.os.Looper
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -25,19 +28,26 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.ryanheise.audioservice.AudioServiceActivity
 import java.io.File
+import kotlin.concurrent.thread
 
 class MainActivity : AudioServiceActivity() {
     private val updateDownloads = mutableMapOf<Long, String>()
     private var downloadReceiverRegistered = false
     private var lyricsStateReceiverRegistered = false
     private var desktopLyricsChannel: MethodChannel? = null
+    // audio_effects channel 引用,供响度分析中途反向 invokeMethod 推进度给 Dart。
+    private var audioEffectsChannel: MethodChannel? = null
     private var bassBoost: BassBoost? = null
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int? = null
-    private var dynamicsProcessing: DynamicsProcessing? = null
-    private var dynamicsProcessingSessionId: Int? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var loudnessEnhancerSessionId: Int? = null
+    // 当前响度分析的取消标志。切歌时调用 cancelLoudnessAnalysis 置 true,
+    // 让解码循环立即结束,避免旧歌曲分析空跑占 CPU。
+    @Volatile private var loudnessAnalysisCancelled: Boolean = false
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
         private const val REQUEST_READ_AUDIO = 1001
@@ -126,6 +136,7 @@ class MainActivity : AudioServiceActivity() {
             }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/audio_effects")
+            .also { audioEffectsChannel = it }
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "getEqualizerConfig" -> {
@@ -166,18 +177,91 @@ class MainActivity : AudioServiceActivity() {
                             result.error("bass_boost_failed", error.message, null)
                         }
                     }
-                    "configureVolumeNormalization" -> {
+                    "analyzeLoudness" -> {
+                        val url = call.argument<String>("url")
+                        val maxDurationMs = call.argument<Int>("maxDurationMs") ?: 1800000
+                        val progressIntervalMs = call.argument<Int>("progressIntervalMs") ?: 500
+                        if (url.isNullOrBlank()) {
+                            result.error("invalid_url", "url is null or empty", null)
+                            return@setMethodCallHandler
+                        }
+                        Log.i("Loudness", "channel analyzeLoudness 收到 url=$url interval=${progressIntervalMs}ms")
+                        // 每次新分析重置取消标志。切歌时 Dart 侧调 cancelLoudnessAnalysis
+                        // 置 true,解码循环检测到后立即抛异常结束,不再空跑。
+                        loudnessAnalysisCancelled = false
+                        val channel = audioEffectsChannel
+                        thread {
+                            try {
+                                val analyzed = LoudnessAnalyzer.analyze(
+                                    url,
+                                    maxDurationMs,
+                                    progressIntervalMs,
+                                    isCancelled = { loudnessAnalysisCancelled },
+                                    onProgress = { lufs, analyzedMs ->
+                                        // 反向 invokeMethod 把中途 LUFS 推给 Dart,
+                                        // Dart 侧用序号守卫决定是否应用。切到主线程调用
+                                        // (Flutter MethodChannel 要求主线程)。
+                                        if (channel != null && !loudnessAnalysisCancelled) {
+                                            mainHandler.post {
+                                                channel.invokeMethod(
+                                                    "onLoudnessProgress",
+                                                    mapOf(
+                                                        "lufs" to lufs,
+                                                        "analyzedMs" to analyzedMs
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    },
+                                )
+                                mainHandler.post {
+                                    result.success(
+                                        mapOf(
+                                            "lufs" to analyzed.lufs,
+                                            "sampleRate" to analyzed.sampleRate,
+                                            "analyzedMs" to analyzed.analyzedMs
+                                        )
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                mainHandler.post {
+                                    if (loudnessAnalysisCancelled) {
+                                        // 取消不算失败,返回 success(false) 让 Dart 侧
+                                        // 走"已丢弃"路径(序号守卫也会拦截)。
+                                        result.success(null)
+                                    } else {
+                                        result.error("analyze_failed", e.message, null)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "cancelLoudnessAnalysis" -> {
+                        // 切歌时调用,让正在跑的解码循环立即结束。
+                        Log.i("Loudness", "channel cancelLoudnessAnalysis 取消在途分析")
+                        loudnessAnalysisCancelled = true
+                        result.success(true)
+                    }
+                    "configureLoudnessGain" -> {
                         val audioSessionId = call.argument<Int>("audioSessionId")
                         val enabled = call.argument<Boolean>("enabled") ?: false
+                        val gainMb = call.argument<Int>("gainMb") ?: 0
+                        Log.i("Loudness", "channel configureLoudnessGain enabled=$enabled gainMb=$gainMb session=$audioSessionId")
 
                         runCatching {
-                            configureVolumeNormalization(audioSessionId, enabled)
+                            configureLoudnessGain(audioSessionId, enabled, gainMb)
                         }.onSuccess { supported ->
+                            Log.i("Loudness", "configureLoudnessGain 成功 supported=$supported gainMb=$gainMb")
                             result.success(supported)
                         }.onFailure { error ->
-                            releaseDynamicsProcessing()
-                            result.error("volume_normalization_failed", error.message, null)
+                            Log.e("Loudness", "configureLoudnessGain 失败 gainMb=$gainMb", error)
+                            releaseLoudnessGain()
+                            result.error("loudness_gain_failed", error.message, null)
                         }
+                    }
+                    "releaseLoudnessGain" -> {
+                        releaseLoudnessGain()
+                        result.success(true)
                     }
                     else -> result.notImplemented()
                 }
@@ -587,87 +671,52 @@ class MainActivity : AudioServiceActivity() {
         bassBoostSessionId = null
     }
 
-    private fun configureVolumeNormalization(audioSessionId: Int?, enabled: Boolean): Boolean {
+    /**
+     * 配置响度增益(基于已分析的 LUFS 差值)。
+     * 使用 Android [LoudnessEnhancer] 仅放大轻歌(增益范围 0~1500 mB);
+     * 响歌衰减由 Dart 侧 [AudioPlayer.setVolume] 完成,LoudnessEnhancer 不支持负增益。
+     * 仿照 [configureBassBoost] 范式:sessionId 不变则复用,否则释放重建。
+     */
+    private fun configureLoudnessGain(
+        audioSessionId: Int?,
+        enabled: Boolean,
+        gainMb: Int
+    ): Boolean {
         if (!enabled) {
-            releaseDynamicsProcessing()
+            releaseLoudnessGain()
             return true
         }
         if (audioSessionId == null || audioSessionId <= 0) {
             return false
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            return false
+
+        val effect = if (loudnessEnhancerSessionId == audioSessionId &&
+            loudnessEnhancer != null
+        ) {
+            loudnessEnhancer!!
+        } else {
+            releaseLoudnessGain()
+            LoudnessEnhancer(audioSessionId).also {
+                loudnessEnhancer = it
+                loudnessEnhancerSessionId = audioSessionId
+            }
         }
 
-        try {
-            val effect = if (dynamicsProcessingSessionId == audioSessionId && dynamicsProcessing != null) {
-                dynamicsProcessing!!
-            } else {
-                releaseDynamicsProcessing()
-
-                val config = DynamicsProcessing.Config.Builder(
-                    DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
-                    2, // channels
-                    false, // preEq
-                    0,
-                    true, // mbc
-                    1, // 1 band compressor
-                    false, // postEq
-                    0,
-                    true // limiter
-                ).build()
-
-                DynamicsProcessing(0, audioSessionId, config).also {
-                    dynamicsProcessing = it
-                    dynamicsProcessingSessionId = audioSessionId
-                }
-            }
-
-            val mbcBand = DynamicsProcessing.MbcBand(
-                true, // enabled
-                20000.0f, // cutoffFrequency
-                50.0f, // attackTime
-                300.0f, // releaseTime
-                4.0f, // ratio
-                -15.0f, // threshold
-                2.0f, // kneeWidth
-                -60.0f, // noiseGateThreshold
-                1.0f, // expanderRatio
-                2.0f, // preGain
-                0.0f // postGain
-            )
-
-            val limiter = DynamicsProcessing.Limiter(
-                true, // inUse
-                true, // enabled
-                0, // linkGroup
-                1.0f, // attackTime
-                100.0f, // releaseTime
-                10.0f, // ratio
-                -1.0f, // threshold
-                0.0f // postGain
-            )
-
-            for (c in 0 until 2) {
-                effect.setMbcBandByChannelIndex(c, 0, mbcBand)
-                effect.setLimiterByChannelIndex(c, limiter)
-            }
-
-            effect.enabled = true
-            return true
-        } catch (e: Exception) {
-            releaseDynamicsProcessing()
-            return false
-        }
+        // LoudnessEnhancer 仅支持正向放大(setTargetGain 文档限定 "amplified"),
+        // 负值衰减属未定义行为,故下限为 0;响歌衰减由 Dart 侧 setVolume 完成。
+        val clampedGain = gainMb.coerceIn(0, 1500)
+        effect.setTargetGain(clampedGain)
+        effect.enabled = true
+        return true
     }
 
-    private fun releaseDynamicsProcessing() {
-        dynamicsProcessing?.runCatching {
+    private fun releaseLoudnessGain() {
+        loudnessEnhancer?.runCatching {
             enabled = false
             release()
         }
-        dynamicsProcessing = null
-        dynamicsProcessingSessionId = null
+        loudnessEnhancer = null
+        loudnessEnhancerSessionId = null
     }
 
     private fun enqueueApkDownload(url: String, fileName: String) {
@@ -780,6 +829,7 @@ class MainActivity : AudioServiceActivity() {
     override fun onDestroy() {
         releaseEqualizer()
         releaseBassBoost()
+        releaseLoudnessGain()
         if (downloadReceiverRegistered) {
             unregisterReceiver(downloadReceiver)
             downloadReceiverRegistered = false
