@@ -46,7 +46,20 @@ class DownloadService {
   final List<_PendingTask> _queue = [];
 
   /// 持久下载目录。
+  ///
+  /// Android 优先使用系统公共下载目录（/storage/emulated/0/Download），
+  /// 其他平台或获取失败时回退到应用文档目录。
   Future<Directory> downloadDir() async {
+    if (Platform.isAndroid) {
+      final downloadsDir = await getDownloadsDirectory();
+      if (downloadsDir != null) {
+        final dir = Directory('${downloadsDir.path}/${AppConfig.downloadDirName}');
+        if (!dir.existsSync()) {
+          await dir.create(recursive: true);
+        }
+        return dir;
+      }
+    }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/${AppConfig.downloadDirName}');
     if (!dir.existsSync()) {
@@ -65,11 +78,26 @@ class DownloadService {
     return dir;
   }
 
-  /// 文件命名：{hash}_{quality.apiValue}.{ext}
+  /// 文件命名：{歌手}-{歌曲名}.{ext}
   String fileNameFor(Song song, AudioQuality quality) {
     final ext = quality == AudioQuality.lossless ? 'flac' : 'mp3';
-    final safeHash = song.hash.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
-    return '${safeHash}_${quality.apiValue}.$ext';
+    final safeArtist = _sanitizeFileName(song.artist);
+    final safeTitle = _sanitizeFileName(song.title);
+    final name = (safeArtist.isNotEmpty && safeTitle.isNotEmpty)
+        ? '$safeArtist-$safeTitle'
+        : song.hash.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
+    return '$name.$ext';
+  }
+
+  /// 移除文件名中不合法的字符。
+  String _sanitizeFileName(String name) {
+    // 替换文件系统不允许的字符：\ / : * ? " < > |
+    return name
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceFirst(RegExp(r'^_+'), '')
+        .replaceFirst(RegExp(r'_+$'), '')
+        .trim();
   }
 
   /// 缓存 key：{hash}_{quality.apiValue}
