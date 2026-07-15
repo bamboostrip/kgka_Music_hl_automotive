@@ -1,68 +1,37 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:flutter/services.dart';
 
 import 'config/app_config.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/player_controller.dart';
-import 'controllers/local_music_controller.dart';
 import 'controllers/theme_controller.dart';
+import 'controllers/local_music_controller.dart';
 import 'core/api_client.dart';
 import 'services/cache_service.dart';
-import 'services/device_info_service.dart';
 import 'services/download_service.dart';
-import 'services/music_audio_handler.dart';
 import 'services/music_api.dart';
-import 'ui/adaptive_layout.dart';
-import 'ui/app_theme.dart';
 import 'ui/pages/app_shell.dart';
 import 'ui/pages/login_page.dart';
-import 'ui/widgets/toast.dart';
+import 'ui/pages/player_page.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.loadCustomBaseUrl();
-
-  final client = ApiClient();
-  final api = MusicApi(client);
-  final audioHandler = await AudioService.init(
-    builder: MusicAudioHandler.new,
+  await AudioService.init(
     config: const AudioServiceConfig(
-      androidNotificationChannelId: 'kgka_music_hl.playback',
-      androidNotificationChannelName: 'KA Music 播放控制',
-      androidStopForegroundOnPause: false,
+      androidNotificationChannelId: 'com.hoilai.mm.music.channel.audio',
+      androidNotificationChannelName: 'Music Playback',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
     ),
+    builder: () => AppAudioHandler(),
   );
-
-  final themeController = ThemeController();
-  // 先检测车机，再加载设置：首次安装时据检测结果决定车机模式默认值。
-  await themeController.detectAutomotive(const DeviceInfoService());
-  await themeController.load();
-
-  runApp(KaMusicApp(
-    client: client,
-    api: api,
-    audioHandler: audioHandler,
-    themeController: themeController,
-  ));
+  runApp(const KaMusicApp());
 }
 
 class KaMusicApp extends StatefulWidget {
-  const KaMusicApp({
-    super.key,
-    required this.client,
-    required this.api,
-    required this.audioHandler,
-    required this.themeController,
-  });
-
-  final ApiClient client;
-  final MusicApi api;
-  final MusicAudioHandler audioHandler;
-  final ThemeController themeController;
+  const KaMusicApp({super.key});
 
   @override
   State<KaMusicApp> createState() => _KaMusicAppState();
@@ -73,9 +42,9 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
   late final MusicApi _api;
   late final CacheService _cacheService;
   late final DownloadService _downloadService;
-  late final DownloadController _downloads;
   late final AuthController _auth;
   late final PlayerController _player;
+  late final DownloadController _downloads;
   late final ThemeController _theme;
   late final LocalMusicController _localMusic;
 
@@ -83,20 +52,16 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _client = widget.client;
-    _api = widget.api;
+    _client = ApiClient();
+    _api = MusicApi(_client);
     _cacheService = CacheService();
     _downloadService = DownloadService();
     _downloads = DownloadController(_downloadService, _api);
     _auth = AuthController(_api, _cacheService);
+    _player = PlayerController(_api, widget.audioHandler);
+    _theme = ThemeController();
     _localMusic = LocalMusicController();
-    _player = PlayerController(_api, widget.audioHandler)
-      ..downloadController = _downloads
-      ..cacheService = _cacheService
-      ..localMusic = _localMusic;
-    _theme = widget.themeController;
     _auth.restore();
-    _downloads.initialize();
   }
 
   @override
@@ -114,6 +79,10 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    // 从后台恢复时静默触发一次每日 VIP 领取（受开关与当日去重约束）。
+    if (state == AppLifecycleState.resumed) {
+      _auth.vipClaim.schedule(_auth.session);
+    }
     if (!_player.desktopLyricsEnabled) return;
     switch (state) {
       case AppLifecycleState.resumed:
@@ -128,182 +97,37 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    _theme.applyOrientations(AdaptiveLayout.isTablet(context));
     return AnimatedBuilder(
       animation: _theme,
       builder: (context, _) {
         return MaterialApp(
-          title: AppConfig.appName,
+          title: 'kgka Music',
           debugShowCheckedModeBanner: false,
-          navigatorKey: Toast.navigatorKey,
-          themeMode: ThemeMode.system,
-          theme: AppTheme.light(
-            seedColor: _theme.seedColor,
-            transparentBackground: _theme.backgroundEnabled,
-          ),
-          darkTheme: AppTheme.dark(
-            seedColor: _theme.seedColor,
-            transparentBackground: _theme.backgroundEnabled,
-          ),
-          builder: (context, child) {
-            return _AppBackground(
-              themeController: _theme,
-              child: _SystemUiOverlay(child: child ?? const SizedBox.shrink()),
-            );
-          },
+          theme: _theme.themeData,
           home: AnimatedBuilder(
             animation: _auth,
             builder: (context, _) {
-              if (!_auth.isRestoring && !_auth.isLoggedIn) {
-                return LoginPage(auth: _auth, api: _api);
+              if (_auth.isRestoring) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
               }
-
+              if (!_auth.isLoggedIn) {
+                return LoginPage(api: _api, auth: _auth);
+              }
               return AppShell(
                 api: _api,
                 auth: _auth,
                 player: _player,
-                cache: _cacheService,
-                downloads: _downloads,
                 theme: _theme,
+                downloads: _downloads,
                 localMusic: _localMusic,
+                cache: _cacheService,
               );
             },
           ),
         );
       },
-    );
-  }
-}
-
-/// 全局背景图层。
-///
-/// 当用户启用了自定义背景图时，在所有页面内容下方显示背景图，
-/// 并叠加半透明遮罩（由 [ThemeController.backgroundOpacity] 控制）。
-class _AppBackground extends StatefulWidget {
-  const _AppBackground({required this.themeController, required this.child});
-
-  final ThemeController themeController;
-  final Widget child;
-
-  @override
-  State<_AppBackground> createState() => _AppBackgroundState();
-}
-
-class _AppBackgroundState extends State<_AppBackground> {
-  FileImage? _imageProvider;
-  String? _cachedPath;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.themeController.addListener(_onThemeChanged);
-    _updateProvider();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _precacheBackground();
-  }
-
-  @override
-  void didUpdateWidget(covariant _AppBackground oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.themeController != widget.themeController) {
-      oldWidget.themeController.removeListener(_onThemeChanged);
-      widget.themeController.addListener(_onThemeChanged);
-      _updateProvider();
-      _precacheBackground();
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.themeController.removeListener(_onThemeChanged);
-    super.dispose();
-  }
-
-  void _onThemeChanged() {
-    _updateProvider();
-    _precacheBackground();
-    setState(() {});
-  }
-
-  void _updateProvider() {
-    final path = widget.themeController.backgroundImagePath;
-    if (path != null && path != _cachedPath) {
-      _cachedPath = path;
-      _imageProvider = FileImage(File(path));
-    }
-  }
-
-  void _precacheBackground() {
-    if (_imageProvider != null) {
-      precacheImage(_imageProvider!, context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = widget.themeController.backgroundEnabled;
-    final path = widget.themeController.backgroundImagePath;
-
-    if (!enabled || path == null || _imageProvider == null) {
-      return widget.child;
-    }
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final overlayColor = isDark ? const Color(0xFF06070A) : Colors.white;
-    final opacity = widget.themeController.backgroundOpacity;
-
-    return Stack(
-      children: [
-        // 背景图层（复用同一个 FileImage provider，避免重复解码）
-        Positioned.fill(
-          child: Image(
-            image: _imageProvider!,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-        ),
-        // 半透明遮罩（opacity 越大遮罩越透明，背景图越明显）
-        Positioned.fill(
-          child: ColoredBox(
-            color: overlayColor.withValues(alpha: 1.0 - opacity),
-          ),
-        ),
-        // 页面内容
-        widget.child,
-      ],
-    );
-  }
-}
-
-class _SystemUiOverlay extends StatelessWidget {
-  const _SystemUiOverlay({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colorScheme = Theme.of(context).colorScheme;
-    final overlayStyle = SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDark ? Brightness.light : Brightness.dark,
-      systemNavigationBarColor: colorScheme.surface,
-      systemNavigationBarIconBrightness: isDark
-          ? Brightness.light
-          : Brightness.dark,
-      systemStatusBarContrastEnforced: false,
-      systemNavigationBarContrastEnforced: false,
-    );
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: overlayStyle,
-      child: child,
     );
   }
 }
