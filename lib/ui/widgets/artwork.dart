@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' show cos, pi;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -153,28 +156,8 @@ class _ShimmerBox extends StatefulWidget {
   State<_ShimmerBox> createState() => _ShimmerBoxState();
 }
 
-class _ShimmerBoxState extends State<_ShimmerBox>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-    _animation = Tween(begin: -1.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class _ShimmerBoxState extends State<_ShimmerBox> {
+  static final _shared = _ShimmerNotifier();
 
   @override
   Widget build(BuildContext context) {
@@ -188,15 +171,15 @@ class _ShimmerBoxState extends State<_ShimmerBox>
         : Colors.white.withValues(alpha: .6);
 
     return AnimatedBuilder(
-      animation: _animation,
+      animation: _shared,
       builder: (context, child) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment(_animation.value - 0.5, 0),
-                end: Alignment(_animation.value + 0.5, 0),
+                begin: Alignment(_shared.value - 0.5, 0),
+                end: Alignment(_shared.value + 0.5, 0),
                 colors: [baseColor, highlightColor, baseColor],
                 stops: const [0, 0.5, 1],
               ),
@@ -211,4 +194,18 @@ class _ShimmerBoxState extends State<_ShimmerBox>
       ),
     );
   }
+}
+
+class _ShimmerNotifier extends ChangeNotifier {
+  _ShimmerNotifier() {
+    Timer.periodic(const Duration(milliseconds: 16), (_) {
+      _elapsed = (_elapsed + 16) % 1200;
+      _value = -cos(_elapsed / 1200.0 * pi);
+      notifyListeners();
+    });
+  }
+
+  double _elapsed = 0;
+  double _value = -1.0;
+  double get value => _value;
 }
