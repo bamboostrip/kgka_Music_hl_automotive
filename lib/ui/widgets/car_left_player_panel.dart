@@ -29,14 +29,31 @@ class CarLeftPlayerPanel extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final height = MediaQuery.sizeOf(context).height;
+    final sysPadding = MediaQuery.paddingOf(context);
+    final availableHeight = height - sysPadding.top - sysPadding.bottom;
+
+    final isShortScreen = height < 500;
+    final verticalPadding = isShortScreen ? 8.0 : 20.0;
+    final bottomGap = isShortScreen ? 10.0 : 32.0;
+    final controlsHeight = isShortScreen ? 68.0 : 80.0;
+
+    final artworkSizeSubtractor = isShortScreen ? 250.0 : 340.0;
+    final artworkSize = (availableHeight - artworkSizeSubtractor).clamp(80.0, 280.0);
+
+    final gapSize = isShortScreen ? 10.0 : 20.0;
+    final titleGap = isShortScreen ? 14.0 : 24.0;
+    final progressGap = isShortScreen ? 16.0 : 28.0;
+
+    final buttonMinWidth = isSmallScreen ? 42.0 : 52.0;
+    final playBtnSize = isSmallScreen ? 56.0 : 64.0;
+    final playIconSize = isSmallScreen ? 32.0 : 40.0;
+
     return AnimatedBuilder(
       animation: player,
       builder: (context, _) {
         final song = player.currentSong;
         if (song == null) {
-          final height = MediaQuery.sizeOf(context).height;
-          final verticalPadding = height < 400 ? 10.0 : 24.0;
-          final sysPadding = MediaQuery.paddingOf(context);
           return Container(
             width: panelWidth,
             color: isDark
@@ -65,272 +82,186 @@ class CarLeftPlayerPanel extends StatelessWidget {
           );
         }
 
-        return AnimatedBuilder(
-          animation: auth,
-          builder: (context, _) {
-            final liked = auth.isLiked(song);
-            final height = MediaQuery.sizeOf(context).height;
-            final sysPadding = MediaQuery.paddingOf(context);
-            final availableHeight = height - sysPadding.top - sysPadding.bottom;
+        final isPreparing = player.isPreparing;
+        final playbackMode = player.playbackMode;
 
-            final isShortScreen = height < 500;
-            final verticalPadding = isShortScreen ? 8.0 : 20.0;
-            final bottomGap = isShortScreen ? 10.0 : 32.0;
-            final controlsHeight = isShortScreen ? 68.0 : 80.0;
-
-            final artworkSizeSubtractor = isShortScreen ? 250.0 : 340.0;
-            final artworkSize = (availableHeight - artworkSizeSubtractor).clamp(80.0, 280.0);
-
-            final gapSize = isShortScreen ? 10.0 : 20.0;
-            final titleGap = isShortScreen ? 14.0 : 24.0;
-            final progressGap = isShortScreen ? 16.0 : 28.0;
-
-            final buttonMinWidth = isSmallScreen ? 42.0 : 52.0;
-            final playBtnSize = isSmallScreen ? 56.0 : 64.0;
-            final playIconSize = isSmallScreen ? 32.0 : 40.0;
-
-            return Container(
-              width: panelWidth,
-              // 加上状态栏（top）和车机系统栏（bottom）的高度，避免被系统 UI 隐藏
-              padding: EdgeInsets.fromLTRB(
-                panelPadding,
-                sysPadding.top + verticalPadding,
-                panelPadding,
-                sysPadding.bottom + verticalPadding,
-              ),
-              color: isDark
-                  ? colorScheme.surfaceContainerLow
-                  : const Color(0xFFF2F4F7), // Light grey background
-              child: ClipRect(
-                child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, colorScheme),
-                  const Spacer(),
-                  // Album Art
-                  Center(
-                    child: GestureDetector(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => PlayerPage(player: player, auth: auth),
-                        ),
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Artwork(
-                            url: song.coverUrl,
-                            size: artworkSize,
-                            borderRadius: 16,
-                          ),
-                        ),
+        return Container(
+          width: panelWidth,
+          padding: EdgeInsets.fromLTRB(
+            panelPadding,
+            sysPadding.top + verticalPadding,
+            panelPadding,
+            sysPadding.bottom + verticalPadding,
+          ),
+          color: isDark
+              ? colorScheme.surfaceContainerLow
+              : const Color(0xFFF2F4F7),
+          child: ClipRect(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context, colorScheme),
+                const Spacer(),
+                Center(
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PlayerPage(player: player, auth: auth),
                       ),
                     ),
-                  ),
-                  SizedBox(height: gapSize),
-                  // Title + Artist + Heart
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              song.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 18,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              song.artist,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: song.source == SongSource.kugou
-                            ? () => auth.toggleLike(song)
-                            : null,
-                        icon: Icon(
-                          liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: liked ? Colors.redAccent : colorScheme.onSurfaceVariant,
-                          size: 26,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: titleGap),
-                  // Progress Bar
-                  Builder(
-                    builder: (context) {
-                      final duration = player.duration;
-                      final position = player.smoothPosition;
-                      final max = duration.inMilliseconds <= 0
-                          ? 1.0
-                          : duration.inMilliseconds.toDouble();
-                      final value = position.inMilliseconds
-                          .clamp(0, max.toInt())
-                          .toDouble();
-
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 3,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 5,
-                              ),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 10,
-                              ),
-                              activeTrackColor: colorScheme.primary,
-                              inactiveTrackColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.16)
-                                  : Colors.black.withValues(alpha: 0.08),
-                              thumbColor: colorScheme.primary,
-                            ),
-                            child: Slider(
-                              value: value,
-                              max: max,
-                              onChanged: (val) =>
-                                  player.previewSeek(Duration(milliseconds: val.round())),
-                              onChangeEnd: (val) =>
-                                  player.seek(Duration(milliseconds: val.round())),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _formatDuration(position),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              Text(
-                                _formatDuration(duration),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
                           ),
                         ],
-                      );
-                    },
-                  ),
-                  SizedBox(height: progressGap),
-                  Container(
-                    height: controlsHeight,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.8)
-                          : Colors.black.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Artwork(
+                          url: song.coverUrl,
+                          size: artworkSize,
+                          borderRadius: 16,
+                        ),
+                      ),
                     ),
-                    padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 8 : 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Loop mode
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
+                  ),
+                ),
+                SizedBox(height: gapSize),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedBuilder(
+                      animation: auth,
+                      builder: (context, _) {
+                        final liked = auth.isLiked(song);
+                        return IconButton(
+                          onPressed: song.source == SongSource.kugou
+                              ? () => auth.toggleLike(song)
+                              : null,
                           icon: Icon(
-                            _getPlaybackModeIcon(player.playbackMode),
-                            size: isSmallScreen ? 24 : 28,
-                            color: colorScheme.onSurface,
+                            liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                            color: liked ? Colors.redAccent : colorScheme.onSurfaceVariant,
+                            size: 26,
                           ),
-                          onPressed: player.cyclePlaybackMode,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                SizedBox(height: titleGap),
+                _CarProgressBar(player: player, colorScheme: colorScheme, isDark: isDark),
+                SizedBox(height: progressGap),
+                Container(
+                  height: controlsHeight,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.8)
+                        : Colors.black.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 8 : 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
+                        icon: Icon(
+                          _getPlaybackModeIcon(playbackMode),
+                          size: isSmallScreen ? 24 : 28,
+                          color: colorScheme.onSurface,
                         ),
-                        // Prev
-                        IconButton(
+                        onPressed: player.cyclePlaybackMode,
+                      ),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
+                        icon: Icon(
+                          Icons.skip_previous_rounded,
+                          size: isSmallScreen ? 30 : 36,
+                          color: colorScheme.onSurface,
+                        ),
+                        onPressed: isPreparing ? null : player.previous,
+                      ),
+                      Container(
+                        width: playBtnSize,
+                        height: playBtnSize,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
                           padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
-                          icon: Icon(
-                            Icons.skip_previous_rounded,
-                            size: isSmallScreen ? 30 : 36,
-                            color: colorScheme.onSurface,
-                          ),
-                          onPressed: player.isPreparing ? null : player.previous,
-                        ),
-                        // Play/Pause (large circle/white or themed)
-                        Container(
-                          width: playBtnSize,
-                          height: playBtnSize,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: Icon(
+                          icon: AnimatedBuilder(
+                            animation: player,
+                            builder: (_, _) => Icon(
                               player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                               color: colorScheme.onPrimary,
                               size: playIconSize,
                             ),
-                            onPressed: player.isPreparing ? null : player.togglePlay,
                           ),
+                          onPressed: isPreparing ? null : player.togglePlay,
                         ),
-                        // Next
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
-                          icon: Icon(
-                            Icons.skip_next_rounded,
-                            size: isSmallScreen ? 30 : 36,
-                            color: colorScheme.onSurface,
-                          ),
-                          onPressed: player.isPreparing ? null : player.next,
+                      ),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
+                        icon: Icon(
+                          Icons.skip_next_rounded,
+                          size: isSmallScreen ? 30 : 36,
+                          color: colorScheme.onSurface,
                         ),
-                        // Queue
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
-                          icon: Icon(
-                            Icons.queue_music_rounded,
-                            size: isSmallScreen ? 24 : 28,
-                            color: colorScheme.onSurface,
-                          ),
-                          onPressed: () => _showQueue(context),
+                        onPressed: isPreparing ? null : player.next,
+                      ),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(minWidth: buttonMinWidth, minHeight: buttonMinWidth),
+                        icon: Icon(
+                          Icons.queue_music_rounded,
+                          size: isSmallScreen ? 24 : 28,
+                          color: colorScheme.onSurface,
                         ),
-                      ],
-                    ),
+                        onPressed: () => _showQueue(context),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  SizedBox(height: bottomGap),
-                ],
-              ),
-              ),
-            );
-          },
+                ),
+                const Spacer(),
+                SizedBox(height: bottomGap),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -486,10 +417,91 @@ class CarLeftPlayerPanel extends StatelessWidget {
     );
   }
 
-  String _formatDuration(Duration d) {
+  static String _formatDuration(Duration d) {
     if (d == Duration.zero) return '00:00';
     final minutes = d.inMinutes.toString().padLeft(2, '0');
     final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+}
+
+class _CarProgressBar extends StatelessWidget {
+  const _CarProgressBar({
+    required this.player,
+    required this.colorScheme,
+    required this.isDark,
+  });
+
+  final PlayerController player;
+  final ColorScheme colorScheme;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: player,
+      builder: (context, _) {
+        final duration = player.duration;
+        final position = player.smoothPosition;
+        final max = duration.inMilliseconds <= 0
+            ? 1.0
+            : duration.inMilliseconds.toDouble();
+        final value = position.inMilliseconds
+            .clamp(0, max.toInt())
+            .toDouble();
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 5,
+                ),
+                overlayShape: const RoundSliderOverlayShape(
+                  overlayRadius: 10,
+                ),
+                activeTrackColor: colorScheme.primary,
+                inactiveTrackColor: isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.black.withValues(alpha: 0.08),
+                thumbColor: colorScheme.primary,
+              ),
+              child: Slider(
+                value: value,
+                max: max,
+                onChanged: (val) =>
+                    player.previewSeek(Duration(milliseconds: val.round())),
+                onChangeEnd: (val) =>
+                    player.seek(Duration(milliseconds: val.round())),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  CarLeftPlayerPanel._formatDuration(position),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                Text(
+                  CarLeftPlayerPanel._formatDuration(duration),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 }
