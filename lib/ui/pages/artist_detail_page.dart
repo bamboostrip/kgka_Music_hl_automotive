@@ -315,6 +315,8 @@ class _ArtistHeader extends StatelessWidget {
                 avatar,
                 fit: BoxFit.cover,
                 alignment: Alignment.topCenter,
+                cacheWidth: 800,
+                cacheHeight: 800,
                 errorBuilder: (context, error, stackTrace) =>
                     const _ArtistPosterFallback(),
               ),
