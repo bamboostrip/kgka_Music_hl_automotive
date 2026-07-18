@@ -32,6 +32,8 @@ class Artwork extends StatelessWidget {
               )
             : Image.network(
                 imageUrl,
+                cacheWidth: (size * 1.5).ceil().clamp(1, 600),
+                cacheHeight: (size * 1.5).ceil().clamp(1, 600),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
                     _Fallback(icon: icon),
