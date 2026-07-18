@@ -1119,6 +1119,8 @@ class _QrImage extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.contain,
+        cacheWidth: (size * 2).ceil().clamp(1, 512),
+        cacheHeight: (size * 2).ceil().clamp(1, 512),
         errorBuilder: (_, __, ___) => fallback(),
       );
     }
@@ -1128,6 +1130,8 @@ class _QrImage extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.contain,
+      cacheWidth: (size * 2).ceil().clamp(1, 512),
+      cacheHeight: (size * 2).ceil().clamp(1, 512),
       errorBuilder: (_, __, ___) => fallback(),
     );
   }

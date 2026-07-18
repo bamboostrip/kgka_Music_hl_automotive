@@ -277,7 +277,7 @@ class _AccountRow extends StatelessWidget {
           ),
           child: profile?.avatarUrl == null
               ? Icon(Icons.person_rounded, color: colorScheme.primary)
-              : Image.network(profile!.avatarUrl!, fit: BoxFit.cover),
+              : Image.network(profile!.avatarUrl!, fit: BoxFit.cover, cacheWidth: 100, cacheHeight: 100),
         ),
         const SizedBox(width: 12),
         Expanded(
