@@ -118,7 +118,12 @@ class _ContentUriImageState extends State<_ContentUriImage> {
     if (_bytes == null) {
       return _Fallback(icon: widget.icon);
     }
-    return Image.memory(_bytes!, fit: BoxFit.cover);
+    return Image.memory(
+      _bytes!,
+      fit: BoxFit.cover,
+      cacheWidth: (widget.size * 1.5).ceil().clamp(1, 600),
+      cacheHeight: (widget.size * 1.5).ceil().clamp(1, 600),
+    );
   }
 }
 
