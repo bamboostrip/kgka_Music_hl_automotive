@@ -475,8 +475,8 @@ class _ArtworkBackgroundState extends State<_ArtworkBackground>
                   child: Image.network(
                     coverUrl,
                     fit: BoxFit.cover,
-                    cacheWidth: 200,
-                    cacheHeight: 200,
+                    cacheWidth: 600,
+                    cacheHeight: 600,
                     errorBuilder: (context, error, stackTrace) =>
                         const SizedBox.shrink(),
                   ),
