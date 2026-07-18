@@ -341,6 +341,8 @@ class _BackgroundPreviewCard extends StatelessWidget {
               child: Image.file(
                 File(imagePath),
                 fit: BoxFit.cover,
+                cacheWidth: 300,
+                cacheHeight: 300,
                 errorBuilder: (_, _, _) => Container(
                   color: colorScheme.surfaceContainerHighest,
                   child: const Center(child: Icon(Icons.broken_image_rounded, size: 40)),
@@ -399,6 +401,8 @@ class _FullBackgroundPreview extends StatelessWidget {
             child: Image.file(
               File(imagePath),
               fit: BoxFit.cover,
+              cacheWidth: 800,
+              cacheHeight: 800,
               errorBuilder: (_, _, _) => Container(
                 color: colorScheme.surfaceContainerHighest,
               ),

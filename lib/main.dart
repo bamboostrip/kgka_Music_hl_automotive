@@ -193,7 +193,7 @@ class _AppBackground extends StatefulWidget {
 }
 
 class _AppBackgroundState extends State<_AppBackground> {
-  FileImage? _imageProvider;
+  ImageProvider? _imageProvider;
   String? _cachedPath;
 
   @override
@@ -236,7 +236,7 @@ class _AppBackgroundState extends State<_AppBackground> {
     final path = widget.themeController.backgroundImagePath;
     if (path != null && path != _cachedPath) {
       _cachedPath = path;
-      _imageProvider = FileImage(File(path));
+      _imageProvider = ResizeImage(FileImage(File(path)), width: 800, height: 800);
     }
   }
 
