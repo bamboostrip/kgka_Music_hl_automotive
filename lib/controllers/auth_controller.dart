@@ -24,6 +24,9 @@ class AuthController extends ChangeNotifier {
   final CacheService _cacheService;
   late final VipBackgroundTask _vipBackgroundTask = VipBackgroundTask(_api);
 
+  /// 自动领取 VIP 任务，供设置页绑定开关 / 立即领取 / 状态展示。
+  VipBackgroundTask get vipClaim => _vipBackgroundTask;
+
   bool isRestoring = true;
   bool isLoading = false;
   String? errorMessage;

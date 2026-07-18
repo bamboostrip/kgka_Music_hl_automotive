@@ -58,7 +58,7 @@ class SettingsPage extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(title: const Text('设置')),
         body: AnimatedBuilder(
-          animation: Listenable.merge([auth, player, localMusic, theme]),
+          animation: Listenable.merge([auth, player, localMusic, theme, auth.vipClaim]),
           builder: (context, _) {
             return AdaptiveContentPadding(
               child: ListView(
@@ -77,6 +77,26 @@ class SettingsPage extends StatelessWidget {
                       loading: auth.isLoading,
                       onTap:
                           auth.isLoading ? null : () => auth.refreshProfile(),
+                    ),
+                    _SettingsDivider(),
+                    _SettingsSwitchTile(
+                      icon: Icons.card_giftcard_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '自动领取VIP',
+                      subtitle: auth.vipClaim.statusText(),
+                      value: auth.vipClaim.autoEnabled,
+                      onChanged: auth.vipClaim.setAutoEnabled,
+                    ),
+                    _SettingsDivider(),
+                    _SettingsTile(
+                      icon: Icons.redeem_rounded,
+                      iconColor: colorScheme.primary,
+                      title: '立即领取',
+                      subtitle: auth.vipClaim.lastMessage,
+                      loading: auth.vipClaim.isClaiming,
+                      onTap: auth.vipClaim.isClaiming
+                          ? null
+                          : () => _claimVipNow(context),
                     ),
                     _SettingsDivider(),
                     _SettingsTile(
@@ -150,18 +170,7 @@ class SettingsPage extends StatelessWidget {
                         player: player,
                       ),
                     ),
-                    if (player.isLoudnessAnalysisSupported) ...[
-                      _SettingsDivider(),
-                      _SettingsSwitchTile(
-                        icon: Icons.volume_up_rounded,
-                        iconColor: colorScheme.primary,
-                        title: '响度均衡',
-                        subtitle: '自动平衡歌曲音量,避免忽大忽小',
-                        value: player.loudnessEnabled,
-                        onChanged: player.setLoudnessEnabled,
-                      ),
-                    ],
-                    _SettingsDivider(),
+                     _SettingsDivider(),
                     _SettingsTile(
                       icon: Icons.bar_chart_rounded,
                       iconColor: colorScheme.primary,
@@ -503,6 +512,14 @@ class SettingsPage extends StatelessWidget {
     await auth.logout();
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _claimVipNow(BuildContext context) async {
+    final result = await auth.vipClaim.claimNow(auth.session);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message), duration: const Duration(seconds: 3)),
+    );
   }
 }
 

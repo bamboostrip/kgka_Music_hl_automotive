@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/download_controller.dart';
@@ -238,6 +242,8 @@ class _DownloadedSongRow extends StatelessWidget {
   }
 
   void _showActions(BuildContext context, Song song) {
+    final filePath = entry.filePath;
+
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
@@ -252,10 +258,60 @@ class _DownloadedSongRow extends StatelessWidget {
                 downloads.deleteDownload(song);
               },
             ),
+            if (filePath != null && filePath.isNotEmpty) ...[
+              ListTile(
+                leading: const Icon(Icons.folder_open_rounded),
+                title: const Text('打开文件夹'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openContainingFolder(filePath);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: const Text('查看文件路径'),
+                subtitle: Text(
+                  filePath,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Clipboard.setData(ClipboardData(text: filePath));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('路径已复制到剪贴板'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openContainingFolder(String filePath) async {
+    final file = File(filePath);
+    final dir = file.parent.path;
+
+    if (Platform.isWindows) {
+      await Process.run('explorer', [dir]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [dir]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [dir]);
+    } else if (Platform.isAndroid) {
+      // Android 无法直接打开文件管理器到指定目录，尝试用 file:// URI
+      final uri = Uri.parse('file://$dir');
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        // 回退：尝试 content URI 方式
+        final contentUri = Uri.parse('content://com.android.externalstorage.documents/document/primary:${dir.replaceFirst('/storage/emulated/0/', '')}');
+        await launchUrl(contentUri, mode: LaunchMode.externalApplication);
+      }
+    }
   }
 }
 
