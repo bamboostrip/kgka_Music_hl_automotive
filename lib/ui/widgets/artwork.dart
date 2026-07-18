@@ -32,8 +32,8 @@ class Artwork extends StatelessWidget {
               )
             : Image.network(
                 imageUrl,
-                cacheWidth: size.isFinite ? (size * 1.5).ceil().clamp(1, 600) : 600,
-                cacheHeight: size.isFinite ? (size * 1.5).ceil().clamp(1, 600) : 600,
+                cacheWidth: size.isFinite ? (size * 2.0).ceil().clamp(1, 600) : 600,
+                cacheHeight: size.isFinite ? (size * 2.0).ceil().clamp(1, 600) : 600,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
                     _Fallback(icon: icon),
@@ -121,8 +121,8 @@ class _ContentUriImageState extends State<_ContentUriImage> {
     return Image.memory(
       _bytes!,
       fit: BoxFit.cover,
-      cacheWidth: widget.size.isFinite ? (widget.size * 1.5).ceil().clamp(1, 600) : 600,
-      cacheHeight: widget.size.isFinite ? (widget.size * 1.5).ceil().clamp(1, 600) : 600,
+      cacheWidth: widget.size.isFinite ? (widget.size * 2.0).ceil().clamp(1, 600) : 600,
+      cacheHeight: widget.size.isFinite ? (widget.size * 2.0).ceil().clamp(1, 600) : 600,
     );
   }
 }
