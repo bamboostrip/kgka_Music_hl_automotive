@@ -99,7 +99,9 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
       ..localMusic = _localMusic;
     _theme = widget.themeController;
     _auth.restore();
-    _downloads.initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _downloads.initialize();
+    });
   }
 
   @override
@@ -206,7 +208,9 @@ class _AppBackgroundState extends State<_AppBackground> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _precacheBackground();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _precacheBackground();
+    });
   }
 
   @override
