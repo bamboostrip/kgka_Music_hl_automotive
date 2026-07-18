@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -14,8 +15,8 @@ class LocalMusicController extends ChangeNotifier {
   List<Song> _songs = [];
   bool _isScanning = false;
 
-  /// 专辑封面缓存（albumId -> bytes）
-  final Map<String, Uint8List> _albumArtCache = {};
+  static const _maxAlbumArtCacheSize = 50;
+  final _albumArtCache = LinkedHashMap<String, Uint8List>();
 
   bool get hasPermission => _hasPermission;
   List<Song> get songs => _songs;
@@ -105,6 +106,9 @@ class LocalMusicController extends ChangeNotifier {
       );
       if (bytes != null) {
         _albumArtCache[albumId] = bytes;
+        if (_albumArtCache.length > _maxAlbumArtCacheSize) {
+          _albumArtCache.remove(_albumArtCache.keys.first);
+        }
       }
       return bytes;
     } catch (e) {
