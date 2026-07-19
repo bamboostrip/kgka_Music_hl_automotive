@@ -2,23 +2,24 @@
   <img src="lib/assets/logo.png" alt="KA Music Logo" width="120" height="120" />
 </p>
 
-<h1 align="center">KA Music</h1>
+<h1 align="center">KA Music 车载版</h1>
 
 <p align="center">
-  <strong>一个精致的第三方音乐客户端</strong>
+  <strong>专为车机大屏优化的第三方音乐客户端</strong>
   <br />
-  基于 Flutter 构建 · 支持多平台 · Material You 设计
+  基于 Flutter 构建 · 支持多平台 · Material You 设计 · 低内存占用
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Flutter-3.11+-02569B?logo=flutter&logoColor=white" alt="Flutter" />
   <img src="https://img.shields.io/badge/Dart-3.11+-0175C2?logo=dart&logoColor=white" alt="Dart" />
-  <img src="https://img.shields.io/badge/Version-2.0.5-4CAF50" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-2.4.0-4CAF50" alt="Version" />
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" />
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white" alt="Android" />
+  <img src="https://img.shields.io/badge/Platform-Automotive-FF6F00?logo=androidauto&logoColor=white" alt="Automotive" />
   <img src="https://img.shields.io/badge/Platform-iOS-000000?logo=apple&logoColor=white" alt="iOS" />
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Platform-macOS-000000?logo=apple&logoColor=white" alt="macOS" />
@@ -30,17 +31,17 @@
 
 ## 📖 简介
 
-KA Music 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 框架构建，支持 Android、iOS、Windows、macOS、Linux 及 Web 六大平台。它提供跨平台音乐搜索、在线播放、歌词展示、下载缓存等完整的音乐体验，并采用 Material You 设计语言，支持深色模式和高度自定义主题。
+KA Music 车载版 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 框架构建。在 [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) 的基础上，针对 **车机大屏** 进行了深度优化：
+
+- **内存优化** — 图片缓存限制、细粒度 Widget 重建、GPU 纹理解码分辨率控制
+- **车机布局** — 横屏左侧播放面板 + 右侧内容区，适配车载屏幕
+- **自适应多端** — 同时兼容手机、平板、电视，自动切换布局
 
 > 🔌 该项目通过第三方 API 获取音乐数据，仅供学习交流使用。
 
 ---
 
 ## 📸 预览
-
-<!-- TODO: 截图占位 — 请替换为实际截图 -->
-
-## 功能截图
 
 | 首页推荐 | 播放器 | 歌词 |
 |:-------:|:------:|:----:|
@@ -49,7 +50,6 @@ KA Music 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 
 | 个人库 | 搜索页 | 歌单详情 |
 |:------:|:------:|:--------:|
 | ![我的](screenshots/library.jpg) | ![搜索](screenshots/search.jpg) | ![歌单](screenshots/playlist.jpg) |
-
 
 ---
 
@@ -176,8 +176,8 @@ KA Music 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 
 
 ```bash
 # 克隆仓库
-git clone <repo-url>
-cd kgka_music_hl
+git clone https://github.com/bamboostrip/kgka_Music_hl_automotive.git
+cd kgka_Music_hl_automotive
 
 # 安装依赖
 flutter pub get
@@ -210,9 +210,9 @@ flutter run --dart-define=KA_MUSIC_API_BASE_URL=https://your-api.com
 
 ```
 lib/
-├── main.dart                 # 应用入口
+├── main.dart                 # 应用入口（含 ImageCache 内存优化配置）
 ├── assets/
-│   └── logo.jpg              # App Logo
+│   └── logo.png              # App Logo
 ├── config/
 │   └── app_config.dart       # 全局配置（API 地址、缓存大小等）
 ├── core/
@@ -221,6 +221,7 @@ lib/
 │   ├── auth_controller.dart  # 登录认证
 │   ├── player_controller.dart# 播放引擎
 │   ├── download_controller.dart # 下载管理
+│   ├── local_music_controller.dart # 本地音乐（含 LRU 封面缓存）
 │   └── theme_controller.dart # 主题管理
 ├── models/
 │   ├── music_models.dart     # 音乐领域模型
@@ -233,32 +234,41 @@ lib/
 │   └── ...                   # 其他服务
 └── ui/
     ├── app_theme.dart        # 主题定义
-    ├── adaptive_layout.dart  # 响应式布局
+    ├── adaptive_layout.dart  # 响应式布局（含车机模式判断）
     ├── pages/                # 页面
+    │   ├── app_shell.dart    # 主壳（含车机横屏布局）
     │   ├── home_page.dart    # 首页
     │   ├── player_page.dart  # 播放器
     │   ├── library_page.dart # 我的
     │   ├── search_page.dart  # 搜索
     │   └── ...               # 其他页面
     └── widgets/              # 可复用组件
-        ├── mini_player.dart  # 迷你播放栏
-        ├── artwork.dart      # 封面组件
+        ├── mini_player.dart  # 迷你播放栏（细粒度重建优化）
+        ├── car_left_player_panel.dart # 车机左侧播放面板
+        ├── artwork.dart      # 封面组件（含 GPU 纹理优化）
         └── ...               # 其他组件
 ```
 
 ---
 
-## 📝 更新日志
+## 🚗 车载优化
 
-详细的版本更新日志请查看 [update.md](update.md)。
+本分支在原始项目基础上进行了以下车载专项优化：
 
-**v2.0.5** 主要更新：
+| 优化项 | 说明 |
+|---|---|
+| ImageCache 限制 | 50 张 / 10MB（原 1000 张 / 100MB） |
+| GPU 纹理控制 | 所有图片解码分辨率按显示尺寸 2x 约束，上限 600px |
+| Widget 细粒度重建 | MiniPlayer / CarLeftPlayerPanel 仅更新进度条和播放按钮 |
+| 启动延迟 | 非关键初始化挪到首帧渲染之后 |
+| 动画复用 | Shimmer 加载动画从 N 个 AnimationController → 1 个 Timer |
+| 封面 LRU 淘汰 | 本地专辑封面缓存上限 50 张 |
 
-- 播放历史 & 统计页面
-- 搜索历史、缓存管理可视化
-- 歌单排序 & 批量删除 & 分享 & 导入
-- 智能音质降级 & 网络自动重试
-- 封面加载 Shimmer 动画
+---
+
+## 🙏 致谢
+
+本项目基于 [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) 二次开发，感谢原作者的卓越工作。
 
 ---
 
@@ -269,5 +279,5 @@ lib/
 ---
 
 <p align="center">
-  <sub>Made with XiaoMai and Flutter</sub>
+  <sub>Forked from umr-xiaomai/kgka_Music_hl · Maintained by bamboostrip</sub>
 </p>

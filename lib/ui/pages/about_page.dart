@@ -13,7 +13,7 @@ class AboutPage extends StatefulWidget {
   const AboutPage({super.key, required this.api});
 
   static final Uri _repositoryUri = Uri.parse(
-    'https://github.com/umr-xiaomai/kgka_Music_hl',
+    'https://github.com/bamboostrip/kgka_Music_hl_automotive',
   );
 
   final MusicApi api;
@@ -94,7 +94,7 @@ class _AboutPageState extends State<AboutPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '一个专注播放体验的音乐应用。',
+                  '「KA Music 车载版」—— 专为车机大屏优化的第三方音乐播放器。',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -141,7 +141,7 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                   _InfoLinkRow(
                     label: 'GitHub',
-                    value: 'umr-xiaomai/kgka_Music_hl',
+                    value: 'bamboostrip/kgka_Music_hl_automotive',
                     onTap: () => _openRepository(context),
                   ),
                 ],
