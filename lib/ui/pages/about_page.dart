@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_config.dart';
 import '../../services/app_update_service.dart';
 import '../../services/music_api.dart';
-import '../widgets/app_update_widgets.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
 
@@ -92,6 +91,14 @@ class _AboutPageState extends State<AboutPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  '时光不朽，音乐永恒',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   '一个专注播放体验的音乐应用。适配手机、车机、平板等多端。',
@@ -107,10 +114,7 @@ class _AboutPageState extends State<AboutPage> {
                       Expanded(
                         child: AppUpdateService.isSupportedPlatform
                             ? FilledButton.icon(
-                                onPressed: () => checkAppUpdateManually(
-                                  context: context,
-                                  api: widget.api,
-                                ),
+                                onPressed: null,
                                 icon: const Icon(Icons.system_update_alt_rounded),
                                 label: const Text('检查更新'),
                               )

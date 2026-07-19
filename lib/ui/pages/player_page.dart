@@ -861,7 +861,7 @@ class _LandscapeArtworkShowcaseState extends State<_LandscapeArtworkShowcase>
           final discSize = (available * (widget.compact ? .84 : .9))
               .clamp(150.0, 330.0)
               .toDouble();
-          final coverSize = discSize * (widget.compact ? .76 : .84);
+          final coverSize = discSize * (widget.compact ? .58 : .70);
 
           return Center(
             // 旋转唱片是纯装饰动画，排除语义树防止 Windows AXTree 竞态崩溃

@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   const AppConfig._();
 
-  static const appName = 'KA Music';
+  static const appName = '时音';
   static const appVersion = '2.4.0';
   static const appVersionCode = '240';
 
