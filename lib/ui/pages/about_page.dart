@@ -94,7 +94,7 @@ class _AboutPageState extends State<AboutPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '「KA Music 车载版」—— 专为车机大屏优化的第三方音乐播放器。',
+                  '一个专注播放体验的音乐应用。适配手机、车机、平板等多端。',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

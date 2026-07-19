@@ -2,10 +2,10 @@
   <img src="lib/assets/logo.png" alt="KA Music Logo" width="120" height="120" />
 </p>
 
-<h1 align="center">KA Music 车载版</h1>
+<h1 align="center">KA Music</h1>
 
 <p align="center">
-  <strong>专为车机大屏优化的第三方音乐客户端</strong>
+  <strong>一个多端适配的第三方音乐客户端</strong>
   <br />
   基于 Flutter 构建 · 支持多平台 · Material You 设计 · 低内存占用
 </p>
@@ -31,7 +31,7 @@
 
 ## 📖 简介
 
-KA Music 车载版 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 框架构建。在 [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) 的基础上，针对 **车机大屏** 进行了深度优化：
+KA Music 是一个功能丰富的 **第三方音乐播放器**，使用 Flutter 框架构建。在 [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) 的基础上，针对 **多端适配** 进行了深度优化：
 
 - **内存优化** — 图片缓存限制、细粒度 Widget 重建、GPU 纹理解码分辨率控制
 - **车机布局** — 横屏左侧播放面板 + 右侧内容区，适配车载屏幕
