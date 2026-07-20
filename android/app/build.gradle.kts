@@ -43,6 +43,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
 }
 kotlin {
     compilerOptions {
@@ -53,4 +59,20 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+tasks.register<Exec>("cargoBuildArm64") {
+    workingDir = file("${project.projectDir}/../../rust")
+    commandLine(
+        "cargo", "ndk",
+        "-t", "arm64-v8a",
+        "-o", "../android/app/src/main/jniLibs",
+        "build", "--release"
+    )
+}
+
+tasks.configureEach {
+    if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
+        dependsOn("cargoBuildArm64")
+    }
 }
