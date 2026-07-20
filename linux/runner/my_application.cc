@@ -4,8 +4,36 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "flutter/generated_plugin_registrant.h"
+
+// Loads the application window icon from the installed PNG resources. Returns
+// nullptr if the file cannot be read; callers should fall back gracefully.
+static GdkPixbuf* load_app_icon(int size) {
+  gchar* path = g_strdup_printf("%s/app_icon_%d.png", APP_ICON_DIR, size);
+  GError* error = nullptr;
+  GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file(path, &error);
+  if (error) {
+    g_warning("Failed to load app icon %s: %s", path, error->message);
+    g_error_free(error);
+  }
+  g_free(path);
+  return pixbuf;
+}
+
+// Sets the window icon from the largest available bundled PNG.
+static void set_window_icon(GtkWindow* window) {
+  const int kSizes[] = {256, 128, 64, 32, 16};
+  GdkPixbuf* pixbuf = nullptr;
+  for (size_t i = 0; i < G_N_ELEMENTS(kSizes) && pixbuf == nullptr; i++) {
+    pixbuf = load_app_icon(kSizes[i]);
+  }
+  if (pixbuf) {
+    gtk_window_set_icon(window, pixbuf);
+    g_object_unref(pixbuf);
+  }
+}
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -24,6 +52,9 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+
+  // Set the window icon from bundled PNG resources.
+  set_window_icon(window);
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -45,11 +76,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "kgka_music_hl");
+    gtk_header_bar_set_title(header_bar, "时音");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "kgka_music_hl");
+    gtk_window_set_title(window, "时音");
   }
 
   gtk_window_set_default_size(window, 1280, 720);

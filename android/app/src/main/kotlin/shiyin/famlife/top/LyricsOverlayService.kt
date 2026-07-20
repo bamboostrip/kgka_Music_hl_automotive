@@ -1,4 +1,4 @@
-package com.hoilai.mm.music
+package shiyin.famlife.top
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -28,13 +28,13 @@ class LyricsOverlayService : Service() {
         const val CHANNEL_ID = "kgka_music_hl.lyrics_overlay"
         const val NOTIFICATION_ID = 9001
 
-        const val ACTION_UPDATE_LYRICS = "com.hoilai.mm.music.UPDATE_LYRICS"
-        const val ACTION_UPDATE_PLAY_STATE = "com.hoilai.mm.music.UPDATE_PLAY_STATE"
-        const val ACTION_HIDE = "com.hoilai.mm.music.HIDE_LYRICS"
-        const val ACTION_UPDATE_KARAOKE = "com.hoilai.mm.music.UPDATE_KARAOKE"
-        const val ACTION_UPDATE_SETTINGS = "com.hoilai.mm.music.UPDATE_SETTINGS"
-        const val ACTION_SET_APP_FOREGROUND = "com.hoilai.mm.music.SET_APP_FOREGROUND"
-        const val ACTION_VISIBILITY_CHANGED = "com.hoilai.mm.music.LYRICS_VISIBILITY_CHANGED"
+        const val ACTION_UPDATE_LYRICS = "shiyin.famlife.top.UPDATE_LYRICS"
+        const val ACTION_UPDATE_PLAY_STATE = "shiyin.famlife.top.UPDATE_PLAY_STATE"
+        const val ACTION_HIDE = "shiyin.famlife.top.HIDE_LYRICS"
+        const val ACTION_UPDATE_KARAOKE = "shiyin.famlife.top.UPDATE_KARAOKE"
+        const val ACTION_UPDATE_SETTINGS = "shiyin.famlife.top.UPDATE_SETTINGS"
+        const val ACTION_SET_APP_FOREGROUND = "shiyin.famlife.top.SET_APP_FOREGROUND"
+        const val ACTION_VISIBILITY_CHANGED = "shiyin.famlife.top.LYRICS_VISIBILITY_CHANGED"
 
         const val EXTRA_CURRENT_LYRIC = "current_lyric"
         const val EXTRA_NEXT_LYRIC = "next_lyric"
@@ -403,7 +403,7 @@ class LyricsOverlayService : Service() {
 
     private fun notifySettingsChanged() {
         // Broadcast settings change so Flutter side can update its state
-        val intent = Intent("com.hoilai.mm.music.LYRICS_SETTINGS_CHANGED")
+        val intent = Intent("shiyin.famlife.top.LYRICS_SETTINGS_CHANGED")
         intent.putExtra(EXTRA_LOCKED, isLocked)
         intent.putExtra(EXTRA_PASSTHROUGH, isPassthrough)
         intent.setPackage(packageName)

@@ -7,7 +7,7 @@ class AppConfig {
   static const appVersion = '2.4.0';
   static const appVersionCode = '240';
 
-  static const _defaultApiBaseUrl = 'https://music.api.hoilai.cn';
+  static const _defaultApiBaseUrl = 'https://kg.famlife.top';
   static const _customBaseUrlKey = 'settings.custom_api_base_url';
 
   static const apiBaseUrl = String.fromEnvironment(

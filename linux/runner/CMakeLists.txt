@@ -19,8 +19,23 @@ apply_standard_settings(${BINARY_NAME})
 # Add preprocessor definitions for the application ID.
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
+# Application window icon. The PNGs are installed into the data directory
+# alongside flutter_assets and loaded at runtime via the resource path.
+set(APP_ICON_PNGS
+  "resources/app_icon_16.png"
+  "resources/app_icon_32.png"
+  "resources/app_icon_64.png"
+  "resources/app_icon_128.png"
+  "resources/app_icon_256.png"
+)
+add_definitions(-DAPP_ICON_DIR="${INSTALL_BUNDLE_DATA_DIR}/app_icon")
+
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+
+# Install the window icon PNGs into the bundle data directory.
+install(FILES ${APP_ICON_PNGS} DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/app_icon"
+  COMPONENT Runtime)
