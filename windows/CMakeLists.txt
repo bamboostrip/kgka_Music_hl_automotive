@@ -49,6 +49,28 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
+# Rust library build (kugou_engine)
+set(RUST_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../rust")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(RUST_BUILD_TYPE "debug")
+  set(RUST_BUILD_FLAG "")
+else()
+  set(RUST_BUILD_TYPE "release")
+  set(RUST_BUILD_FLAG "--release")
+endif()
+set(RUST_TARGET_DIR "${RUST_LIB_DIR}/target/${RUST_BUILD_TYPE}")
+
+add_custom_command(
+  OUTPUT "${RUST_TARGET_DIR}/kugou_engine.dll"
+  COMMAND cargo build ${RUST_BUILD_FLAG}
+  WORKING_DIRECTORY "${RUST_LIB_DIR}"
+  COMMENT "Building Rust kugou_engine library"
+  VERBATIM
+)
+add_custom_target(rust_engine_build ALL
+  DEPENDS "${RUST_TARGET_DIR}/kugou_engine.dll"
+)
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
@@ -105,4 +127,9 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 # Install the AOT library on non-Debug builds only.
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
+  COMPONENT Runtime)
+
+# Install the Rust kugou_engine DLL.
+install(FILES "${RUST_TARGET_DIR}/kugou_engine.dll"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
