@@ -14,6 +14,15 @@ pub enum AppError {
     #[error("Session error: {0}")]
     Session(String),
 
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Validation: {0}")]
+    Validation(String),
+
+    #[error("Internal: {0}")]
+    Internal(String),
+
     #[error("{0}")]
     Other(String),
 }
