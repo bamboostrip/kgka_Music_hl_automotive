@@ -453,7 +453,7 @@ class _ArtworkBackgroundState extends State<_ArtworkBackground>
     final coverUrl = widget.song.coverUrl;
     final size = MediaQuery.sizeOf(context);
     final maxDim = math.max(size.width, size.height);
-    final squareSize = maxDim * 1.5;
+    final squareSize = maxDim * 1.2;
 
     // 旋转动画背景是纯装饰性的，排除语义树防止 Windows AXTree 竞态崩溃
     return ExcludeSemantics(
@@ -469,14 +469,14 @@ class _ArtworkBackgroundState extends State<_ArtworkBackground>
               minWidth: squareSize,
               minHeight: squareSize,
               child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+                imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                 child: RotationTransition(
                   turns: _rotationController,
                   child: Image.network(
                     coverUrl,
                     fit: BoxFit.cover,
-                    cacheWidth: 600,
-                    cacheHeight: 600,
+                    cacheWidth: 300,
+                    cacheHeight: 300,
                     errorBuilder: (context, error, stackTrace) =>
                         const SizedBox.shrink(),
                   ),

@@ -426,7 +426,7 @@ class PlayerController extends ChangeNotifier {
     final coverUrl = song.coverUrl;
     if (coverUrl == null || coverUrl.isEmpty) return;
     if (coverUrl.startsWith('content://')) return; // 本地封面走原生加载，不预缓存
-    final provider = NetworkImage(coverUrl);
+    final provider = ResizeImage(NetworkImage(coverUrl), width: 300, height: 300);
     provider.resolve(ImageConfiguration.empty);
   }
 

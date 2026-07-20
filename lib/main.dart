@@ -25,8 +25,8 @@ import 'ui/widgets/toast.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final cache = PaintingBinding.instance.imageCache;
-  cache.maximumSize = 50;
-  cache.maximumSizeBytes = 10 << 20;
+  cache.maximumSize = 30;
+  cache.maximumSizeBytes = 6 << 20;
   await AppConfig.loadCustomBaseUrl();
 
   final client = ApiClient();

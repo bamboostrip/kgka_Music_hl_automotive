@@ -167,6 +167,18 @@ class _ShimmerBoxState extends State<_ShimmerBox> {
   static final _shared = _ShimmerNotifier();
 
   @override
+  void initState() {
+    super.initState();
+    _shared.attach();
+  }
+
+  @override
+  void dispose() {
+    _shared.detach();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -204,12 +216,25 @@ class _ShimmerBoxState extends State<_ShimmerBox> {
 }
 
 class _ShimmerNotifier extends ChangeNotifier {
-  _ShimmerNotifier() {
-    Timer.periodic(const Duration(milliseconds: 16), (_) {
+  Timer? _timer;
+  int _refCount = 0;
+
+  void attach() {
+    _refCount++;
+    _timer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
       _elapsed = (_elapsed + 16) % 1200;
       _value = -cos(_elapsed / 1200.0 * pi);
       notifyListeners();
     });
+  }
+
+  void detach() {
+    _refCount--;
+    if (_refCount <= 0) {
+      _refCount = 0;
+      _timer?.cancel();
+      _timer = null;
+    }
   }
 
   double _elapsed = 0;
