@@ -1,0 +1,40 @@
+[package]
+name = "kugou_engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.9.0"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls", "charset", "http2", "json", "gzip", "form",
+] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+md-5 = { version = "0.10", default-features = false, features = ["alloc"] }
+digest = { version = "0.10", default-features = false, features = ["alloc"] }
+hex = "0.4"
+flate2 = "1"
+base64 = "0.22"
+rand = "0.8"
+regex = "1"
+url = "2"
+aes = "0.8"
+cipher = { version = "0.4", features = ["block-padding"] }
+rsa = { version = "0.9", features = ["sha2"] }
+num-bigint = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+thiserror = "2"
+tracing = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
