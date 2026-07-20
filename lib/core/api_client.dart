@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import 'api_client_interface.dart';
 
 class ApiException implements Exception {
   ApiException(this.message, {this.statusCode});
@@ -14,7 +15,7 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode): $message';
 }
 
-class ApiClient {
+class ApiClient implements ApiClientInterface {
   ApiClient({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;

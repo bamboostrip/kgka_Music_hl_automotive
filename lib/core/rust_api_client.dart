@@ -6,8 +6,9 @@ import 'package:path_provider/path_provider.dart';
 import '../src/rust/api.dart';
 import '../src/rust/frb_generated.dart';
 import 'api_client.dart';
+import 'api_client_interface.dart';
 
-class RustApiClient {
+class RustApiClient implements ApiClientInterface {
   RustApiClient._(this._engine);
 
   static RustApiClient? _instance;

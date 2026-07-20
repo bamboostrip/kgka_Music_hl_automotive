@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import '../config/app_config.dart';
 import '../core/api_client.dart';
+import '../core/api_client_interface.dart';
+import '../core/rust_api_client.dart';
 import '../models/app_version.dart';
 import '../models/music_models.dart';
 
@@ -12,9 +14,8 @@ class MusicApi {
 
   static const _registerHint = '若没有账号请先在酷狗音乐概念版App注册';
 
-  final ApiClient _client;
+  final ApiClientInterface _client;
 
-  /// 暴露 ApiClient 当前持有的后端 session key（由响应 header 自动保存）。
   String? get clientSessionId => _client.sessionId;
 
   void setSession(LoginSession? session) {
@@ -22,18 +23,19 @@ class MusicApi {
       _client.token = null;
       _client.t1 = null;
       _client.sessionId = null;
+      if (_client case RustApiClient rust) {
+        rust.setSession(null, null, null);
+      }
       return;
     }
     _client.token = session.token;
     _client.t1 = session.t1;
-    // 扫码/手机号登录返回的 session 不携带 sessionId，
-    // 此时 _client.sessionId 已由 ApiClient._processResponse 从
-    // 登录请求的响应 header (X-Kg-Session-Id) 中保存。
-    // 不能用 null 覆盖，否则后续请求无法关联到后端 session，
-    // 导致 /user/detail、/user/playlist 等接口拿不到登录态。
     final sid = session.sessionId;
     if (sid != null && sid.isNotEmpty) {
       _client.sessionId = sid;
+    }
+    if (_client case RustApiClient rust) {
+      rust.setSession(session.userId, session.token, session.t1);
     }
   }
 

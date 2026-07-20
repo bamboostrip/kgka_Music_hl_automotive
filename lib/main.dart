@@ -10,7 +10,8 @@ import 'controllers/download_controller.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/local_music_controller.dart';
 import 'controllers/theme_controller.dart';
-import 'core/api_client.dart';
+import 'core/api_client_interface.dart';
+import 'core/rust_api_client.dart';
 import 'services/cache_service.dart';
 import 'services/device_info_service.dart';
 import 'services/download_service.dart';
@@ -29,7 +30,7 @@ Future<void> main() async {
   cache.maximumSizeBytes = 6 << 20;
   await AppConfig.loadCustomBaseUrl();
 
-  final client = ApiClient();
+  final client = await RustApiClient.getInstance();
   final api = MusicApi(client);
   final audioHandler = await AudioService.init(
     builder: MusicAudioHandler.new,
@@ -41,7 +42,6 @@ Future<void> main() async {
   );
 
   final themeController = ThemeController();
-  // 先检测车机，再加载设置：首次安装时据检测结果决定车机模式默认值。
   await themeController.detectAutomotive(const DeviceInfoService());
   await themeController.load();
 
@@ -62,7 +62,7 @@ class KaMusicApp extends StatefulWidget {
     required this.themeController,
   });
 
-  final ApiClient client;
+  final ApiClientInterface client;
   final MusicApi api;
   final MusicAudioHandler audioHandler;
   final ThemeController themeController;
@@ -72,7 +72,7 @@ class KaMusicApp extends StatefulWidget {
 }
 
 class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
-  late final ApiClient _client;
+  late final ApiClientInterface _client;
   late final MusicApi _api;
   late final CacheService _cacheService;
   late final DownloadService _downloadService;
