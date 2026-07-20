@@ -10,21 +10,21 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.9.0"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls", "charset", "http2", "json", "gzip", "form",
+    "rustls-tls", "charset", "http2", "json", "gzip",
 ] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-md-5 = { version = "0.10", default-features = false, features = ["alloc"] }
-digest = { version = "0.10", default-features = false, features = ["alloc"] }
+md-5 = { version = "0.11", default-features = false, features = ["alloc"] }
+digest = { version = "0.11", default-features = false, features = ["alloc"] }
 hex = "0.4"
 flate2 = "1"
 base64 = "0.22"
-rand = "0.8"
+rand = "0.10"
 regex = "1"
 url = "2"
-aes = "0.8"
-cipher = { version = "0.4", features = ["block-padding"] }
+aes = "0.9"
+cipher = { version = "0.5", features = ["block-padding"] }
 rsa = { version = "0.9", features = ["sha2"] }
 num-bigint = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
