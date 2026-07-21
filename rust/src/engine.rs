@@ -324,65 +324,56 @@ impl KugouEngine {
                 playlist::playlist_tracks(client, session, id, begin_idx, pagesize).await
             }
             ("POST", "/playlist/create") => {
+                // Dart 走 query: name / type；兼容 body: name / is_pri
                 let body_val: Value =
                     serde_json::from_str(body.unwrap_or("{}")).unwrap_or_default();
-                let name = body_val
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("新歌单");
-                let is_pri = body_val
-                    .get("is_pri")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
-                playlist::create_playlist(client, session, name, is_pri).await
+                let name = first_str(
+                    &[&body_val],
+                    params,
+                    &["name"],
+                )
+                .unwrap_or_else(|| "新歌单".into());
+                let is_pri = first_i64(&[&body_val], params, &["is_pri", "type"]).unwrap_or(0);
+                playlist::create_playlist(client, session, &name, is_pri).await
             }
             ("POST", "/playlist/add") => {
+                // Dart 走 query: name / list_create_gid
                 let body_val: Value =
                     serde_json::from_str(body.unwrap_or("{}")).unwrap_or_default();
-                let name = body_val
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let global_collection_id = body_val
-                    .get("global_collection_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                playlist::collect_playlist(client, session, name, global_collection_id).await
+                let name = first_str(&[&body_val], params, &["name"]).unwrap_or_default();
+                let global_collection_id = first_str(
+                    &[&body_val],
+                    params,
+                    &["list_create_gid", "global_collection_id"],
+                )
+                .unwrap_or_default();
+                playlist::collect_playlist(client, session, &name, &global_collection_id).await
             }
             ("POST", "/playlist/del") => {
+                // Dart 走 query: listid
                 let body_val: Value =
                     serde_json::from_str(body.unwrap_or("{}")).unwrap_or_default();
-                let listid = body_val
-                    .get("listid")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                playlist::delete_playlist(client, session, listid).await
+                let listid =
+                    first_str(&[&body_val], params, &["listid", "listId"]).unwrap_or_default();
+                playlist::delete_playlist(client, session, &listid).await
             }
             ("POST", "/playlist/tracks/add") => {
+                // Dart body: { listId, songs: [{ name, hash, albumId, mixSongId }] }
                 let body_val: Value =
                     serde_json::from_str(body.unwrap_or("{}")).unwrap_or_default();
-                let listid = body_val
-                    .get("listid")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let songs: Vec<playlist::AddSongItem> = body_val
-                    .get("songs")
-                    .and_then(|v| serde_json::from_value(v.clone()).ok())
-                    .unwrap_or_default();
-                playlist::add_tracks(client, session, listid, &songs).await
+                let listid =
+                    first_str(&[&body_val], params, &["listId", "listid"]).unwrap_or_default();
+                let songs = parse_add_songs(body_val.get("songs"));
+                playlist::add_tracks(client, session, &listid, &songs).await
             }
             ("POST", "/playlist/tracks/del") => {
+                // Dart: query listid + fileids（逗号分隔）；兼容 body listid + file_ids 数组
                 let body_val: Value =
                     serde_json::from_str(body.unwrap_or("{}")).unwrap_or_default();
-                let listid = body_val
-                    .get("listid")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let file_ids: Vec<i64> = body_val
-                    .get("file_ids")
-                    .and_then(|v| serde_json::from_value(v.clone()).ok())
-                    .unwrap_or_default();
-                playlist::remove_tracks(client, session, listid, &file_ids).await
+                let listid =
+                    first_str(&[&body_val], params, &["listid", "listId"]).unwrap_or_default();
+                let file_ids = parse_file_ids(&body_val, params);
+                playlist::remove_tracks(client, session, &listid, &file_ids).await
             }
 
             ("GET", "/artist/detail") => {
@@ -474,4 +465,144 @@ impl KugouEngine {
             .update_auth(&userid, token, &vip_type, vip_token, t1);
         self.store.save(&self.session);
     }
+}
+
+fn first_str(
+    bodies: &[&Value],
+    params: &HashMap<String, String>,
+    keys: &[&str],
+) -> Option<String> {
+    for key in keys {
+        for body in bodies {
+            if let Some(v) = body.get(*key) {
+                if let Some(s) = v.as_str() {
+                    if !s.is_empty() {
+                        return Some(s.to_string());
+                    }
+                }
+                if let Some(n) = v.as_i64() {
+                    return Some(n.to_string());
+                }
+                if let Some(n) = v.as_u64() {
+                    return Some(n.to_string());
+                }
+            }
+        }
+        if let Some(s) = params.get(*key) {
+            if !s.is_empty() {
+                return Some(s.clone());
+            }
+        }
+    }
+    None
+}
+
+fn first_i64(
+    bodies: &[&Value],
+    params: &HashMap<String, String>,
+    keys: &[&str],
+) -> Option<i64> {
+    for key in keys {
+        for body in bodies {
+            if let Some(v) = body.get(*key) {
+                if let Some(n) = v.as_i64() {
+                    return Some(n);
+                }
+                if let Some(s) = v.as_str() {
+                    if let Ok(n) = s.parse::<i64>() {
+                        return Some(n);
+                    }
+                }
+            }
+        }
+        if let Some(s) = params.get(*key) {
+            if let Ok(n) = s.parse::<i64>() {
+                return Some(n);
+            }
+        }
+    }
+    None
+}
+
+/// 兼容 Dart camelCase payload 与 Rust snake_case 字段。
+fn parse_add_songs(raw: Option<&Value>) -> Vec<playlist::AddSongItem> {
+    let Some(arr) = raw.and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|item| {
+            let name = item
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let hash = item
+                .get("hash")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if name.is_empty() || hash.is_empty() {
+                return None;
+            }
+            let album_id = item
+                .get("albumId")
+                .or_else(|| item.get("album_id"))
+                .map(value_to_string)
+                .unwrap_or_default();
+            let mix_song_id = item
+                .get("mixSongId")
+                .or_else(|| item.get("mixsongid"))
+                .or_else(|| item.get("mix_song_id"))
+                .map(value_to_string)
+                .unwrap_or_default();
+            Some(playlist::AddSongItem {
+                name,
+                hash,
+                album_id,
+                mix_song_id,
+            })
+        })
+        .collect()
+}
+
+fn parse_file_ids(body: &Value, params: &HashMap<String, String>) -> Vec<i64> {
+    if let Some(arr) = body
+        .get("file_ids")
+        .or_else(|| body.get("fileids"))
+        .and_then(|v| v.as_array())
+    {
+        return arr
+            .iter()
+            .filter_map(|v| {
+                v.as_i64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+            .collect();
+    }
+    let raw = params
+        .get("fileids")
+        .or_else(|| params.get("file_ids"))
+        .cloned()
+        .or_else(|| {
+            body.get("fileids")
+                .or_else(|| body.get("file_ids"))
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+        })
+        .unwrap_or_default();
+    raw.split(',')
+        .filter_map(|s| s.trim().parse::<i64>().ok())
+        .collect()
+}
+
+fn value_to_string(v: &Value) -> String {
+    if let Some(s) = v.as_str() {
+        return s.to_string();
+    }
+    if let Some(n) = v.as_i64() {
+        return n.to_string();
+    }
+    if let Some(n) = v.as_u64() {
+        return n.to_string();
+    }
+    String::new()
 }
