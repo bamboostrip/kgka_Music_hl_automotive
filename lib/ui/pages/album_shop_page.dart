@@ -47,6 +47,7 @@ class _AlbumShopPageState extends State<AlbumShopPage> {
     _scrollController
       ..removeListener(_maybeLoadMore)
       ..dispose();
+    _albums.clear();
     super.dispose();
   }
 

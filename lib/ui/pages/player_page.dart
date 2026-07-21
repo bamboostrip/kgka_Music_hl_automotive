@@ -2179,67 +2179,73 @@ class _Progress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final max = player.duration.inMilliseconds <= 0
-        ? 1.0
-        : player.duration.inMilliseconds.toDouble();
-    final value = player.smoothPosition.inMilliseconds
-        .clamp(0, max.toInt())
-        .toDouble();
     final textColor = bright
         ? Colors.white.withValues(alpha: .64)
         : Theme.of(context).colorScheme.onSurfaceVariant;
 
-    return Column(
-      children: [
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: compact ? 3 : 5,
-            thumbShape: RoundSliderThumbShape(
-              enabledThumbRadius: compact ? 4 : 5,
-            ),
-            overlayShape: RoundSliderOverlayShape(
-              overlayRadius: compact ? 10 : 14,
-            ),
-            activeTrackColor: bright
-                ? Colors.white.withValues(alpha: .86)
-                : Theme.of(context).colorScheme.primary,
-            inactiveTrackColor: bright
-                ? Colors.white.withValues(alpha: .25)
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            thumbColor: Colors.white,
-          ),
-          child: Slider(
-            value: value,
-            max: max,
-            onChanged: (value) =>
-                player.previewSeek(Duration(milliseconds: value.round())),
-            onChangeEnd: (value) =>
-                player.seek(Duration(milliseconds: value.round())),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
-          child: Row(
-            children: [
-              Text(
-                formatDuration(player.smoothPosition),
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: compact ? 12 : null,
+    return ValueListenableBuilder<Duration>(
+      valueListenable: player.positionListenable,
+      builder: (context, _, _) {
+        final max = player.duration.inMilliseconds <= 0
+            ? 1.0
+            : player.duration.inMilliseconds.toDouble();
+        final pos = player.smoothPosition;
+        final value =
+            pos.inMilliseconds.clamp(0, max.toInt()).toDouble();
+
+        return Column(
+          children: [
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: compact ? 3 : 5,
+                thumbShape: RoundSliderThumbShape(
+                  enabledThumbRadius: compact ? 4 : 5,
                 ),
-              ),
-              const Spacer(),
-              Text(
-                formatDuration(player.duration),
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: compact ? 12 : null,
+                overlayShape: RoundSliderOverlayShape(
+                  overlayRadius: compact ? 10 : 14,
                 ),
+                activeTrackColor: bright
+                    ? Colors.white.withValues(alpha: .86)
+                    : Theme.of(context).colorScheme.primary,
+                inactiveTrackColor: bright
+                    ? Colors.white.withValues(alpha: .25)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                thumbColor: Colors.white,
               ),
-            ],
-          ),
-        ),
-      ],
+              child: Slider(
+                value: value,
+                max: max,
+                onChanged: (value) =>
+                    player.previewSeek(Duration(milliseconds: value.round())),
+                onChangeEnd: (value) =>
+                    player.seek(Duration(milliseconds: value.round())),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
+              child: Row(
+                children: [
+                  Text(
+                    formatDuration(pos),
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: compact ? 12 : null,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    formatDuration(player.duration),
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: compact ? 12 : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

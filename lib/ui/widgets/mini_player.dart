@@ -311,9 +311,9 @@ class _MiniPlayerContent extends StatelessWidget {
                               ),
                             ),
                           ),
-                          AnimatedBuilder(
-                            animation: player,
-                            builder: (context, _) {
+                          ValueListenableBuilder<Duration>(
+                            valueListenable: player.positionListenable,
+                            builder: (context, _, _) {
                               final progress =
                                   player.duration.inMilliseconds == 0
                                       ? 0.0

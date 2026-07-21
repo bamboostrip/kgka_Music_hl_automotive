@@ -101,7 +101,8 @@ class PlayerController extends ChangeNotifier {
       }
       _maybeCompleteFromPosition(value);
       _maybeSyncDesktopLyricFromPosition();
-      notifyListeners();
+      // 进度只通知 positionListenable，避免整页 AnimatedBuilder(player) 每 tick 重建。
+      _emitPosition();
     });
     // Send timing anchors; Android animates karaoke progress at display refresh.
     SchedulerBinding.instance.addPersistentFrameCallback((_) {
@@ -114,6 +115,7 @@ class PlayerController extends ChangeNotifier {
     });
     _durationSub = audioPlayer.durationStream.listen((value) {
       duration = value ?? Duration.zero;
+      _emitPosition();
       notifyListeners();
     });
     _stateSub = audioPlayer.playerStateStream.listen((value) {
@@ -126,6 +128,7 @@ class PlayerController extends ChangeNotifier {
       }
       _syncListeningTimeTracker();
       _syncDesktopPlayState();
+      _emitPosition();
       notifyListeners();
     });
     _processingStateSub = audioPlayer.processingStateStream.distinct().listen((
@@ -208,6 +211,11 @@ class PlayerController extends ChangeNotifier {
   PlaybackMode playbackMode = PlaybackMode.playlistLoop;
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
+
+  /// 播放进度专用通知（高频）。UI 进度条应监听此对象，勿依赖 [notifyListeners]。
+  final ValueNotifier<Duration> positionListenable =
+      ValueNotifier<Duration>(Duration.zero);
+
   bool isPlaying = false;
   bool isBuffering = false;
   bool isPreparing = false;
@@ -811,7 +819,7 @@ class PlayerController extends ChangeNotifier {
     _isScrubbing = true;
     _isSeeking = true;
     _setPositionBase(position, playing: false);
-    notifyListeners();
+    _emitPosition();
   }
 
   Future<void> seek(Duration position) async {
@@ -821,7 +829,7 @@ class PlayerController extends ChangeNotifier {
     _isScrubbing = false;
     _isSeeking = true;
     _setPositionBase(target, playing: isPlaying);
-    notifyListeners();
+    _emitPosition();
 
     try {
       await _audioHandler.seek(target);
@@ -829,7 +837,7 @@ class PlayerController extends ChangeNotifier {
         return;
       }
       _setPositionBase(target, playing: isPlaying);
-      notifyListeners();
+      _emitPosition();
     } finally {
       if (serial == _seekSerial) {
         _isSeeking = false;
@@ -1795,6 +1803,7 @@ class PlayerController extends ChangeNotifier {
     _becomingNoisySub?.cancel();
     _devicesSub?.cancel();
     _completionFallbackTimer?.cancel();
+    positionListenable.dispose();
     unawaited(
       _audioEffects.configureEqualizer(
         audioSessionId:
@@ -1827,6 +1836,13 @@ class PlayerController extends ChangeNotifier {
       ..reset();
     if (playing) {
       _positionClock.start();
+    }
+  }
+
+  void _emitPosition() {
+    final next = smoothPosition;
+    if (positionListenable.value != next) {
+      positionListenable.value = next;
     }
   }
 

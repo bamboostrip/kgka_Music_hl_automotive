@@ -148,6 +148,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       ..removeListener(_maybeLoadMore)
       ..dispose();
     _searchController.dispose();
+    _songs.clear();
+    _info = null;
     super.dispose();
   }
 

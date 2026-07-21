@@ -67,6 +67,10 @@ class _SearchPageState extends State<SearchPage> {
     _debounce?.cancel();
     _controller.dispose();
     _focusNode.dispose();
+    _results = const [];
+    _suggestions = const [];
+    _hotCategories = const [];
+    _searchHistory = const [];
     super.dispose();
   }
 

@@ -55,6 +55,8 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
     _scrollController
       ..removeListener(_maybeLoadMore)
       ..dispose();
+    _songs.clear();
+    _detail = null;
     super.dispose();
   }
 

@@ -438,9 +438,9 @@ class _CarProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: player,
-      builder: (context, _) {
+    return ValueListenableBuilder<Duration>(
+      valueListenable: player.positionListenable,
+      builder: (context, _, _) {
         final duration = player.duration;
         final position = player.smoothPosition;
         final max = duration.inMilliseconds <= 0

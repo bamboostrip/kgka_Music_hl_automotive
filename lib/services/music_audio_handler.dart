@@ -41,6 +41,9 @@ class MusicAudioHandler extends BaseAudioHandler
     _onPrevious = null;
   }
 
+  /// 系统媒体会话队列上限（超长歌单只推送窗口，降低 MediaItem 堆积）。
+  static const _maxSystemQueueSize = 80;
+
   Future<void> loadSong({
     required Song song,
     required String url,
@@ -48,8 +51,8 @@ class MusicAudioHandler extends BaseAudioHandler
     required int queueIndex,
   }) async {
     _queueIndex = queueIndex < 0 ? 0 : queueIndex;
-    final currentItem = _mediaItemFor(song);
-    final items = queueSongs.map(_mediaItemFor).toList(growable: false);
+    final currentItem = _mediaItemFor(song, includeArt: true);
+    final items = _buildSystemQueue(queueSongs, _queueIndex);
 
     if (items.isNotEmpty) {
       queue.add(items);
@@ -186,9 +189,9 @@ class MusicAudioHandler extends BaseAudioHandler
     Song? currentSong,
   }) async {
     _queueIndex = queueIndex < 0 ? 0 : queueIndex;
-    queue.add(queueSongs.map(_mediaItemFor).toList(growable: false));
+    queue.add(_buildSystemQueue(queueSongs, _queueIndex));
     if (currentSong != null) {
-      mediaItem.add(_mediaItemFor(currentSong));
+      mediaItem.add(_mediaItemFor(currentSong, includeArt: true));
     }
   }
 
@@ -228,14 +231,46 @@ class MusicAudioHandler extends BaseAudioHandler
     await audioPlayer.dispose();
   }
 
-  MediaItem _mediaItemFor(Song song) {
+  /// 构建推给系统媒体会话的队列：当前曲含封面，其余精简；超长队列只保留窗口。
+  List<MediaItem> _buildSystemQueue(List<Song> songs, int focusIndex) {
+    if (songs.isEmpty) {
+      return const [];
+    }
+    final safeFocus = focusIndex.clamp(0, songs.length - 1);
+    if (songs.length <= _maxSystemQueueSize) {
+      return [
+        for (var i = 0; i < songs.length; i++)
+          _mediaItemFor(songs[i], includeArt: i == safeFocus),
+      ];
+    }
+
+    final half = _maxSystemQueueSize ~/ 2;
+    var start = safeFocus - half;
+    var end = start + _maxSystemQueueSize;
+    if (start < 0) {
+      start = 0;
+      end = _maxSystemQueueSize;
+    } else if (end > songs.length) {
+      end = songs.length;
+      start = end - _maxSystemQueueSize;
+    }
+    _queueIndex = safeFocus - start;
+    return [
+      for (var i = start; i < end; i++)
+        _mediaItemFor(songs[i], includeArt: i == safeFocus),
+    ];
+  }
+
+  MediaItem _mediaItemFor(Song song, {bool includeArt = false}) {
     return MediaItem(
       id: song.hash.isEmpty ? song.id : song.hash,
       album: song.albumName,
       title: song.title,
       artist: song.artist,
       duration: song.duration,
-      artUri: song.coverUrl == null ? null : Uri.tryParse(song.coverUrl!),
+      artUri: includeArt && song.coverUrl != null
+          ? Uri.tryParse(song.coverUrl!)
+          : null,
       extras: {'hash': song.hash, 'songId': song.id},
     );
   }

@@ -54,6 +54,8 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
     _scrollController
       ..removeListener(_maybeLoadMore)
       ..dispose();
+    _songs.clear();
+    _info = null;
     super.dispose();
   }
 

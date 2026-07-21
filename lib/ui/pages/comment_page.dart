@@ -38,6 +38,7 @@ class _CommentPageState extends State<CommentPage> {
     _scrollController
       ..removeListener(_maybeLoadMore)
       ..dispose();
+    _comments.clear();
     super.dispose();
   }
 
