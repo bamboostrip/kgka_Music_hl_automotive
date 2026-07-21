@@ -607,7 +607,7 @@ class _AccountOptionTile extends StatelessWidget {
                 radius: 24,
                 backgroundColor: colorScheme.primary.withValues(alpha: .12),
                 backgroundImage: account.avatarUrl != null
-                    ? NetworkImage(account.avatarUrl!)
+                    ? ResizeImage(NetworkImage(account.avatarUrl!), width: 96, height: 96)
                     : null,
                 child: account.avatarUrl == null
                     ? Text(

@@ -354,7 +354,7 @@ class _PlayerBodyState extends State<_PlayerBody> {
                   leading: CircleAvatar(
                     backgroundImage: artist.avatarUrl == null
                         ? null
-                        : NetworkImage(artist.avatarUrl!),
+                        : ResizeImage(NetworkImage(artist.avatarUrl!), width: 80, height: 80),
                     child: artist.avatarUrl == null
                         ? const Icon(Icons.person_rounded)
                         : null,
@@ -475,8 +475,8 @@ class _ArtworkBackgroundState extends State<_ArtworkBackground>
                   child: Image.network(
                     coverUrl,
                     fit: BoxFit.cover,
-                    cacheWidth: 300,
-                    cacheHeight: 300,
+                    cacheWidth: 100,
+                    cacheHeight: 100,
                     errorBuilder: (context, error, stackTrace) =>
                         const SizedBox.shrink(),
                   ),

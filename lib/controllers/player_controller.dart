@@ -425,9 +425,10 @@ class PlayerController extends ChangeNotifier {
   void _precacheCover(Song song) {
     final coverUrl = song.coverUrl;
     if (coverUrl == null || coverUrl.isEmpty) return;
-    if (coverUrl.startsWith('content://')) return; // 本地封面走原生加载，不预缓存
-    final provider = ResizeImage(NetworkImage(coverUrl), width: 300, height: 300);
-    provider.resolve(ImageConfiguration.empty);
+    if (coverUrl.startsWith('content://')) return;
+    final provider = ResizeImage(NetworkImage(coverUrl), width: 150, height: 150);
+    final stream = provider.resolve(ImageConfiguration.empty);
+    stream.addListener(ImageStreamListener((_, __) {}, onError: (_, __) {}));
   }
 
   /// 解析播放地址。

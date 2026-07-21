@@ -197,7 +197,7 @@ class _CommentRow extends StatelessWidget {
           CircleAvatar(
             radius: 18,
             backgroundImage:
-                comment.userPic != null ? NetworkImage(comment.userPic!) : null,
+                comment.userPic != null ? ResizeImage(NetworkImage(comment.userPic!), width: 72, height: 72) : null,
             child: comment.userPic == null
                 ? Icon(Icons.person_rounded,
                     size: 18,
