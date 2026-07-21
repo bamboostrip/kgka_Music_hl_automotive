@@ -2,14 +2,14 @@ pub mod album;
 pub mod artist;
 pub mod comment;
 pub mod discover;
-pub mod external_playlist;
+// pub mod external_playlist; // unused, requires regex
 pub mod fm;
 pub mod login;
 pub mod lyric;
-pub mod media_catalog;
+// pub mod media_catalog; // unused
 pub mod playlist;
-pub mod rank;
-pub mod register;
+// pub mod rank; // unused
+// pub mod register; // unused
 pub mod report;
 pub mod search;
 pub mod song;

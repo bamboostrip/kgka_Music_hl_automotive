@@ -22,6 +22,8 @@ impl KugouEngine {
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(15))
+            .pool_max_idle_per_host(1)
+            .pool_idle_timeout(std::time::Duration::from_secs(10))
             .gzip(true)
             .build()
             .expect("failed to build reqwest client");
