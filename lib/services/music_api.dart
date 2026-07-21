@@ -648,15 +648,6 @@ class MusicApi {
       'pagesize': pageSize,
       'type': 'song',
     });
-    if (kDebugMode) {
-      debugPrint('[KA Music][search] keywords="$keywords"');
-      debugPrint('[KA Music][search] raw type: ${raw.runtimeType}');
-      if (raw is List) {
-        debugPrint('[KA Music][search] list length: ${raw.length}');
-      } else if (raw is Map) {
-        debugPrint('[KA Music][search] map keys: ${raw.keys.toList()}');
-      }
-    }
     // API returns either a plain array or { songs: [...] }
     final List songs;
     if (raw is List) {
