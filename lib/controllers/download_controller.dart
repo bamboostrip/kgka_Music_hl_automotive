@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -212,11 +213,13 @@ class DownloadController extends ChangeNotifier {
     if (download?.status == DownloadStatus.downloaded &&
         download?.filePath != null &&
         _service.cacheKeyFor(download!.song, download.quality) == key) {
-      return download.filePath;
+      if (File(download.filePath!).existsSync()) {
+        return download.filePath;
+      }
     }
     // 其次播放缓存
     final cache = _playCache[key];
-    if (cache != null) {
+    if (cache != null && File(cache.filePath).existsSync()) {
       return cache.filePath;
     }
     return null;

@@ -1,7 +1,13 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../models/music_models.dart';
+
+const _kgUserAgent = 'Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi';
 
 class MusicAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
@@ -16,6 +22,11 @@ class MusicAudioHandler extends BaseAudioHandler
   Future<void> Function()? _onNext;
   Future<void> Function()? _onPrevious;
   int _queueIndex = 0;
+
+  HttpServer? _proxy;
+  String? _proxyTarget;
+  String? _proxyLocalFile;
+  int _loadSeq = 0;
 
   void attachTransportControls({
     required Future<void> Function() onNext,
@@ -44,16 +55,129 @@ class MusicAudioHandler extends BaseAudioHandler
       queue.add(items);
     }
     mediaItem.add(currentItem);
+
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      await audioPlayer.setUrl(url);
+      _proxyLocalFile = null;
+      await _loadViaProxy(url);
     } else {
-      await audioPlayer.setAudioSource(AudioSource.file(url));
+      _proxyLocalFile = url;
+      await _loadViaProxy(url);
+    }
+  }
+
+  Future<void> _ensureProxy() async {
+    if (_proxy != null) return;
+    _proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    _proxy!.listen(_onProxyRequest, onError: (Object e) {
+      debugPrint('[AudioHandler] proxy error: $e');
+    });
+  }
+
+  void _onProxyRequest(HttpRequest req) async {
+    final localFile = _proxyLocalFile;
+    if (localFile != null) {
+      await _serveLocalFile(req, localFile);
+      return;
+    }
+    final target = _proxyTarget;
+    if (target == null) {
+      req.response.statusCode = HttpStatus.serviceUnavailable;
+      await req.response.close();
+      return;
+    }
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 10);
+      final upstream = await client.openUrl(req.method, Uri.parse(target));
+      upstream.headers.set(HttpHeaders.userAgentHeader, _kgUserAgent);
+      final range = req.headers.value(HttpHeaders.rangeHeader);
+      if (range != null) {
+        upstream.headers.set(HttpHeaders.rangeHeader, range);
+      }
+      final resp = await upstream.close();
+
+      req.response.statusCode = resp.statusCode;
+      resp.headers.forEach((name, values) {
+        final lower = name.toLowerCase();
+        if (lower == HttpHeaders.contentTypeHeader ||
+            lower == HttpHeaders.transferEncodingHeader) {
+          return;
+        }
+        req.response.headers.set(name, values);
+      });
+      req.response.headers.set(HttpHeaders.contentTypeHeader, 'audio/mpeg');
+      req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+
+      await resp.pipe(req.response);
+      client.close();
+    } catch (e) {
+      try {
+        req.response.statusCode = HttpStatus.badGateway;
+        await req.response.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _serveLocalFile(HttpRequest req, String path) async {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) {
+        req.response.statusCode = HttpStatus.notFound;
+        await req.response.close();
+        return;
+      }
+      final fileSize = file.lengthSync();
+      final range = req.headers.value(HttpHeaders.rangeHeader);
+      req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+      req.response.headers.set(HttpHeaders.contentTypeHeader, 'audio/mpeg');
+
+      if (range != null && range.startsWith('bytes=')) {
+        final parts = range.substring(6).split('-');
+        final start = int.tryParse(parts[0]) ?? 0;
+        final end = parts.length > 1 && parts[1].isNotEmpty
+            ? int.tryParse(parts[1]) ?? fileSize - 1
+            : fileSize - 1;
+        final length = end - start + 1;
+        req.response.statusCode = HttpStatus.partialContent;
+        req.response.headers.set(
+            HttpHeaders.contentRangeHeader, 'bytes $start-$end/$fileSize');
+        req.response.headers.contentLength = length;
+        final stream = file.openRead(start, end + 1);
+        await stream.pipe(req.response);
+      } else {
+        req.response.statusCode = HttpStatus.ok;
+        req.response.headers.contentLength = fileSize;
+        final stream = file.openRead();
+        await stream.pipe(req.response);
+      }
+    } catch (e) {
+      try {
+        req.response.statusCode = HttpStatus.internalServerError;
+        await req.response.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _loadViaProxy(String url) async {
+    await _ensureProxy();
+    _proxyTarget = url;
+    final seq = ++_loadSeq;
+    final proxyUrl = 'http://127.0.0.1:${_proxy!.port}/play/$seq';
+    try {
+      await audioPlayer.setUrl(proxyUrl).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('音频加载超时，请检查网络后重试');
+        },
+      );
+    } on PlayerException catch (e) {
+      throw Exception('播放失败: ${e.message}');
     }
   }
 
   @override
-  Future<void> updateQueue(List<MediaItem> newQueue) async {
-    queue.add(newQueue);
+  Future<void> updateQueue(List<MediaItem> queue) async {
+    this.queue.add(queue);
   }
 
   Future<void> setSongQueue({
@@ -99,6 +223,8 @@ class MusicAudioHandler extends BaseAudioHandler
   }
 
   Future<void> close() async {
+    await _proxy?.close(force: true);
+    _proxy = null;
     await audioPlayer.dispose();
   }
 
