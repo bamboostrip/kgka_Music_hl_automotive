@@ -108,7 +108,11 @@ impl KugouEngine {
             }
 
             ("GET", "/search") => {
-                let keyword = params.get("keyword").map(|s| s.as_str()).unwrap_or("");
+                let keyword = params
+                    .get("keywords")
+                    .or_else(|| params.get("keyword"))
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
                 let page = params
                     .get("page")
                     .and_then(|s| s.parse().ok())
@@ -122,7 +126,11 @@ impl KugouEngine {
             }
             ("GET", "/search/hot") => search::search_hot(client, session).await,
             ("GET", "/search/suggest") => {
-                let keyword = params.get("keyword").map(|s| s.as_str()).unwrap_or("");
+                let keyword = params
+                    .get("keywords")
+                    .or_else(|| params.get("keyword"))
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
                 search::search_suggest(client, session, keyword, 0, 0, 0, 10).await
             }
 
