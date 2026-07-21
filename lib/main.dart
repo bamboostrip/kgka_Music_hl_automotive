@@ -119,15 +119,18 @@ class _KaMusicAppState extends State<KaMusicApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (!_player.desktopLyricsEnabled) return;
     switch (state) {
       case AppLifecycleState.resumed:
-        _player.setAppForeground(true);
+        if (_player.desktopLyricsEnabled) _player.setAppForeground(true);
       case AppLifecycleState.inactive:
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
-        _player.setAppForeground(false);
+        if (_player.desktopLyricsEnabled) _player.setAppForeground(false);
+      case AppLifecycleState.paused:
+        if (_player.desktopLyricsEnabled) _player.setAppForeground(false);
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+      case AppLifecycleState.detached:
+        if (_player.desktopLyricsEnabled) _player.setAppForeground(false);
     }
   }
 
