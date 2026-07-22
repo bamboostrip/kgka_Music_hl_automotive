@@ -9,12 +9,14 @@ use serde::{Deserialize, Serialize};
 
 /// 把封面图 URL 里的 `{size}` 占位替换成给定尺寸（.NET SongInfo.Cover 的 getter 逻辑）。
 /// .NET 固定替换为 "400"。其它模型（PlaylistSong.Cover 等）会替换成 150/250。
+#[allow(dead_code)]
 pub fn resolve_size_placeholder(url: &str, size: &str) -> String {
     url.replace("{size}", size)
 }
 
 /// 歌手精简信息（SongInfo.Singers / PlaylistSong.singerinfo 共用）。
 /// 对应 .NET SingerLite。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SingerLite {
     /// .NET: id（SingerId）
@@ -29,6 +31,7 @@ pub struct SingerLite {
 }
 
 /// 搜索结果中的单首歌曲。对应 .NET SongInfo。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SongInfo {
     /// .NET: FileHash
@@ -58,6 +61,7 @@ pub struct SongInfo {
     pub image: String,
 }
 
+#[allow(dead_code)]
 impl SongInfo {
     /// 取已替换 {size} 的封面 URL（对应 .NET SongInfo.Cover getter）。
     pub fn cover(&self) -> String {
@@ -66,6 +70,7 @@ impl SongInfo {
 }
 
 /// 搜索结果分页数据。对应 .NET SearchResultData。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SearchResultData {
     /// .NET: total
@@ -80,6 +85,7 @@ pub struct SearchResultData {
 ///
 /// 注意：原始上游响应外层有 status/error_code（由 api_response 解包），
 /// 这里只承载 `data` 字段的内容。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PlayUrlData {
     /// .NET: url
@@ -96,6 +102,7 @@ pub struct PlayUrlData {
     pub err_code: i64,
 }
 
+#[allow(dead_code)]
 impl PlayUrlData {
     /// 是否成功返回可用播放地址（对应 .NET PlayUrlData.IsSuccess）。
     pub fn is_success(&self) -> bool {

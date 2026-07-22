@@ -60,6 +60,7 @@ pub async fn get_play_url(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn get_play_info(
     client: &reqwest::Client,
     session: &KgSession,

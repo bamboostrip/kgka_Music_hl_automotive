@@ -99,6 +99,7 @@ pub fn parse(mut root: Value) -> ParsedResponse {
 }
 
 /// 判断响应是否成功（便捷封装）。
+#[allow(dead_code)]
 pub fn is_success(root: &Value) -> bool {
     let status = root.get("status").and_then(|v| v.as_i64());
     let err = root

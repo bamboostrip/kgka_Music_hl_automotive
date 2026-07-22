@@ -36,6 +36,7 @@ pub async fn user_detail(client: &reqwest::Client, session: &KgSession) -> AppRe
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_vip_detail(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/v1/get_union_vip")
         .base_url("https://kugouvip.kugou.com")
@@ -59,6 +60,7 @@ pub async fn user_playlist(client: &reqwest::Client, session: &KgSession, page: 
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_history(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     require_login(session)?;
     let body = json!({
@@ -72,6 +74,7 @@ pub async fn user_history(client: &reqwest::Client, session: &KgSession) -> AppR
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_listen(client: &reqwest::Client, session: &KgSession, list_type: i64) -> AppResult<Value> {
     require_login(session)?;
     let client_time = chrono::Utc::now().timestamp();
@@ -90,6 +93,7 @@ pub async fn user_listen(client: &reqwest::Client, session: &KgSession, list_typ
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_follow(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     require_login(session)?;
     let client_time = chrono::Utc::now().timestamp();
@@ -170,6 +174,7 @@ pub async fn user_cloud_url(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_follow_message(client: &reqwest::Client, session: &KgSession, artist_id: &str, pagesize: i64) -> AppResult<Value> {
     require_login(session)?;
     let req = KgRequest::get("/msg.mobile/v3/msgtag/history")
@@ -179,6 +184,7 @@ pub async fn user_follow_message(client: &reqwest::Client, session: &KgSession, 
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_video_collect(client: &reqwest::Client, session: &KgSession, page: i64, pagesize: i64) -> AppResult<Value> {
     require_login(session)?;
     let body = json!({ "userid": session.userid, "token": session.token, "page": page, "pagesize": pagesize });
@@ -190,6 +196,7 @@ pub async fn user_video_collect(client: &reqwest::Client, session: &KgSession, p
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_video_love(client: &reqwest::Client, session: &KgSession, pagesize: i64) -> AppResult<Value> {
     let req = KgRequest::get("/m.comment.service/v1/get_user_like_video")
         .param("kugouid", &session.userid)
@@ -199,6 +206,7 @@ pub async fn user_video_love(client: &reqwest::Client, session: &KgSession, page
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn favorite_count(client: &reqwest::Client, session: &KgSession, mixsongids: &str) -> AppResult<Value> {
     let req = KgRequest::get("/count/v1/audio/mget_collect")
         .param("mixsongids", mixsongids)
@@ -206,6 +214,7 @@ pub async fn favorite_count(client: &reqwest::Client, session: &KgSession, mixso
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn server_now(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let body = json!({ "token": session.token, "userid": session.userid });
     let req = KgRequest::get("/v1/server_now")

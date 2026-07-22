@@ -139,11 +139,17 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_maybeLoadMore);
+    if (widget.playlist.isLikedPlaylist) {
+      widget.auth.addListener(_onLikedChanged);
+    }
     _loadInitial();
   }
 
   @override
   void dispose() {
+    if (widget.playlist.isLikedPlaylist) {
+      widget.auth.removeListener(_onLikedChanged);
+    }
     _scrollController
       ..removeListener(_maybeLoadMore)
       ..dispose();
@@ -151,6 +157,15 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     _songs.clear();
     _info = null;
     super.dispose();
+  }
+
+  void _onLikedChanged() {
+    if (!mounted) return;
+    final before = _songs.length;
+    _songs.removeWhere((song) => !widget.auth.isLiked(song));
+    if (_songs.length != before) {
+      setState(() {});
+    }
   }
 
   List<Song> get _filteredSongs {

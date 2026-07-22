@@ -9,6 +9,7 @@ pub async fn album_shop(client: &reqwest::Client, session: &KgSession) -> AppRes
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn album_info(
     client: &reqwest::Client,
     session: &KgSession,
@@ -42,6 +43,7 @@ pub async fn album_info(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn album_detail(client: &reqwest::Client, session: &KgSession, album_id: &str) -> AppResult<Value> {
     let body = json!({
         "data": [{ "album_id": album_id }],

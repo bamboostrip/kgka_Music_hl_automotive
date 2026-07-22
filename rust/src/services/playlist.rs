@@ -158,8 +158,9 @@ pub async fn remove_tracks(
         "listid": listid, "userid": session.userid, "data": data,
         "type": 0, "token": session.token, "list_ver": 0
     });
-    let req = KgRequest::get("/cloudlist.service/v6/del_song")
+    let req = KgRequest::get("/v4/delete_songs")
         .method(reqwest::Method::POST)
+        .router("cloudlist.service.kugou.com")
         .json_body(body)
         .signature_type(SignatureType::Default);
     transport::send(client, session, &req).await
@@ -174,6 +175,7 @@ pub struct AddSongItem {
     pub mix_song_id: String,
 }
 
+#[allow(dead_code)]
 pub async fn sheet_collection(client: &reqwest::Client, session: &KgSession, position: i64) -> AppResult<Value> {
     let req = KgRequest::get("/miniyueku/v1/opern_square/get_home_module_config")
         .param("srcappid", "2919")
@@ -182,6 +184,7 @@ pub async fn sheet_collection(client: &reqwest::Client, session: &KgSession, pos
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn sheet_collection_detail(client: &reqwest::Client, session: &KgSession, collection_id: &str, page: i64) -> AppResult<Value> {
     let req = KgRequest::get("/miniyueku/v1/opern_square/collection_detail")
         .param("srcappid", "2919")
@@ -191,6 +194,7 @@ pub async fn sheet_collection_detail(client: &reqwest::Client, session: &KgSessi
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn sheet_detail(client: &reqwest::Client, session: &KgSession, id: &str, source: &str) -> AppResult<Value> {
     let req = KgRequest::get("/v1/opern/detail")
         .base_url("https://miniyueku.kugou.com")
@@ -200,6 +204,7 @@ pub async fn sheet_detail(client: &reqwest::Client, session: &KgSession, id: &st
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn sheet_hot(client: &reqwest::Client, session: &KgSession, opern_type: i64) -> AppResult<Value> {
     let req = KgRequest::get("/miniyueku/v1/opern_square/get_home_hot_opern")
         .param("srcappid", "2919")
@@ -208,6 +213,7 @@ pub async fn sheet_hot(client: &reqwest::Client, session: &KgSession, opern_type
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn sheet_list(client: &reqwest::Client, session: &KgSession, album_audio_id: &str, opern_type: i64, page: i64, pagesize: i64) -> AppResult<Value> {
     let req = KgRequest::get("/miniyueku/v1/opern/list")
         .param("album_audio_id", album_audio_id)
@@ -238,6 +244,7 @@ pub async fn playlist_info(client: &reqwest::Client, session: &KgSession, playli
     Ok(resp)
 }
 
+#[allow(dead_code)]
 pub async fn playlist_tags(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let body = json!({ "tag_type": "collection", "tag_id": 0, "source": 3 });
     let req = KgRequest::get("/pubsongs/v1/get_tags_by_type")
@@ -262,6 +269,7 @@ pub async fn playlist_tracks(client: &reqwest::Client, session: &KgSession, play
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn playlist_tracks_new(client: &reqwest::Client, session: &KgSession, list_id: &str, page: i64, pagesize: i64) -> AppResult<Value> {
     let body = json!({
         "listid": list_id, "userid": session.userid, "area_code": 1, "show_relate_goods": 0,
@@ -276,6 +284,7 @@ pub async fn playlist_tracks_new(client: &reqwest::Client, session: &KgSession, 
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn playlist_similar(client: &reqwest::Client, session: &KgSession, ids: &str) -> AppResult<Value> {
     let client_time_ms = chrono::Utc::now().timestamp_millis();
     let data: Vec<Value> = ids.split(',').filter(|s| !s.trim().is_empty())
@@ -292,6 +301,7 @@ pub async fn playlist_similar(client: &reqwest::Client, session: &KgSession, ids
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn playlist_effect(client: &reqwest::Client, session: &KgSession, page: i64, pagesize: i64) -> AppResult<Value> {
     let body = json!({ "page": page, "pagesize": pagesize });
     let req = KgRequest::get("/pubsongs/v1/get_sound_effect_list")

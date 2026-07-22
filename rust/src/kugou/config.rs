@@ -8,6 +8,7 @@ pub const APP_ID: &str = "3116";
 /// KuGouConfig.ClientVer（Lite 客户端版本）
 pub const CLIENT_VER: &str = "11440";
 /// KuGouConfig.Version
+#[allow(dead_code)]
 pub const VERSION: &str = "11440";
 
 /// KuGouConfig.OfficialAppId（正式版 Android 客户端，评论/听歌识曲用）
@@ -30,10 +31,13 @@ pub const WEB_SIGNATURE_SALT: &str = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt";
 
 // ===== 设备身份占位符 =====
 /// KuGouConfig.Dfid —— 初始占位，真实 dfid 由 register/dev 从酷狗拿
+#[allow(dead_code)]
 pub const DFID_PLACEHOLDER: &str = "-";
 /// KuGouConfig.Mid
+#[allow(dead_code)]
 pub const MID_PLACEHOLDER: &str = "";
 /// KuGouConfig.Uuid
+#[allow(dead_code)]
 pub const UUID_PLACEHOLDER: &str = "-";
 
 // ===== 固定反风控 header（SignatureHandler.cs 始终注入）=====
@@ -45,7 +49,9 @@ pub const KG_RF: &str = "B9EDA08A64250DEFFBCADDEE00F8F25F";
 // ===== 散落的特殊常量（迁移时逐个核对，这里先集中登记）=====
 /// RawCommentApi 的评论业务 code 常量
 pub const COMMENT_SONG_CODE: &str = "fc4be23b4e972707f36b8a828a93ba8a";
+#[allow(dead_code)]
 pub const COMMENT_PLAYLIST_CODE: &str = "ca53b96fe5a1d9c22d71c8f522ef7c4f";
+#[allow(dead_code)]
 pub const COMMENT_ALBUM_CODE: &str = "94f1792ced1df89aa68a7939eaf2efca";
 
 // ===== RSA 公钥（Constants.cs）=====

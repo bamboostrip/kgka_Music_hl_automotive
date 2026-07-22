@@ -25,6 +25,7 @@ impl FileSessionStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn clear(&self) {
         let _ = std::fs::remove_file(&self.path);
     }

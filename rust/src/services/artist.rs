@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use crate::error::AppResult;
 use crate::kugou::{config, crypto, request::{KgRequest, SignatureType}, session::KgSession, signer, transport};
 
+#[allow(dead_code)]
 pub async fn artist_lists(
     client: &reqwest::Client,
     session: &KgSession,
@@ -21,6 +22,7 @@ pub async fn artist_lists(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn singer_list(
     client: &reqwest::Client,
     session: &KgSession,
@@ -36,6 +38,7 @@ pub async fn singer_list(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn artist_videos(
     client: &reqwest::Client,
     session: &KgSession,
@@ -104,6 +107,7 @@ pub async fn artist_audios(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn artist_albums(
     client: &reqwest::Client,
     session: &KgSession,
@@ -129,6 +133,7 @@ pub async fn artist_albums(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn artist_honour(
     client: &reqwest::Client,
     session: &KgSession,

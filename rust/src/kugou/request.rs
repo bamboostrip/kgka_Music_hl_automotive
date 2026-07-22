@@ -26,6 +26,7 @@ pub enum SignatureType {
     /// Web（扫码登录/迷你乐库），body 不参与签名
     Web,
     /// 枚举保留值；实际等价于 Default（源码未单独处理）
+    #[allow(dead_code)]
     Register,
     /// 不签名（但仍注入默认参数，除非 clear_default_params）
     None,
@@ -166,6 +167,7 @@ impl KgRequest {
     }
 
     /// 链式覆盖 session 字段（如临时 dfid/userid/token）。
+    #[allow(dead_code)]
     pub fn session_override(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.session_overrides
             .get_or_insert_with(BTreeMap::new)

@@ -12,6 +12,7 @@ pub enum AppError {
     Json(#[from] serde_json::Error),
 
     #[error("Session error: {0}")]
+    #[allow(dead_code)]
     Session(String),
 
     #[error("Unauthorized: {0}")]

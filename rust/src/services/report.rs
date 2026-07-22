@@ -9,6 +9,7 @@ use crate::kugou::{
     transport,
 };
 
+#[allow(dead_code)]
 pub async fn upload_play_history(
     client: &reqwest::Client, session: &KgSession,
     mix_song_id: i64, timestamp: Option<i64>, play_count: i64,
@@ -25,6 +26,7 @@ pub async fn upload_play_history(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn latest_songs(client: &reqwest::Client, session: &KgSession, pagesize: i64) -> AppResult<Value> {
     let body = json!({
         "area_code": "1", "sources": ["pc", "mobile", "tv", "car"],

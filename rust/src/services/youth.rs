@@ -18,6 +18,7 @@ fn today_str() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
+#[allow(dead_code)]
 pub async fn channel_all(client: &reqwest::Client, session: &KgSession, page: i64, pagesize: i64) -> AppResult<Value> {
     let req = KgRequest::get("/youth/v2/channel/channel_all_list")
         .param("page", page.to_string())
@@ -27,6 +28,7 @@ pub async fn channel_all(client: &reqwest::Client, session: &KgSession, page: i6
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn channel_amway(client: &reqwest::Client, session: &KgSession, global_collection_id: &str) -> AppResult<Value> {
     let req = KgRequest::get("/youth/api/amway/v2/index")
         .param("global_collection_id", global_collection_id)
@@ -34,6 +36,7 @@ pub async fn channel_amway(client: &reqwest::Client, session: &KgSession, global
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn channel_detail(client: &reqwest::Client, session: &KgSession, global_collection_ids: &str) -> AppResult<Value> {
     let data: Vec<Value> = global_collection_ids
         .split(',')
@@ -48,6 +51,7 @@ pub async fn channel_detail(client: &reqwest::Client, session: &KgSession, globa
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn channel_similar(client: &reqwest::Client, session: &KgSession, channel_id: &str) -> AppResult<Value> {
     let vip_type: i64 = session.vip_type.parse().unwrap_or(0);
     let req = KgRequest::get("/youth/v1/channel/get_friendly_channel")
@@ -63,6 +67,7 @@ pub async fn channel_similar(client: &reqwest::Client, session: &KgSession, chan
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn channel_songs(
     client: &reqwest::Client,
     session: &KgSession,
@@ -79,6 +84,7 @@ pub async fn channel_songs(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn channel_song_detail(
     client: &reqwest::Client,
     session: &KgSession,
@@ -92,6 +98,7 @@ pub async fn channel_song_detail(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn channel_subscription(
     client: &reqwest::Client,
     session: &KgSession,
@@ -116,16 +123,19 @@ pub async fn channel_subscription(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn dynamic(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/youth/v3/user/get_dynamic").signature_type(SignatureType::Default);
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn dynamic_recent(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/youth/v3/user/recent_dynamic").signature_type(SignatureType::Default);
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn report_listen_song(client: &reqwest::Client, session: &KgSession, mixsongid: i64) -> AppResult<Value> {
     let req = KgRequest::get("/youth/v2/report/listen_song")
         .method(reqwest::Method::POST)
@@ -139,6 +149,7 @@ pub async fn report_listen_song(client: &reqwest::Client, session: &KgSession, m
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn union_vip(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/v1/get_union_vip")
         .base_url("https://kugouvip.kugou.com")
@@ -149,6 +160,7 @@ pub async fn union_vip(client: &reqwest::Client, session: &KgSession) -> AppResu
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn user_songs(
     client: &reqwest::Client,
     session: &KgSession,
@@ -169,6 +181,7 @@ pub async fn user_songs(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn report_vip_ad_play(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let time_ms = chrono::Utc::now().timestamp_millis();
     let req = KgRequest::get("/youth/v1/ad/play_report")

@@ -10,6 +10,7 @@ use crate::kugou::{
 };
 
 const FAKE_M_PERSONAL: &str = "ca981cfc583a4c37f28d2d49000013c16a0a";
+#[allow(dead_code)]
 const FAKE_M_CARD: &str = "60f7ebf1f812edbac3c63a7310001701760f";
 
 pub async fn recommend_playlists(
@@ -58,6 +59,7 @@ pub async fn recommend_songs(client: &reqwest::Client, session: &KgSession) -> A
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn recommend_style(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let body = json!({ "platform": "android" });
     let req = KgRequest::get("/everydayrec.service/everyday_style_recommend")
@@ -91,6 +93,7 @@ pub async fn ai_recommend(client: &reqwest::Client, session: &KgSession, album_a
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn yueku(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/v1/yueku/recommend_v2")
         .router("service.mobile.kugou.com")
@@ -100,6 +103,7 @@ pub async fn yueku(client: &reqwest::Client, session: &KgSession) -> AppResult<V
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn yueku_banner(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let body = json!({
         "plat": 0, "channel": 201, "operator": 7, "networktype": 2,
@@ -113,6 +117,7 @@ pub async fn yueku_banner(client: &reqwest::Client, session: &KgSession) -> AppR
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn yueku_fm(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/v1/time_fm_info")
         .router("fm.service.kugou.com")
@@ -133,6 +138,7 @@ pub async fn top_album(client: &reqwest::Client, session: &KgSession, page: i64,
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn top_card(client: &reqwest::Client, session: &KgSession, card_id: i64) -> AppResult<Value> {
     let client_time_ms = chrono::Utc::now().timestamp_millis();
     let body = json!({
@@ -153,6 +159,7 @@ pub async fn top_card(client: &reqwest::Client, session: &KgSession, card_id: i6
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn top_ip(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/v1/daily_recommend")
         .method(reqwest::Method::POST)
@@ -164,6 +171,7 @@ pub async fn top_ip(client: &reqwest::Client, session: &KgSession) -> AppResult<
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn pc_diantai(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let body = json!({ "isvip": 0, "userid": session.userid, "vipType": 0 });
     let req = KgRequest::get("/v3/pc_diantai")
@@ -174,6 +182,7 @@ pub async fn pc_diantai(client: &reqwest::Client, session: &KgSession) -> AppRes
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn brush(client: &reqwest::Client, session: &KgSession, song_pool_id: i64, mode: &str) -> AppResult<Value> {
     let client_time_ms = chrono::Utc::now().timestamp_millis();
     let pr = json!({
@@ -201,6 +210,7 @@ pub async fn brush(client: &reqwest::Client, session: &KgSession, song_pool_id: 
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn everyday_history(
     client: &reqwest::Client, session: &KgSession,
     mode: &str, platform: &str, history_name: Option<&str>, date: Option<&str>,

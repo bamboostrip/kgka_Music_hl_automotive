@@ -544,32 +544,42 @@ class MusicApi {
     await _client.post('/playlist/del', query: {'listid': listId});
   }
 
-  Future<void> addToPlaylist(String listId, Song song) async {
-    await addSongsToPlaylist(listId, [song]);
+  Future<Map<String, dynamic>?> addToPlaylist(String listId, Song song) {
+    return addSongsToPlaylist(listId, [song]);
   }
 
-  Future<void> addSongsToPlaylist(String listId, List<Song> songs) async {
-    if (songs.isEmpty) return;
-    await _client.post(
+  Future<Map<String, dynamic>?> addSongsToPlaylist(
+    String listId,
+    List<Song> songs,
+  ) async {
+    if (songs.isEmpty) return null;
+    final result = await _client.post(
       '/playlist/tracks/add',
       body: {'listId': listId, 'songs': songs.map(_songAddPayload).toList()},
     );
+    return result is Map<String, dynamic> ? result : null;
   }
 
-  Future<void> removeFromPlaylist(String listId, Song song) async {
-    await removeSongsFromPlaylist(listId, [song]);
+  Future<Map<String, dynamic>?> removeFromPlaylist(String listId, Song song) {
+    return removeSongsFromPlaylist(listId, [song]);
   }
 
-  Future<void> removeSongsFromPlaylist(String listId, List<Song> songs) async {
-    final fileIds = songs
-        .map((song) => song.id)
-        .where((id) => id.isNotEmpty)
-        .join(',');
-    if (fileIds.isEmpty) return;
-    await _client.post(
+  Future<Map<String, dynamic>?> removeSongsFromPlaylist(
+    String listId,
+    List<Song> songs, {
+    List<int>? fileIds,
+  }) async {
+    final ids = fileIds ??
+        songs
+            .map((song) => int.tryParse(song.id) ?? 0)
+            .where((id) => id != 0)
+            .toList();
+    if (ids.isEmpty) return null;
+    final result = await _client.post(
       '/playlist/tracks/del',
-      query: {'listid': listId, 'fileids': fileIds},
+      query: {'listid': listId, 'fileids': ids.join(',')},
     );
+    return result is Map<String, dynamic> ? result : null;
   }
 
   Map<String, Object?> _songAddPayload(Song song) {

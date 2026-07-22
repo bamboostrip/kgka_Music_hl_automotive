@@ -300,6 +300,27 @@ class PlaylistSummary {
         (sourceListId != null && sourceListId!.isNotEmpty);
   }
 
+  PlaylistSummary copyWith({int? songCount}) {
+    return PlaylistSummary(
+      id: id,
+      title: title,
+      subtitle: subtitle,
+      coverUrl: coverUrl,
+      songCount: songCount ?? this.songCount,
+      playCount: playCount,
+      isDefault: isDefault,
+      creatorName: creatorName,
+      creatorUserId: creatorUserId,
+      currentUserId: currentUserId,
+      sourceGlobalId: sourceGlobalId,
+      sourceListId: sourceListId,
+      type: type,
+      source: source,
+      listId: listId,
+      musiclibId: musiclibId,
+    );
+  }
+
   factory PlaylistSummary.fromRecommend(Map<String, dynamic> json) {
     final globalCollectionId = asString(json['global_collection_id']);
     final id = globalCollectionId ?? asString(json['specialid']) ?? '';

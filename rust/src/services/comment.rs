@@ -6,7 +6,9 @@ use crate::error::AppResult;
 use crate::kugou::{config, request::{KgRequest, SignatureType}, session::KgSession, transport};
 
 const CODE_SONG: &str = config::COMMENT_SONG_CODE;
+#[allow(dead_code)]
 const CODE_PLAYLIST: &str = config::COMMENT_PLAYLIST_CODE;
+#[allow(dead_code)]
 const CODE_ALBUM: &str = config::COMMENT_ALBUM_CODE;
 
 fn official(mut params: BTreeMap<String, String>) -> BTreeMap<String, String> {
@@ -45,6 +47,7 @@ pub async fn music_comments(
     send_comment_list(client, session, "/mcomment/v1/cmtlist", params).await
 }
 
+#[allow(dead_code)]
 pub async fn playlist_comments(
     client: &reqwest::Client,
     session: &KgSession,
@@ -68,6 +71,7 @@ pub async fn playlist_comments(
     send_comment_list(client, session, "/m.comment.service/v1/cmtlist", params).await
 }
 
+#[allow(dead_code)]
 pub async fn album_comments(
     client: &reqwest::Client,
     session: &KgSession,
@@ -89,6 +93,7 @@ pub async fn album_comments(
     send_comment_list(client, session, "/m.comment.service/v1/cmtlist", params).await
 }
 
+#[allow(dead_code)]
 pub async fn comment_count(
     client: &reqwest::Client,
     session: &KgSession,
@@ -116,6 +121,7 @@ pub async fn comment_count(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub struct FloorCommentsParams<'a> {
     pub special_id: Option<&'a str>,
     pub tid: &'a str,
@@ -128,6 +134,7 @@ pub struct FloorCommentsParams<'a> {
     pub code: Option<&'a str>,
 }
 
+#[allow(dead_code)]
 pub async fn floor_comments(
     client: &reqwest::Client,
     session: &KgSession,
@@ -172,6 +179,7 @@ pub async fn floor_comments(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn music_comment_classify(
     client: &reqwest::Client,
     session: &KgSession,
@@ -194,6 +202,7 @@ pub async fn music_comment_classify(
     send_comment_list(client, session, "/mcomment/v1/cmt_classify_list", params).await
 }
 
+#[allow(dead_code)]
 pub async fn music_comment_hotword(
     client: &reqwest::Client,
     session: &KgSession,

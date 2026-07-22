@@ -35,6 +35,7 @@ class AuthController extends ChangeNotifier {
   List<PlaylistSummary> playlists = const [];
 
   final Set<String> _likedHashes = {};
+  final Map<String, int> _hashToFileId = {};
 
   bool get isLoggedIn => session?.isValid == true;
 
@@ -57,21 +58,47 @@ class AuthController extends ChangeNotifier {
         ? playlist.listId!
         : playlist.id;
     try {
+      Map<String, dynamic>? resp;
       if (liked) {
-        await _api.removeFromPlaylist(targetListId, song);
+        final fileId = _hashToFileId[song.hash];
+        if (fileId == null) {
+          await _syncLikedSongs();
+          final retried = _hashToFileId[song.hash];
+          if (retried == null) return;
+          resp = await _api.removeSongsFromPlaylist(
+            targetListId,
+            [song],
+            fileIds: [retried],
+          );
+        } else {
+          resp = await _api.removeSongsFromPlaylist(
+            targetListId,
+            [song],
+            fileIds: [fileId],
+          );
+        }
         _likedHashes.remove(song.hash);
+        _hashToFileId.remove(song.hash);
       } else {
-        await _api.addToPlaylist(targetListId, song);
+        resp = await _api.addToPlaylist(targetListId, song);
         _likedHashes.add(song.hash);
+        if (resp != null) {
+          final info = resp['info'];
+          if (info is List && info.isNotEmpty) {
+            final fid = info[0]['fileid'];
+            if (fid is int) _hashToFileId[song.hash] = fid;
+          }
+        }
       }
+      _updateLikedCountFromResponse(resp);
       await _persistLikedHashes();
       notifyListeners();
     } catch (error) {
-      // Revert on failure
       if (liked) {
         _likedHashes.add(song.hash);
       } else {
         _likedHashes.remove(song.hash);
+        _hashToFileId.remove(song.hash);
       }
       rethrow;
     }
@@ -166,10 +193,17 @@ class AuthController extends ChangeNotifier {
     final listId = _playlistListId(playlist);
     if (listId == null) return;
     await _run(() async {
-      await _api.addToPlaylist(listId, song);
+      final resp = await _api.addToPlaylist(listId, song);
       playlists = await _loadUserPlaylistsWithCache();
       if (playlist.isLikedPlaylist) {
         _likedHashes.add(song.hash);
+        if (resp != null) {
+          final info = resp['info'];
+          if (info is List && info.isNotEmpty) {
+            final fid = info[0]['fileid'];
+            if (fid is int) _hashToFileId[song.hash] = fid;
+          }
+        }
         await _persistLikedHashes();
       }
     });
@@ -183,10 +217,16 @@ class AuthController extends ChangeNotifier {
     final listId = _playlistListId(target);
     if (listId == null) return;
     await _run(() async {
-      await _api.removeFromPlaylist(listId, song);
+      final fileId = _hashToFileId[song.hash];
+      await _api.removeSongsFromPlaylist(
+        listId,
+        [song],
+        fileIds: fileId != null ? [fileId] : null,
+      );
       playlists = await _loadUserPlaylistsWithCache();
       if (target.isLikedPlaylist) {
         _likedHashes.remove(song.hash);
+        _hashToFileId.remove(song.hash);
         await _persistLikedHashes();
       }
     });
@@ -411,6 +451,15 @@ class AuthController extends ChangeNotifier {
     });
   }
 
+  void _updateLikedCountFromResponse(Map<String, dynamic>? resp) {
+    if (resp == null) return;
+    final count = resp['count'];
+    if (count is! int) return;
+    final index = playlists.indexWhere((p) => p.isLikedPlaylist);
+    if (index < 0) return;
+    playlists[index] = playlists[index].copyWith(songCount: count);
+  }
+
   Future<void> _syncLikedSongs() async {
     final playlist = likedPlaylist;
     if (playlist == null) return;
@@ -418,8 +467,11 @@ class AuthController extends ChangeNotifier {
     try {
       final songs = await _api.playlistSongs(playlist.id, fetchAll: true);
       _likedHashes.clear();
+      _hashToFileId.clear();
       for (final song in songs) {
         _likedHashes.add(song.hash);
+        final fid = int.tryParse(song.id);
+        if (fid != null) _hashToFileId[song.hash] = fid;
       }
       await _persistLikedHashes();
     } catch (_) {

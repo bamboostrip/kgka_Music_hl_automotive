@@ -34,6 +34,7 @@ pub async fn search_raw(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn search_songs(
     client: &reqwest::Client,
     session: &KgSession,
@@ -56,6 +57,7 @@ pub async fn search_hot(client: &reqwest::Client, session: &KgSession) -> AppRes
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn search_default(
     client: &reqwest::Client,
     session: &KgSession,
@@ -105,6 +107,7 @@ pub async fn search_suggest(
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn search_mixed(client: &reqwest::Client, session: &KgSession, keyword: &str) -> AppResult<Value> {
     let time_ms = chrono::Utc::now().timestamp_millis();
     let requestid = format!(
@@ -144,6 +147,7 @@ pub async fn search_mixed(client: &reqwest::Client, session: &KgSession, keyword
     transport::send(client, session, &req).await
 }
 
+#[allow(dead_code)]
 pub async fn search_complex(
     client: &reqwest::Client,
     session: &KgSession,
