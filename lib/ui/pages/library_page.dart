@@ -784,16 +784,29 @@ class _PlaylistTabViewState extends State<_PlaylistTabView> {
     );
     if (confirmed != true) return;
 
+    var ok = 0;
+    String? lastError;
     for (final playlist in targets) {
+      if (playlist.isSystemDefaultCollect || playlist.isLikedPlaylist) {
+        lastError = playlist.isSystemDefaultCollect
+            ? '「默认收藏」为系统歌单，无法删除'
+            : '「我喜欢」无法删除';
+        continue;
+      }
       try {
         await widget.auth.deleteOrUncollectPlaylist(playlist);
-      } catch (_) {}
+        ok++;
+      } catch (e) {
+        lastError = e.toString();
+      }
     }
     if (!mounted) return;
-    if (widget.auth.errorMessage != null) {
-      Toast.error('删除失败：${widget.auth.errorMessage}');
+    if (ok == 0) {
+      Toast.error(lastError ?? widget.auth.errorMessage ?? '删除失败');
+    } else if (ok < targets.length) {
+      Toast.info('已删除 $ok 个，部分失败：${lastError ?? widget.auth.errorMessage ?? ''}');
     } else {
-      Toast.success('已删除 ${targets.length} 个歌单');
+      Toast.success('已删除 $ok 个歌单');
     }
     _exitMultiSelect();
   }

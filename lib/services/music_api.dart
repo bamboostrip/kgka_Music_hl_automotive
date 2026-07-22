@@ -455,6 +455,7 @@ class MusicApi {
       }),
     );
     final items = asList(json['songs']);
+    // 无 hash（下架/无版权等）不展示；rawItemCount 仍用接口条数判断分页
     final songs = items
         .whereType<Map<String, dynamic>>()
         .map(Song.fromPlaylist)

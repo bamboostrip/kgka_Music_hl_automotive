@@ -111,7 +111,8 @@ class AuthController extends ChangeNotifier {
     return playlists
         .where(
           (playlist) =>
-              !playlist.isCollectedAlbum && playlist.isCreatedPlaylist,
+              !playlist.isCollectedAlbum &&
+              (playlist.isCreatedPlaylist || playlist.isSystemDefaultCollect),
         )
         .toList();
   }
@@ -122,6 +123,7 @@ class AuthController extends ChangeNotifier {
           (playlist) =>
               !playlist.isLikedPlaylist &&
               !playlist.isCollectedAlbum &&
+              !playlist.isSystemDefaultCollect &&
               !playlist.isCreatedPlaylist,
         )
         .toList();
@@ -174,8 +176,17 @@ class AuthController extends ChangeNotifier {
 
   Future<void> deleteOrUncollectPlaylist(PlaylistSummary playlist) async {
     final target = findUserPlaylist(playlist) ?? playlist;
+    if (target.isLikedPlaylist || target.isSystemDefaultCollect) {
+      throw Exception(
+        target.isSystemDefaultCollect
+            ? '「默认收藏」为系统歌单，无法删除'
+            : '「我喜欢」无法删除',
+      );
+    }
     final listId = _playlistListId(target);
-    if (listId == null) return;
+    if (listId == null) {
+      throw Exception('无法删除：缺少歌单 listid');
+    }
     await _run(() async {
       await _api.deletePlaylist(listId);
       playlists = await _loadUserPlaylistsWithCache();
@@ -341,12 +352,22 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  /// 删除/增删歌曲必须用数字 listid，不能用 global_collection_id。
   String? _playlistListId(PlaylistSummary playlist) {
-    if (playlist.listId?.isNotEmpty == true) {
-      return playlist.listId;
+    final raw = playlist.listId?.trim();
+    if (raw != null && raw.isNotEmpty && int.tryParse(raw) != null) {
+      return raw;
     }
-    if (playlist.id.isNotEmpty) {
-      return playlist.id;
+    // 自建歌单 list_create_listid 通常等于 listid
+    final source = playlist.sourceListId?.trim();
+    if (source != null && source.isNotEmpty && int.tryParse(source) != null) {
+      return source;
+    }
+    // collection_3_{userid}_{listid}_0
+    final id = playlist.id;
+    final m = RegExp(r'collection_\d+_\d+_(\d+)_\d+').firstMatch(id);
+    if (m != null) {
+      return m.group(1);
     }
     return null;
   }

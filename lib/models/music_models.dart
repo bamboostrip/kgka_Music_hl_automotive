@@ -261,6 +261,10 @@ class PlaylistSummary {
 
   bool get isLikedPlaylist => isDefault == 2 || title.trim() == '我喜欢';
 
+  /// 酷狗系统「默认收藏」歌单（is_def=1），不可删除，一般不展示。
+  bool get isSystemDefaultCollect =>
+      isDefault == 1 || title.trim() == '默认收藏';
+
   /// 收藏专辑：用户歌单列表里没有 `list_create_gid` 的专辑条目。
   /// 注意：自建歌单也可能没有 `list_create_gid`，不能单靠 sourceGlobalId 为空判断。
   bool get isCollectedAlbum {
@@ -298,7 +302,7 @@ class PlaylistSummary {
   }
 
   bool get isCreatedPlaylist {
-    if (isLikedPlaylist || isCollectedAlbum) {
+    if (isLikedPlaylist || isCollectedAlbum || isSystemDefaultCollect) {
       return false;
     }
     if (type == 0) {
@@ -307,7 +311,7 @@ class PlaylistSummary {
     if (type == 1) {
       return false;
     }
-    if (isDefault == 0 || isDefault == 1) {
+    if (isDefault == 0) {
       return true;
     }
     return currentUserId != null &&
@@ -315,8 +319,13 @@ class PlaylistSummary {
         currentUserId == creatorUserId;
   }
 
-  /// 可对歌单内歌曲做增删（自建 + 我喜欢）
-  bool get canEditTracks => isLikedPlaylist || isCreatedPlaylist;
+  /// 可对歌单内歌曲做增删（自建 / 我喜欢 / 默认收藏）
+  bool get canEditTracks =>
+      isLikedPlaylist || isCreatedPlaylist || isSystemDefaultCollect;
+
+  /// 可删除/取消收藏（系统默认收藏与「我喜欢」不可删）
+  bool get canDeleteOrUncollect =>
+      !isLikedPlaylist && !isSystemDefaultCollect && (isCreatedPlaylist || type == 1 || isCollectedAlbum);
 
   bool get hasCollectionSource {
     return (sourceGlobalId != null && sourceGlobalId!.isNotEmpty) ||
@@ -630,19 +639,29 @@ class Song {
     final artist = artists.map((artist) => artist.name).join(' / ');
     final albumInfo = json['albuminfo'];
     final albumMap = albumInfo is Map<String, dynamic> ? albumInfo : null;
+    final hash = asString(json['hash']) ??
+        asString(json['hash_320']) ??
+        asString(json['hash_flac']) ??
+        asString(json['FileHash']) ??
+        '';
 
     return Song(
-      id: asString(json['fileid']) ?? asString(json['hash']) ?? '',
+      id: asString(json['fileid']) ??
+          asString(json['mixsongid']) ??
+          hash,
       title: asString(json['name']) ?? asString(json['audio_name']) ?? '未知歌曲',
       artist: artist.isNotEmpty ? artist : '未知艺人',
-      hash: asString(json['hash']) ?? '',
-      albumId: asString(json['album_id']) ?? asString(albumMap?['album_id']),
+      hash: hash,
+      albumId: asString(json['album_id']) ??
+          asString(albumMap?['album_id']) ??
+          asString(albumMap?['id']),
       albumAudioId:
           asString(json['mixsongid']) ??
           asString(json['album_audio_id']) ??
           asString(json['audio_id']),
-      albumName:
-          asString(albumMap?['album_name']) ?? asString(json['album_name']),
+      albumName: asString(albumMap?['name']) ??
+          asString(albumMap?['album_name']) ??
+          asString(json['album_name']),
       coverUrl: normalizeImageUrl(
         asString(json['cover']) ??
             asString(albumMap?['sizable_cover']) ??

@@ -308,19 +308,32 @@ impl KugouEngine {
             }
 
             ("GET", "/playlist/detail") => {
-                let id = params.get("id").map(|s| s.as_str()).unwrap_or("");
+                // Dart: ids；兼容 id
+                let id = params
+                    .get("ids")
+                    .or_else(|| params.get("id"))
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
                 playlist::playlist_info(client, session, id).await
             }
             ("GET", "/playlist/track/all") => {
                 let id = params.get("id").map(|s| s.as_str()).unwrap_or("");
-                let begin_idx = params
-                    .get("begin_idx")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0i64);
                 let pagesize = params
                     .get("pagesize")
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(30i64);
+                // 酷狗接口用 begin_idx（起始下标），.NET: beginIdx = (page-1)*pageSize
+                // Dart 传 page；兼容直接传 begin_idx
+                let begin_idx = params
+                    .get("begin_idx")
+                    .and_then(|s| s.parse().ok())
+                    .or_else(|| {
+                        params.get("page").and_then(|s| s.parse::<i64>().ok()).map(|page| {
+                            let p = if page < 1 { 1 } else { page };
+                            (p - 1) * pagesize
+                        })
+                    })
+                    .unwrap_or(0i64);
                 playlist::playlist_tracks(client, session, id, begin_idx, pagesize).await
             }
             ("POST", "/playlist/create") => {

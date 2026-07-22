@@ -26,7 +26,7 @@ pub async fn collect_playlist(
     let client_time = chrono::Utc::now().timestamp();
     let body = json!({
         "userid": session.userid, "token": session.token, "total_ver": 0,
-        "name": name, "type": 0, "source": 1, "is_pri": 0,
+        "name": name, "type": 1, "source": 1, "is_pri": 0,
         "list_create_userid": session.userid, "list_create_listid": "1",
         "list_create_gid": list_create_gid, "from_shupinmv": 0
     });

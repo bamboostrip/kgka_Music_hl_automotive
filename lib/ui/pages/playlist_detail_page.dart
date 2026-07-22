@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -257,12 +258,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       setState(() {
         // 增量追加：保留已有歌曲，仅追加尚未加载的歌曲，
         // 避免先清空再重建列表导致滚动位置被强制重置。
-        final existingHashes = _songs.map((s) => s.hash).toSet();
+        final existingKeys =
+            _songs.map(_songKey).where((k) => k.isNotEmpty).toSet();
         for (final song in allSongs) {
-          if (song.hash.isNotEmpty && !existingHashes.contains(song.hash)) {
-            _songs.add(song);
-            existingHashes.add(song.hash);
-          }
+          final key = _songKey(song);
+          if (key.isEmpty || existingKeys.contains(key)) continue;
+          _songs.add(song);
+          existingKeys.add(key);
         }
         _allSongsLoaded = true;
         _hasMore = false;
@@ -273,25 +275,36 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     }
   }
 
-  /// 确保播放队列包含完整歌单内容。
-  ///
-  /// 当歌单因分页仅加载前 N 首时，对比播放队列与歌单总歌曲数量。
-  /// 若不一致则自动获取完整歌单数据（优先读缓存），保障播放队列完整。
-  /// 搜索模式下仅返回过滤后的结果。
-  Future<List<Song>> _ensureFullQueueForPlayback() async {
-    // 搜索模式下仅播放搜索结果
-    if (_searchQuery.isNotEmpty) {
-      return _filteredSongs;
-    }
-    // 已加载全部或总数未知，直接返回当前列表
-    final totalCount = _currentPlaylist.songCount;
-    if (_allSongsLoaded || totalCount == null || _songs.length >= totalCount) {
-      return _filteredSongs;
-    }
-    // 队列数量与歌单总数不一致，需要加载完整歌单
-    Toast.info('正在加载完整歌单…');
-    await _loadAllSongs();
-    return _filteredSongs;
+  /// 当前可播放队列：已加载列表（搜索时为过滤结果）。
+  /// 不阻塞等待未分页内容，避免因 count 含无版权曲而误提示「加载完整歌单」。
+  List<Song> _playbackQueueNow() {
+    if (_searchQuery.isNotEmpty) return _filteredSongs;
+    return _songs.where((s) => s.hash.isNotEmpty).toList();
+  }
+
+  /// 后台静默补全剩余分页，并在仍播放本列表时扩展队列（无 Toast）。
+  void _expandQueueInBackgroundIfNeeded({required Song startedWith}) {
+    if (_searchQuery.isNotEmpty) return;
+    if (_allSongsLoaded || !_hasMore) return;
+    final startedKey =
+        startedWith.hash.isNotEmpty ? startedWith.hash : startedWith.id;
+    unawaited(() async {
+      await _loadAllSongs();
+      if (!mounted || startedKey.isEmpty) return;
+      final current = widget.player.currentSong;
+      if (current == null) return;
+      final currentKey =
+          current.hash.isNotEmpty ? current.hash : current.id;
+      final queueStillOurs = widget.player.queue.any((s) {
+        final k = s.hash.isNotEmpty ? s.hash : s.id;
+        return k == startedKey;
+      });
+      // 用户已切到其它来源则不改队列
+      if (currentKey != startedKey && !queueStillOurs) return;
+      final expanded = _playbackQueueNow();
+      if (expanded.length <= widget.player.queue.length) return;
+      await widget.player.replaceQueue(expanded);
+    }());
   }
 
   Future<void> _loadInitial() async {
@@ -361,6 +374,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
           _hasMore =
               _songs.length < (widget.playlist.songCount ?? 1 << 31) &&
               songPage.rawItemCount == _pageSize;
+          if (!_hasMore) {
+            _allSongsLoaded = true;
+          }
           _isInitialLoading = false;
         });
         await _cache.write(cacheKey, {
@@ -399,6 +415,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
           _hasMore =
               _songs.length < (info.songCount ?? 1 << 31) &&
               songPage.rawItemCount == _pageSize;
+          if (!_hasMore) {
+            _allSongsLoaded = true;
+          }
           _isInitialLoading = false;
         });
         await _cache.write(cacheKey, {
@@ -469,6 +488,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         _hasMore =
             songPage.rawItemCount == _pageSize &&
             _songs.length < (_currentPlaylist.songCount ?? 1 << 31);
+        if (!_hasMore) {
+          _allSongsLoaded = true;
+        }
         _isLoadingMore = false;
       });
     } catch (error) {
@@ -590,11 +612,11 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   }
 
   Future<List<Song>> _resolveSelectedSongs() async {
+    // 仅当真有未加载分页时才补全；count 含无版权曲时不再误触发
     if (_selectAllMode &&
         _searchQuery.isEmpty &&
         !_allSongsLoaded &&
-        (_currentPlaylist.songCount == null ||
-            _songs.length < (_currentPlaylist.songCount ?? 0))) {
+        _hasMore) {
       Toast.info('正在加载完整列表…');
       await _loadAllSongs();
     }
@@ -742,7 +764,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         onTap: _collectPlaylist,
       ));
     }
-    if (_isInLibrary && !_libraryPlaylist.isLikedPlaylist) {
+    if (_isInLibrary &&
+        !_libraryPlaylist.isLikedPlaylist &&
+        !_libraryPlaylist.isSystemDefaultCollect) {
       final isAlbum = _libraryPlaylist.isCollectedAlbum;
       final isCreated = _libraryPlaylist.isCreatedPlaylist;
       options.add(_ActionOption(
@@ -1029,18 +1053,25 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                 if (!_isSelecting)
                   SliverToBoxAdapter(
                     child: _Actions(
-                      count: _info?.songCount ?? _songs.length,
+                      // 以可播放列表为准；元数据 count 可能含无版权曲
+                      count: (!_hasMore || _allSongsLoaded)
+                          ? _songs.length
+                          : (_info?.songCount ?? _songs.length),
                       loadedCount: _songs.length,
                       sortLabel: _sortModeLabel,
                       onSortTap: () => _showSortSheet(context),
-                      onPlay: _filteredSongs.isEmpty
+                      onPlay: _playbackQueueNow().isEmpty
                           ? null
-                          : () async {
-                              final queue = await _ensureFullQueueForPlayback();
-                              if (!mounted || queue.isEmpty) return;
+                          : () {
+                              final queue = _playbackQueueNow();
+                              if (queue.isEmpty) return;
+                              final first = queue.first;
                               widget.player.playSong(
-                                queue.first,
+                                first,
                                 queue: List<Song>.of(queue),
+                              );
+                              _expandQueueInBackgroundIfNeeded(
+                                startedWith: first,
                               );
                             },
                       searchQuery: _searchQuery,
@@ -1086,17 +1117,18 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                           canDelete: _canEdit,
                           selecting: _isSelecting,
                           selected: _isSongSelected(song),
-                          onTap: () async {
+                          onTap: () {
                             if (_isSelecting) {
                               _toggleSongSelection(song);
                               return;
                             }
-                            final queue = await _ensureFullQueueForPlayback();
-                            if (!mounted || queue.isEmpty) return;
+                            final queue = _playbackQueueNow();
+                            if (queue.isEmpty) return;
                             widget.player.playSong(
                               song,
                               queue: List<Song>.of(queue),
                             );
+                            _expandQueueInBackgroundIfNeeded(startedWith: song);
                           },
                           onAddToPlaylist: () => _addSongToPlaylist(song),
                           onDelete: () => _removeSong(song),

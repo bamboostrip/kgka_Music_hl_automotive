@@ -508,6 +508,18 @@ class PlayerController extends ChangeNotifier {
   }
 
   /// 批量插入到「下一首」位置，只更新一次队列与系统媒体会话。
+  /// 用新列表替换播放队列（不切歌），用于歌单分页后台补全。
+  Future<void> replaceQueue(List<Song> songs) async {
+    if (songs.isEmpty) return;
+    queue = List<Song>.of(songs);
+    await _audioHandler.setSongQueue(
+      queueSongs: queue,
+      queueIndex: currentIndex,
+      currentSong: currentSong,
+    );
+    notifyListeners();
+  }
+
   Future<int> addSongsToQueue(List<Song> songs) async {
     if (songs.isEmpty) return 0;
 
