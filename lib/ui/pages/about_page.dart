@@ -137,12 +137,6 @@ class _AboutPageState extends State<AboutPage> {
                 children: [
                   const _InfoRow(label: '应用名称', value: AppConfig.appName),
                   const _InfoRow(label: '当前版本', value: AppConfig.appVersion),
-                  _InfoRow(
-                    label: '服务地址',
-                    value: AppConfig.hasCustomBaseUrl
-                        ? AppConfig.customBaseUrl!
-                        : AppConfig.apiBaseUrl,
-                  ),
                   _InfoLinkRow(
                     label: 'GitHub',
                     value: 'bamboostrip/kgka_Music_hl_automotive',

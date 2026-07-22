@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
@@ -274,23 +273,6 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-                // Network section
-                _SectionHeader(title: '网络'),
-                const SizedBox(height: 8),
-                _SettingsCard(
-                  children: [
-                    _SettingsTile(
-                      icon: Icons.dns_rounded,
-                      iconColor: colorScheme.primary,
-                      title: 'API 服务器地址',
-                      subtitle: AppConfig.hasCustomBaseUrl
-                          ? AppConfig.customBaseUrl
-                          : '默认：${AppConfig.defaultApiBaseUrl}',
-                      onTap: () => _editApiBaseUrl(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
                 // Cache section
                 _SectionHeader(title: '缓存'),
                 const SizedBox(height: 8),
@@ -411,79 +393,6 @@ class SettingsPage extends StatelessWidget {
           player: player,
         );
       },
-    );
-  }
-
-  Future<void> _editApiBaseUrl(BuildContext context) async {
-    final controller = TextEditingController(
-      text: AppConfig.customBaseUrl ?? '',
-    );
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('API 服务器地址'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '留空则使用默认地址',
-                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '默认：${AppConfig.defaultApiBaseUrl}',
-                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  hintText: 'https://example.com/api',
-                  labelText: 'Base URL',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            if (AppConfig.hasCustomBaseUrl)
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(''),
-                child: Text(
-                  '恢复默认',
-                  style: TextStyle(color: Theme.of(dialogContext).colorScheme.error),
-                ),
-              ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == null || !context.mounted) return;
-
-    await AppConfig.saveCustomBaseUrl(result);
-    if (!context.mounted) return;
-
-    Toast.success(
-      AppConfig.hasCustomBaseUrl
-          ? '已切换到 ${AppConfig.customBaseUrl}，重启后生效'
-          : '已恢复默认 API 地址，重启后生效',
     );
   }
 

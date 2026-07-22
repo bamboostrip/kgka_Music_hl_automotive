@@ -47,6 +47,9 @@ app.*.map.json
 # Rust build artifacts
 rust/target/
 
+# Android native library build output
+android/app/src/main/jniLibs/
+
 .ace-tool/
 .opencode/
 .superpowers/

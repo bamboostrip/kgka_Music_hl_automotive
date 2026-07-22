@@ -28,8 +28,6 @@ Future<void> main() async {
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 30;
   cache.maximumSizeBytes = 6 << 20;
-  await AppConfig.loadCustomBaseUrl();
-
   final client = await RustApiClient.getInstance();
   final api = MusicApi(client);
   final audioHandler = await AudioService.init(

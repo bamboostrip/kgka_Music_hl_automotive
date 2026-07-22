@@ -4,11 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
-import '../widgets/toast.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.auth, required this.api});
@@ -130,79 +128,6 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     await widget.auth.login(mobile, code, userId: selected.userId);
-  }
-
-  Future<void> _editApiBaseUrl(BuildContext context) async {
-    final controller = TextEditingController(
-      text: AppConfig.customBaseUrl ?? '',
-    );
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('API 服务器地址'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '留空则使用默认地址',
-                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '默认：${AppConfig.defaultApiBaseUrl}',
-                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  hintText: 'https://example.com/api',
-                  labelText: 'Base URL',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            if (AppConfig.hasCustomBaseUrl)
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(''),
-                child: Text(
-                  '恢复默认',
-                  style: TextStyle(color: Theme.of(dialogContext).colorScheme.error),
-                ),
-              ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == null || !context.mounted) return;
-
-    await AppConfig.saveCustomBaseUrl(result);
-    if (!context.mounted) return;
-
-    Toast.success(
-      AppConfig.hasCustomBaseUrl
-          ? '已切换到 ${AppConfig.customBaseUrl}，重启后生效'
-          : '已恢复默认 API 地址，重启后生效',
-    );
   }
 
   Future<void> _loadQrCode() async {
@@ -358,15 +283,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   );
                 },
-              ),
-            ),
-            Positioned(
-              top: MediaQuery.paddingOf(context).top + 10,
-              right: 16,
-              child: IconButton(
-                tooltip: '设置 API 服务器地址',
-                icon: const Icon(Icons.dns_rounded),
-                onPressed: () => _editApiBaseUrl(context),
               ),
             ),
           ],
