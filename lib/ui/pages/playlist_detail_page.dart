@@ -59,6 +59,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   bool _isSearching = false;
   bool _isLoadingAllSongs = false;
   bool _allSongsLoaded = false;
+  bool _isSelecting = false;
+  bool _selectAllMode = false;
+  final Set<String> _selectedKeys = {};
+  final Set<String> _excludedKeys = {};
   String _searchQuery = '';
   _SongSortMode _sortMode = _SongSortMode.defaultOrder;
 
@@ -320,7 +324,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       final infoJson = cacheData['info'];
       setState(() {
         if (infoJson is Map<String, dynamic>) {
-          _info = PlaylistSummary.fromCache(infoJson);
+          final library = widget.auth.findUserPlaylist(widget.playlist) ??
+              widget.playlist;
+          _info = library.mergeWithDetail(PlaylistSummary.fromCache(infoJson));
         }
         _songs.clear();
         _songs.addAll((cacheData['songs'] as List? ?? const [])
@@ -375,7 +381,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         final songPage = results[1] as SongPage;
         final songs = songPage.songs;
         setState(() {
-          _info = info;
+          // 详情接口可能缺 type/listId；与入口/库内元数据合并，保证 canEdit 正确
+          final library = widget.auth.findUserPlaylist(widget.playlist) ??
+              widget.playlist;
+          _info = library.mergeWithDetail(info);
           final songs = songPage.songs;
           // 增量替换：仅当网络数据与当前列表不同时才更新，
           // 避免缓存已显示后网络刷新触发 clear+addAll 导致滚动位置重置。
@@ -479,7 +488,167 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
   bool get _isInLibrary => widget.auth.isPlaylistInLibrary(_currentPlaylist);
 
-  bool get _canEdit => widget.auth.canEditPlaylist(_currentPlaylist);
+  /// 优先用库列表里的歌单元数据判断，避免详情接口字段不全导致无法删歌。
+  bool get _canEdit => widget.auth.canEditPlaylist(_libraryPlaylist);
+
+  String _songKey(Song song) =>
+      song.hash.isNotEmpty ? song.hash : song.id;
+
+  bool _isSongSelected(Song song) {
+    final key = _songKey(song);
+    if (key.isEmpty) return false;
+    if (_selectAllMode) {
+      return !_excludedKeys.contains(key);
+    }
+    return _selectedKeys.contains(key);
+  }
+
+  int get _selectedCount {
+    if (!_isSelecting) return 0;
+    if (_selectAllMode) {
+      // 未全部加载时用歌单总数估算，避免全选后显示偏小
+      if (_searchQuery.isEmpty &&
+          !_allSongsLoaded &&
+          _currentPlaylist.songCount != null) {
+        return (_currentPlaylist.songCount! - _excludedKeys.length)
+            .clamp(0, _currentPlaylist.songCount!);
+      }
+      final pool = _selectPool;
+      return pool.where((s) => !_excludedKeys.contains(_songKey(s))).length;
+    }
+    return _selectedKeys.length;
+  }
+
+  /// 当前可选池：搜索时为过滤结果，否则为已加载列表。
+  List<Song> get _selectPool => _filteredSongs;
+
+  bool get _isAllSelected {
+    final pool = _selectPool;
+    if (pool.isEmpty) return false;
+    if (_selectAllMode) {
+      return pool.every((s) => !_excludedKeys.contains(_songKey(s)));
+    }
+    return pool.every((s) => _selectedKeys.contains(_songKey(s)));
+  }
+
+  void _enterSelectMode() {
+    setState(() {
+      _isSelecting = true;
+      _selectAllMode = false;
+      _selectedKeys.clear();
+      _excludedKeys.clear();
+      if (_isSearching) {
+        _isSearching = false;
+        _searchQuery = '';
+        _searchController.clear();
+      }
+    });
+  }
+
+  void _exitSelectMode() {
+    setState(() {
+      _isSelecting = false;
+      _selectAllMode = false;
+      _selectedKeys.clear();
+      _excludedKeys.clear();
+    });
+  }
+
+  void _toggleSongSelection(Song song) {
+    final key = _songKey(song);
+    if (key.isEmpty) return;
+    setState(() {
+      if (_selectAllMode) {
+        if (_excludedKeys.contains(key)) {
+          _excludedKeys.remove(key);
+        } else {
+          _excludedKeys.add(key);
+        }
+      } else {
+        if (_selectedKeys.contains(key)) {
+          _selectedKeys.remove(key);
+        } else {
+          _selectedKeys.add(key);
+        }
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _selectAllMode = false;
+        _selectedKeys.clear();
+        _excludedKeys.clear();
+      } else {
+        // 逻辑全选：只标记模式，不把所有 id 塞进 Set
+        _selectAllMode = true;
+        _selectedKeys.clear();
+        _excludedKeys.clear();
+      }
+    });
+  }
+
+  Future<List<Song>> _resolveSelectedSongs() async {
+    if (_selectAllMode &&
+        _searchQuery.isEmpty &&
+        !_allSongsLoaded &&
+        (_currentPlaylist.songCount == null ||
+            _songs.length < (_currentPlaylist.songCount ?? 0))) {
+      Toast.info('正在加载完整列表…');
+      await _loadAllSongs();
+    }
+    final pool = _selectPool;
+    if (_selectAllMode) {
+      return pool
+          .where((s) => !_excludedKeys.contains(_songKey(s)))
+          .toList();
+    }
+    return pool.where((s) => _selectedKeys.contains(_songKey(s))).toList();
+  }
+
+  Future<void> _batchPlayNext() async {
+    final songs = await _resolveSelectedSongs();
+    if (songs.isEmpty || !mounted) return;
+    try {
+      final n = await widget.player.addSongsToQueue(songs);
+      Toast.success(n > 0 ? '已添加 $n 首到下一首播放' : '所选歌曲已在播放中');
+      _exitSelectMode();
+    } catch (e) {
+      Toast.error('添加失败：$e');
+    }
+  }
+
+  Future<void> _batchAddToPlaylist() async {
+    final songs = await _resolveSelectedSongs();
+    if (songs.isEmpty || !mounted) return;
+    final ok = await showAddSongsToPlaylistSheet(
+      context: context,
+      auth: widget.auth,
+      songs: songs,
+    );
+    if (ok && mounted) _exitSelectMode();
+  }
+
+  Future<void> _batchDelete() async {
+    if (!_canEdit) return;
+    final songs = await _resolveSelectedSongs();
+    if (songs.isEmpty || !mounted) return;
+    final confirmed = await _confirm(
+      title: '删除歌曲',
+      message: '从当前歌单删除选中的 ${songs.length} 首歌曲？',
+    );
+    if (confirmed != true) return;
+    await _runMutation(() async {
+      await widget.auth.removeSongsFromPlaylist(_libraryPlaylist, songs);
+      if (!mounted) return;
+      final keys = songs.map(_songKey).toSet();
+      setState(() {
+        _songs.removeWhere((s) => keys.contains(_songKey(s)));
+      });
+      _exitSelectMode();
+    });
+  }
 
   Future<void> _collectPlaylist() async {
     if (_isAlbum) return;
@@ -712,7 +881,14 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isSelecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _isSelecting) {
+          _exitSelectMode();
+        }
+      },
+      child: Scaffold(
       extendBody: true,
       body: AdaptiveContentPadding(
         child: Stack(
@@ -735,7 +911,24 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                 // 列表内容会透过与标题/操作按钮重叠。这里用 scaffoldBackgroundColor
                 // 作为不透明底色（与头部渐变底部一致，过渡自然），展开态被 _HeroHeader 覆盖。
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                title: _isSearching
+                leading: _isSelecting
+                    ? IconButton(
+                        tooltip: '取消',
+                        onPressed: _exitSelectMode,
+                        icon: const Icon(Icons.close_rounded),
+                      )
+                    : null,
+                title: _isSelecting
+                    ? Text(
+                        '已选 $_selectedCount 首',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                    : _isSearching
                     ? TextField(
                         controller: _searchController,
                         autofocus: true,
@@ -767,7 +960,19 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                         ),
                       ),
                 actions: [
-                  if (!_isSearching) ...[
+                  if (_isSelecting) ...[
+                    TextButton(
+                      onPressed: _selectPool.isEmpty ? null : _toggleSelectAll,
+                      child: Text(_isAllSelected ? '取消全选' : '全选'),
+                    ),
+                  ] else if (!_isSearching) ...[
+                    IconButton(
+                      tooltip: '选择',
+                      onPressed: _songs.isEmpty && !_hasMore
+                          ? null
+                          : _enterSelectMode,
+                      icon: const Icon(Icons.checklist_rounded),
+                    ),
                     IconButton(
                       tooltip: '搜索',
                       onPressed: _toggleSearch,
@@ -821,28 +1026,29 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                   ),
                 )
               else ...[
-                SliverToBoxAdapter(
-                  child: _Actions(
-                    count: _info?.songCount ?? _songs.length,
-                    loadedCount: _songs.length,
-                    sortLabel: _sortModeLabel,
-                    onSortTap: () => _showSortSheet(context),
-                    onPlay: _filteredSongs.isEmpty
-                        ? null
-                        : () async {
-                            final queue = await _ensureFullQueueForPlayback();
-                            if (!mounted || queue.isEmpty) return;
-                            widget.player.playSong(
-                              queue.first,
-                              queue: List<Song>.of(queue),
-                            );
-                          },
-                    searchQuery: _searchQuery,
-                    searchResultCount: _searchQuery.isNotEmpty
-                        ? _filteredSongs.length
-                        : null,
+                if (!_isSelecting)
+                  SliverToBoxAdapter(
+                    child: _Actions(
+                      count: _info?.songCount ?? _songs.length,
+                      loadedCount: _songs.length,
+                      sortLabel: _sortModeLabel,
+                      onSortTap: () => _showSortSheet(context),
+                      onPlay: _filteredSongs.isEmpty
+                          ? null
+                          : () async {
+                              final queue = await _ensureFullQueueForPlayback();
+                              if (!mounted || queue.isEmpty) return;
+                              widget.player.playSong(
+                                queue.first,
+                                queue: List<Song>.of(queue),
+                              );
+                            },
+                      searchQuery: _searchQuery,
+                      searchResultCount: _searchQuery.isNotEmpty
+                          ? _filteredSongs.length
+                          : null,
+                    ),
                   ),
-                ),
                 if (_isLoadingAllSongs)
                   const SliverToBoxAdapter(
                     child: Padding(
@@ -862,7 +1068,12 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                   const SliverToBoxAdapter(child: _SearchEmpty())
                 else ...[
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      4,
+                      12,
+                      _isSelecting ? 100 : 12,
+                    ),
                     sliver: SliverList.separated(
                       itemCount: _filteredSongs.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 2),
@@ -873,7 +1084,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                           index: index + 1,
                           player: widget.player,
                           canDelete: _canEdit,
+                          selecting: _isSelecting,
+                          selected: _isSongSelected(song),
                           onTap: () async {
+                            if (_isSelecting) {
+                              _toggleSongSelection(song);
+                              return;
+                            }
                             final queue = await _ensureFullQueueForPlayback();
                             if (!mounted || queue.isEmpty) return;
                             widget.player.playSong(
@@ -902,16 +1119,133 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
             ],
           ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: bottomInset + 10,
-            child: MiniPlayer(player: widget.player, auth: widget.auth),
-          ),
+          if (_isSelecting)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _SelectionBottomBar(
+                canDelete: _canEdit,
+                onPlayNext: _selectedCount > 0 ? _batchPlayNext : null,
+                onAddToPlaylist:
+                    _selectedCount > 0 ? _batchAddToPlaylist : null,
+                onDelete: _canEdit && _selectedCount > 0 ? _batchDelete : null,
+              ),
+            )
+          else
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: bottomInset + 10,
+              child: MiniPlayer(player: widget.player, auth: widget.auth),
+            ),
         ],
       ),
     ),
+    ),
   );
+  }
+}
+
+class _SelectionBottomBar extends StatelessWidget {
+  const _SelectionBottomBar({
+    required this.canDelete,
+    required this.onPlayNext,
+    required this.onAddToPlaylist,
+    required this.onDelete,
+  });
+
+  final bool canDelete;
+  final VoidCallback? onPlayNext;
+  final VoidCallback? onAddToPlaylist;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Material(
+      elevation: 8,
+      color: colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(12, 10, 12, bottom > 0 ? 8 : 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: _SelectionActionButton(
+                  icon: Icons.queue_music_rounded,
+                  label: '下一首',
+                  onTap: onPlayNext,
+                ),
+              ),
+              Expanded(
+                child: _SelectionActionButton(
+                  icon: Icons.playlist_add_rounded,
+                  label: '加歌单',
+                  onTap: onAddToPlaylist,
+                ),
+              ),
+              if (canDelete)
+                Expanded(
+                  child: _SelectionActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: '删除',
+                    danger: true,
+                    onTap: onDelete,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectionActionButton extends StatelessWidget {
+  const _SelectionActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = onTap == null
+        ? colorScheme.onSurface.withValues(alpha: .38)
+        : danger
+            ? colorScheme.error
+            : colorScheme.onSurface;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1326,6 +1660,8 @@ class _SongRow extends StatelessWidget {
     required this.index,
     required this.player,
     required this.canDelete,
+    required this.selecting,
+    required this.selected,
     required this.onTap,
     required this.onAddToPlaylist,
     required this.onDelete,
@@ -1336,6 +1672,8 @@ class _SongRow extends StatelessWidget {
   final int index;
   final PlayerController player;
   final bool canDelete;
+  final bool selecting;
+  final bool selected;
   final VoidCallback onTap;
   final VoidCallback onAddToPlaylist;
   final VoidCallback onDelete;
@@ -1350,7 +1688,7 @@ class _SongRow extends StatelessWidget {
       child: AnimatedBuilder(
         animation: player,
         builder: (context, _) {
-          final active = player.currentSong?.hash == song.hash;
+          final active = !selecting && player.currentSong?.hash == song.hash;
           final activeColor = colorScheme.primary;
           return InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -1359,43 +1697,58 @@ class _SongRow extends StatelessWidget {
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
             decoration: BoxDecoration(
-              color: active
-                  ? activeColor.withValues(alpha: .09)
-                  : Colors.transparent,
+              color: selecting
+                  ? (selected
+                      ? activeColor.withValues(alpha: .08)
+                      : Colors.transparent)
+                  : active
+                      ? activeColor.withValues(alpha: .09)
+                      : Colors.transparent,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               children: [
+                if (selecting) ...[
+                  Checkbox(
+                    value: selected,
+                    onChanged: (_) => onTap(),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 SizedBox.square(
                   dimension: 50,
                   child: Stack(
                     children: [
                       Artwork(url: song.coverUrl, size: 50, borderRadius: 9),
-                      Positioned(
-                        left: 4,
-                        top: 4,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .42),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
+                      if (!selecting)
+                        Positioned(
+                          left: 4,
+                          top: 4,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: .42),
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Text(
-                              '$index',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: Colors.white.withValues(alpha: .78),
-                                    fontWeight: FontWeight.w800,
-                                    height: 1.1,
-                                  ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              child: Text(
+                                '$index',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color:
+                                          Colors.white.withValues(alpha: .78),
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.1,
+                                    ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
                       if (active)
                         Positioned(
                           right: 4,
@@ -1447,67 +1800,71 @@ class _SongRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  formatDuration(song.duration),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: active
-                        ? activeColor.withValues(alpha: .72)
-                        : colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
+                if (!selecting) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    formatDuration(song.duration),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: active
+                          ? activeColor.withValues(alpha: .72)
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: '更多',
-                  onPressed: () {
-                    showSongActionSheet(
-                      context: context,
-                      song: song,
-                      actions: [
-                        SongSheetAction(
-                          icon: Icons.queue_music_rounded,
-                          title: '下一首播放',
-                          onTap: () => addSongToQueueWithFeedback(
-                            context: context,
-                            player: player,
-                            song: song,
-                          ),
-                        ),
-                        SongSheetAction(
-                          icon: Icons.playlist_add_rounded,
-                          title: '添加到歌单',
-                          onTap: onAddToPlaylist,
-                        ),
-                        SongSheetAction(
-                          icon: Icons.person_rounded,
-                          title: '查看歌手',
-                          onTap: onViewArtist,
-                        ),
-                        if (canDelete)
+                  IconButton(
+                    tooltip: '更多',
+                    onPressed: () {
+                      showSongActionSheet(
+                        context: context,
+                        song: song,
+                        actions: [
                           SongSheetAction(
-                            icon: Icons.delete_outline_rounded,
-                            title: '从歌单删除',
-                            danger: true,
-                            onTap: onDelete,
-                          ),
-                        if (player.downloadController != null)
-                          SongSheetAction(
-                            icon: player.downloadController!.isDownloaded(song)
-                                ? Icons.download_done_rounded
-                                : Icons.download_rounded,
-                            title: player.downloadController!.isDownloaded(song)
-                                ? '已下载'
-                                : '下载',
-                            onTap: () => player.downloadController!.download(
-                              song,
-                              player.audioQuality,
+                            icon: Icons.queue_music_rounded,
+                            title: '下一首播放',
+                            onTap: () => addSongToQueueWithFeedback(
+                              context: context,
+                              player: player,
+                              song: song,
                             ),
                           ),
-                      ],
-                    );
-                  },
-                  icon: const Icon(Icons.more_horiz_rounded),
-                ),
+                          SongSheetAction(
+                            icon: Icons.playlist_add_rounded,
+                            title: '添加到歌单',
+                            onTap: onAddToPlaylist,
+                          ),
+                          SongSheetAction(
+                            icon: Icons.person_rounded,
+                            title: '查看歌手',
+                            onTap: onViewArtist,
+                          ),
+                          if (canDelete)
+                            SongSheetAction(
+                              icon: Icons.delete_outline_rounded,
+                              title: '从歌单删除',
+                              danger: true,
+                              onTap: onDelete,
+                            ),
+                          if (player.downloadController != null)
+                            SongSheetAction(
+                              icon: player.downloadController!
+                                      .isDownloaded(song)
+                                  ? Icons.download_done_rounded
+                                  : Icons.download_rounded,
+                              title: player.downloadController!
+                                      .isDownloaded(song)
+                                  ? '已下载'
+                                  : '下载',
+                              onTap: () => player.downloadController!.download(
+                                song,
+                                player.audioQuality,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                    icon: const Icon(Icons.more_horiz_rounded),
+                  ),
+                ],
               ],
             ),
           ),

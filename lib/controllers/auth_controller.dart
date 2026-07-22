@@ -60,23 +60,17 @@ class AuthController extends ChangeNotifier {
     try {
       Map<String, dynamic>? resp;
       if (liked) {
-        final fileId = _hashToFileId[song.hash];
+        var fileId = _resolvePlaylistFileId(song);
         if (fileId == null) {
           await _syncLikedSongs();
-          final retried = _hashToFileId[song.hash];
-          if (retried == null) return;
-          resp = await _api.removeSongsFromPlaylist(
-            targetListId,
-            [song],
-            fileIds: [retried],
-          );
-        } else {
-          resp = await _api.removeSongsFromPlaylist(
-            targetListId,
-            [song],
-            fileIds: [fileId],
-          );
+          fileId = _hashToFileId[song.hash];
         }
+        if (fileId == null) return;
+        resp = await _api.removeSongsFromPlaylist(
+          targetListId,
+          [song],
+          fileIds: [fileId],
+        );
         _likedHashes.remove(song.hash);
         _hashToFileId.remove(song.hash);
       } else {
@@ -156,7 +150,7 @@ class AuthController extends ChangeNotifier {
 
   bool canEditPlaylist(PlaylistSummary playlist) {
     final item = findUserPlaylist(playlist) ?? playlist;
-    return item.isCreatedPlaylist;
+    return item.canEditTracks;
   }
 
   Future<void> createPlaylist(String name, {bool private = false}) async {
@@ -190,18 +184,37 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> addSongToPlaylist(PlaylistSummary playlist, Song song) async {
+    await addSongsToPlaylist(playlist, [song]);
+  }
+
+  /// 批量添加（一次 API 请求）。
+  Future<void> addSongsToPlaylist(
+    PlaylistSummary playlist,
+    List<Song> songs,
+  ) async {
+    if (songs.isEmpty) return;
     final listId = _playlistListId(playlist);
     if (listId == null) return;
     await _run(() async {
-      final resp = await _api.addToPlaylist(listId, song);
+      final resp = await _api.addSongsToPlaylist(listId, songs);
       playlists = await _loadUserPlaylistsWithCache();
       if (playlist.isLikedPlaylist) {
-        _likedHashes.add(song.hash);
-        if (resp != null) {
-          final info = resp['info'];
-          if (info is List && info.isNotEmpty) {
-            final fid = info[0]['fileid'];
-            if (fid is int) _hashToFileId[song.hash] = fid;
+        for (final song in songs) {
+          if (song.hash.isNotEmpty) {
+            _likedHashes.add(song.hash);
+          }
+        }
+        final info = resp?['info'];
+        if (info is List) {
+          for (var i = 0; i < info.length && i < songs.length; i++) {
+            final item = info[i];
+            if (item is Map) {
+              final fid = item['fileid'];
+              final hash = songs[i].hash;
+              if (fid is int && hash.isNotEmpty) {
+                _hashToFileId[hash] = fid;
+              }
+            }
           }
         }
         await _persistLikedHashes();
@@ -213,23 +226,60 @@ class AuthController extends ChangeNotifier {
     PlaylistSummary playlist,
     Song song,
   ) async {
+    await removeSongsFromPlaylist(playlist, [song]);
+  }
+
+  /// 批量从歌单删除（一次 API 请求）。
+  Future<void> removeSongsFromPlaylist(
+    PlaylistSummary playlist,
+    List<Song> songs,
+  ) async {
+    if (songs.isEmpty) return;
     final target = findUserPlaylist(playlist) ?? playlist;
     final listId = _playlistListId(target);
     if (listId == null) return;
     await _run(() async {
-      final fileId = _hashToFileId[song.hash];
+      if (target.isLikedPlaylist) {
+        final missing = songs.any((s) => _resolvePlaylistFileId(s) == null);
+        if (missing) {
+          await _syncLikedSongs();
+        }
+      }
+      final fileIds = <int>[];
+      for (final song in songs) {
+        final fid = _resolvePlaylistFileId(song);
+        if (fid != null) fileIds.add(fid);
+      }
+      if (fileIds.isEmpty) {
+        throw Exception('无法定位歌曲在歌单中的 fileid');
+      }
       await _api.removeSongsFromPlaylist(
         listId,
-        [song],
-        fileIds: fileId != null ? [fileId] : null,
+        songs,
+        fileIds: fileIds,
       );
       playlists = await _loadUserPlaylistsWithCache();
       if (target.isLikedPlaylist) {
-        _likedHashes.remove(song.hash);
-        _hashToFileId.remove(song.hash);
+        for (final song in songs) {
+          _likedHashes.remove(song.hash);
+          _hashToFileId.remove(song.hash);
+        }
         await _persistLikedHashes();
       }
     });
+  }
+
+  int? _resolvePlaylistFileId(Song song) {
+    final mapped = _hashToFileId[song.hash];
+    if (mapped != null && mapped != 0) {
+      return mapped;
+    }
+    // 歌单曲目 Song.fromPlaylist 的 id 即为 fileid
+    final fromId = int.tryParse(song.id);
+    if (fromId != null && fromId != 0) {
+      return fromId;
+    }
+    return null;
   }
 
   Future<void> restore() async {

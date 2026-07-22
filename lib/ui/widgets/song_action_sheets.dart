@@ -244,11 +244,25 @@ class _GridItem extends StatelessWidget {
   }
 }
 
-Future<void> showAddToPlaylistSheet({
+Future<bool> showAddToPlaylistSheet({
   required BuildContext context,
   required AuthController auth,
   required Song song,
+}) {
+  return showAddSongsToPlaylistSheet(
+    context: context,
+    auth: auth,
+    songs: [song],
+  );
+}
+
+/// 返回是否添加成功。
+Future<bool> showAddSongsToPlaylistSheet({
+  required BuildContext context,
+  required AuthController auth,
+  required List<Song> songs,
 }) async {
+  if (songs.isEmpty) return false;
   final playlists = auth.createdPlaylists
       .where((playlist) => playlist.listId?.isNotEmpty == true)
       .toList();
@@ -266,7 +280,9 @@ Future<void> showAddToPlaylistSheet({
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '添加到歌单',
+                songs.length == 1
+                    ? '添加到歌单'
+                    : '添加 ${songs.length} 首到歌单',
                 style: Theme.of(
                   sheetContext,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
@@ -319,16 +335,22 @@ Future<void> showAddToPlaylistSheet({
     },
   );
 
-  if (picked == null || !context.mounted) return;
+  if (picked == null || !context.mounted) return false;
 
   try {
-    await auth.addSongToPlaylist(picked, song);
+    await auth.addSongsToPlaylist(picked, songs);
     if (auth.errorMessage != null) {
       throw Exception(auth.errorMessage);
     }
-    Toast.success('已添加到 ${picked.title}');
+    Toast.success(
+      songs.length == 1
+          ? '已添加到 ${picked.title}'
+          : '已添加 ${songs.length} 首到 ${picked.title}',
+    );
+    return true;
   } catch (error) {
     Toast.error('添加失败：$error');
+    return false;
   }
 }
 

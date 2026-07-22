@@ -503,31 +503,46 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<bool> addToQueue(Song song) async {
-    final songKey = song.hash.isNotEmpty ? song.hash : song.id;
+    final added = await addSongsToQueue([song]);
+    return added > 0;
+  }
+
+  /// 批量插入到「下一首」位置，只更新一次队列与系统媒体会话。
+  Future<int> addSongsToQueue(List<Song> songs) async {
+    if (songs.isEmpty) return 0;
+
     final currentSongKey = currentSong == null
         ? ''
         : (currentSong!.hash.isNotEmpty ? currentSong!.hash : currentSong!.id);
-    if (songKey.isNotEmpty && songKey == currentSongKey) {
-      return false;
+    final nextQueue = List<Song>.of(queue);
+    final seen = <String>{};
+    final toInsert = <Song>[];
+
+    for (final song in songs) {
+      final songKey = song.hash.isNotEmpty ? song.hash : song.id;
+      if (songKey.isEmpty || songKey == currentSongKey) continue;
+      if (!seen.add(songKey)) continue;
+
+      final existingIndex = nextQueue.indexWhere((item) {
+        final itemKey = item.hash.isNotEmpty ? item.hash : item.id;
+        return itemKey.isNotEmpty && itemKey == songKey;
+      });
+      if (existingIndex >= 0) {
+        nextQueue.removeAt(existingIndex);
+      }
+      toInsert.add(song);
     }
 
-    final nextQueue = List<Song>.of(queue);
-    final existingIndex = nextQueue.indexWhere((item) {
-      final itemKey = item.hash.isNotEmpty ? item.hash : item.id;
-      return itemKey.isNotEmpty && itemKey == songKey;
-    });
-    if (existingIndex >= 0) {
-      nextQueue.removeAt(existingIndex);
-    }
+    if (toInsert.isEmpty) return 0;
 
     if (nextQueue.isEmpty) {
-      nextQueue.add(song);
+      nextQueue.addAll(toInsert);
     } else {
       final index = currentIndex;
       final insertIndex = index < 0
           ? 0
           : (index + 1).clamp(0, nextQueue.length);
-      nextQueue.insert(insertIndex, song);
+      nextQueue.insertAll(insertIndex, toInsert);
     }
 
     queue = nextQueue;
@@ -537,7 +552,7 @@ class PlayerController extends ChangeNotifier {
       currentSong: currentSong,
     );
     notifyListeners();
-    return true;
+    return toInsert.length;
   }
 
   Future<void> setAudioQuality(
