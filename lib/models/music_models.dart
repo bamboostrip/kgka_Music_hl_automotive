@@ -214,6 +214,94 @@ class UpgradeVipResult {
   }
 }
 
+class BusiVipInfo {
+  const BusiVipInfo({
+    this.isVip,
+    this.productType,
+    this.busiType,
+    this.vipBeginTime,
+    this.vipEndTime,
+    this.vipClearday,
+  });
+
+  final int? isVip;
+  final String? productType;
+  final String? busiType;
+  final String? vipBeginTime;
+  final String? vipEndTime;
+  final String? vipClearday;
+
+  bool get active => isVip == 1;
+
+  String? get typeLabel => switch (productType) {
+    'svip' => '概念版VIP',
+    'tvip' => '畅听VIP',
+    _ => null,
+  };
+
+  factory BusiVipInfo.fromJson(Map<String, dynamic> json) {
+    return BusiVipInfo(
+      isVip: asInt(json['is_vip']),
+      productType: asString(json['product_type']),
+      busiType: asString(json['busi_type']),
+      vipBeginTime: asString(json['vip_begin_time']),
+      vipEndTime: asString(json['vip_end_time']),
+      vipClearday: asString(json['vip_clearday']),
+    );
+  }
+}
+
+class UserVipInfo {
+  const UserVipInfo({
+    this.isVip,
+    this.vipType,
+    this.busiVip = const [],
+    this.isSuperVip,
+    this.isConceptVip,
+  });
+
+  final int? isVip;
+  final int? vipType;
+  final List<BusiVipInfo> busiVip;
+  final bool? isSuperVip;
+  final bool? isConceptVip;
+
+  bool get hasVip =>
+      isVip == 1 ||
+      (isSuperVip ?? false) ||
+      (isConceptVip ?? false) ||
+      activeVip != null;
+
+  BusiVipInfo? get activeVip {
+    for (final v in busiVip) {
+      if (v.active) return v;
+    }
+    return null;
+  }
+
+  String? get expiryDisplay {
+    final vip = activeVip;
+    if (vip == null) return null;
+    final end = vip.vipEndTime;
+    if (end == null || end.isEmpty) return null;
+    final label = vip.typeLabel ?? 'VIP';
+    return '$label · $end 到期';
+  }
+
+  factory UserVipInfo.fromJson(Map<String, dynamic> json) {
+    return UserVipInfo(
+      isVip: asInt(json['is_vip']),
+      vipType: asInt(json['vip_type']),
+      busiVip: asList(json['busi_vip'])
+          .whereType<Map>()
+          .map((e) => BusiVipInfo.fromJson(asMap(e)))
+          .toList(),
+      isSuperVip: json['isSuperVip'] as bool?,
+      isConceptVip: json['isConceptVip'] as bool?,
+    );
+  }
+}
+
 class PlaylistSummary {
   const PlaylistSummary({
     required this.id,

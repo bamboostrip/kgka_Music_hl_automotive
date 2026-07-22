@@ -264,6 +264,9 @@ class _AccountRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final profile = auth.profile;
+    final vipInfo = auth.vipInfo;
+    final vipText = vipInfo?.expiryDisplay;
+    final isVip = vipInfo?.hasVip ?? false;
 
     return Row(
       children: [
@@ -284,16 +287,43 @@ class _AccountRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                profile?.nickname ?? 'KA Music 用户',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      profile?.nickname ?? 'KA Music 用户',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  if (isVip) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFD54F), Color(0xFFFFB300)],
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'VIP',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF5D4037),
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               Text(
-                '已登录',
+                vipText ?? '已登录',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),

@@ -437,6 +437,7 @@ impl KugouEngine {
                 .await
             }
 
+            ("GET", "/user/vip/detail") => user::user_vip_detail(client, session).await,
             ("GET", "/youth/month/vip/record") => youth::month_vip_record(client, session).await,
             ("GET", "/youth/day/vip") => youth::receive_one_day_vip(client, session).await,
             ("GET", "/youth/day/vip/upgrade") => youth::upgrade_vip(client, session).await,

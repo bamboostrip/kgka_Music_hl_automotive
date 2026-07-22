@@ -282,6 +282,11 @@ class MusicApi {
     return VipReceiveHistory.fromJson(json);
   }
 
+  Future<UserVipInfo> userVipDetail() async {
+    final json = asMap(await _client.get('/user/vip/detail'));
+    return UserVipInfo.fromJson(json);
+  }
+
   Future<OneDayVipResult> dailyVip() async {
     final json = asMap(await _client.get('/youth/day/vip'));
     return OneDayVipResult.fromJson(json);

@@ -36,7 +36,6 @@ pub async fn user_detail(client: &reqwest::Client, session: &KgSession) -> AppRe
     transport::send(client, session, &req).await
 }
 
-#[allow(dead_code)]
 pub async fn user_vip_detail(client: &reqwest::Client, session: &KgSession) -> AppResult<Value> {
     let req = KgRequest::get("/v1/get_union_vip")
         .base_url("https://kugouvip.kugou.com")

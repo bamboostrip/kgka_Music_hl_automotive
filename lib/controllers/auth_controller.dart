@@ -32,6 +32,7 @@ class AuthController extends ChangeNotifier {
   String? errorMessage;
   LoginSession? session;
   UserProfile? profile;
+  UserVipInfo? vipInfo;
   List<PlaylistSummary> playlists = const [];
 
   final Set<String> _likedHashes = {};
@@ -492,6 +493,11 @@ class AuthController extends ChangeNotifier {
       if (profile != null) {
         await _cacheService.write(_userCacheKey, profile!.toCache());
       }
+      try {
+        vipInfo = await _api.userVipDetail();
+      } catch (_) {
+        vipInfo = null;
+      }
       playlists = await _loadUserPlaylistsWithCache();
       await _syncLikedSongs();
     }, silent: silent);
@@ -507,6 +513,7 @@ class AuthController extends ChangeNotifier {
         final emptyCountKey = _playlistEmptyCountKey;
         session = null;
         profile = null;
+        vipInfo = null;
         playlists = const [];
         _likedHashes.clear();
         _api.setSession(null);
