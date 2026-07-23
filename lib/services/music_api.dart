@@ -777,6 +777,33 @@ class MusicApi {
         }
       }
     }
+    // 搜索接口不返回头像，通过 artistDetail 并行补全
+    final needAvatar = artists.where((a) => a.id.isNotEmpty && (a.avatarUrl == null || a.avatarUrl!.isEmpty)).toList();
+    if (needAvatar.isNotEmpty) {
+      final details = await Future.wait(
+        needAvatar.map((a) async {
+          try {
+            return await artistDetail(a.id);
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      for (var i = 0; i < needAvatar.length; i++) {
+        final detail = details[i];
+        if (detail != null && detail.avatarUrl != null && detail.avatarUrl!.isNotEmpty) {
+          final idx = artists.indexOf(needAvatar[i]);
+          if (idx >= 0) {
+            artists[idx] = SearchArtistResult(
+              id: needAvatar[i].id,
+              name: needAvatar[i].name,
+              avatarUrl: detail.avatarUrl,
+              songCount: needAvatar[i].songCount,
+            );
+          }
+        }
+      }
+    }
     return artists;
   }
 
