@@ -1550,6 +1550,36 @@ class PlayerController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// 尝试播放已恢复的当前歌曲。
+  ///
+  /// 播放失败时按播放模式处理：
+  /// - [PlaybackMode.singleLoop]：不切歌，保留错误信息
+  /// - [PlaybackMode.playlistLoop] / [PlaybackMode.shuffle]：自动切下一首重试
+  ///
+  /// 返回 true 表示成功开始播放。
+  Future<bool> resumePlayback() async {
+    if (currentSong == null || queue.isEmpty) return false;
+
+    final maxAttempts = queue.length;
+    var songToPlay = currentSong!;
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      errorMessage = null;
+      await playSong(songToPlay, queue: queue);
+      if (errorMessage == null) return true;
+
+      if (playbackMode == PlaybackMode.singleLoop) {
+        return false;
+      }
+
+      final nextSong = _nextSong();
+      if (nextSong == null) return false;
+      songToPlay = nextSong;
+    }
+
+    return false;
+  }
+
   List<int> _restoreEqualizerLevels(String? raw) {
     if (raw == null || raw.isEmpty) {
       return List<int>.of(_defaultEqualizerLevels);
