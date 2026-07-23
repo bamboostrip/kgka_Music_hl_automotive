@@ -991,6 +991,7 @@ class Song {
                 })
             .toList(),
         if (isCloudDrive) 'isCloudDrive': true,
+        if (source != SongSource.kugou) 'source': source.name,
       };
 
   factory Song.fromCache(Map<String, dynamic> json) {
@@ -1014,6 +1015,12 @@ class Song {
           .where((artist) => artist.name.isNotEmpty)
           .toList(),
       isCloudDrive: json['isCloudDrive'] == true,
+      source: json['source'] is String
+          ? SongSource.values.firstWhere(
+              (s) => s.name == json['source'],
+              orElse: () => SongSource.kugou,
+            )
+          : SongSource.kugou,
     );
   }
 }
