@@ -95,6 +95,7 @@ class PlayerController extends ChangeNotifier {
 
   PlayerController(this._api, this._audioHandler) {
     unawaited(_restoreSettings());
+    unawaited(_restorePlaybackState());
     _audioHandler.attachTransportControls(onNext: next, onPrevious: previous);
     _desktopLyrics.setVisibilityChangedHandler(_handleDesktopLyricsVisibility);
     _positionSub = audioPlayer.positionStream.listen((value) {
@@ -228,6 +229,7 @@ class PlayerController extends ChangeNotifier {
   /// 是否开启音质智能切换（播放失败时自动降级重试）。
   bool smartQualityEnabled = false;
   bool autoPlayOnStartupEnabled = false;
+  bool hasRestoredPlaybackState = false;
   double playbackSpeed = 1.0;
   bool equalizerEnabled = false;
   List<int> equalizerLevels = List<int>.of(_defaultEqualizerLevels);
@@ -1515,6 +1517,37 @@ class PlayerController extends ChangeNotifier {
     unawaited(_applyEqualizer());
     unawaited(_applyBassBoost());
     notifyListeners();
+  }
+
+  Future<void> _restorePlaybackState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playbackStateKey);
+    if (raw == null || raw.isEmpty) return;
+
+    try {
+      final state = jsonDecode(raw) as Map<String, dynamic>;
+      final queueList = (state['queue'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(Song.fromCache)
+          .toList();
+      if (queueList.isEmpty) return;
+
+      queue = queueList;
+      final index = (state['currentIndex'] as int? ?? 0)
+          .clamp(0, queueList.length - 1);
+      currentSong = queueList[index];
+
+      final modeName = state['playbackMode'] as String?;
+      if (modeName != null) {
+        playbackMode = PlaybackMode.values.firstWhere(
+          (m) => m.name == modeName,
+          orElse: () => PlaybackMode.playlistLoop,
+        );
+      }
+
+      hasRestoredPlaybackState = true;
+      notifyListeners();
+    } catch (_) {}
   }
 
   List<int> _restoreEqualizerLevels(String? raw) {
