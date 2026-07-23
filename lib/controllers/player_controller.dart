@@ -51,6 +51,8 @@ class PlayerController extends ChangeNotifier {
   static const _autoPlayOnStartupSettingKey = 'settings.auto_play_on_startup';
   static const _autoPlayOnDeviceConnectedSettingKey =
       'settings.auto_play_on_device_connected';
+  static const _playbackStateKey = 'playback_state';
+  static const _playbackStateMaxQueueSize = 200;
   static const _listenTimeReportInterval = Duration(minutes: 30);
   static const _listenTimeCheckInterval = Duration(minutes: 1);
   static const _defaultEqualizerLevels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -243,6 +245,7 @@ class PlayerController extends ChangeNotifier {
   Timer? _autoResumeTimer;
   Duration? sleepTimerRemaining;
   Timer? _sleepTimer;
+  Timer? _saveStateTimer;
   DateTime? _sleepTimerEnd;
   bool _sleepFinishCurrentSong = false;
   bool _sleepFinishCurrentSongOption = false;
@@ -325,6 +328,7 @@ class PlayerController extends ChangeNotifier {
       PlaybackMode.shuffle => PlaybackMode.singleLoop,
       PlaybackMode.singleLoop => PlaybackMode.playlistLoop,
     };
+    _scheduleSavePlaybackState();
     notifyListeners();
     return playbackMode;
   }
@@ -426,6 +430,7 @@ class PlayerController extends ChangeNotifier {
         isPreparing = false;
         notifyListeners();
       }
+      _scheduleSavePlaybackState();
     }
   }
 
@@ -517,6 +522,7 @@ class PlayerController extends ChangeNotifier {
       queueIndex: currentIndex,
       currentSong: currentSong,
     );
+    _scheduleSavePlaybackState();
     notifyListeners();
   }
 
@@ -563,6 +569,7 @@ class PlayerController extends ChangeNotifier {
       queueIndex: currentIndex,
       currentSong: currentSong,
     );
+    _scheduleSavePlaybackState();
     notifyListeners();
     return toInsert.length;
   }
@@ -1435,6 +1442,26 @@ class PlayerController extends ChangeNotifier {
     unawaited(_audioHandler.pause());
   }
 
+  void _scheduleSavePlaybackState() {
+    _saveStateTimer?.cancel();
+    _saveStateTimer = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_savePlaybackState());
+    });
+  }
+
+  Future<void> _savePlaybackState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final state = {
+      'queue': queue
+          .take(_playbackStateMaxQueueSize)
+          .map((s) => s.toCache())
+          .toList(),
+      'currentIndex': currentIndex,
+      'playbackMode': playbackMode.name,
+    };
+    await prefs.setString(_playbackStateKey, jsonEncode(state));
+  }
+
   Future<void> _restoreSettings() async {
     final prefs = await SharedPreferences.getInstance();
     addListeningTimeEnabled =
@@ -1830,6 +1857,7 @@ class PlayerController extends ChangeNotifier {
     _becomingNoisySub?.cancel();
     _devicesSub?.cancel();
     _completionFallbackTimer?.cancel();
+    _saveStateTimer?.cancel();
     positionListenable.dispose();
     unawaited(
       _audioEffects.configureEqualizer(
