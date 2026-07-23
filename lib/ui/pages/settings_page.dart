@@ -136,7 +136,7 @@ class SettingsPage extends StatelessWidget {
                       icon: Icons.power_settings_new_rounded,
                       iconColor: colorScheme.primary,
                       title: '开机自启播放',
-                      subtitle: '打开应用时自动加载并播放推荐歌单',
+                      subtitle: '打开应用时自动播放上次的歌曲',
                       value: player.autoPlayOnStartupEnabled,
                       onChanged: player.setAutoPlayOnStartupEnabled,
                     ),
