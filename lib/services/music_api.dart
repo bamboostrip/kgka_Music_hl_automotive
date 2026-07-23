@@ -207,6 +207,79 @@ class MusicApi {
     return DailyRecommend.fromJson(json);
   }
 
+  // -------------------------------------------------------------------------
+  // 排行榜 (Rank)
+  // -------------------------------------------------------------------------
+
+  Future<List<RankCategory>> rankList({int withSong = 0}) async {
+    final json = asMap(
+      await _client.get('/rank/list', {'withsong': withSong}),
+    );
+    final data = asMap(json['data']);
+    final items = asList(
+      data['info'] ?? json['info'] ?? json['list'] ?? json['ranks'],
+    );
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(RankCategory.fromJson)
+        .where((c) => c.rankId > 0)
+        .toList();
+  }
+
+  Future<RankSongPage> rankAudio({
+    required int rankId,
+    int rankCid = 0,
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    final raw = await _client.get('/rank/audio', {
+      'rankid': rankId,
+      'rank_cid': rankCid,
+      'page': page,
+      'pagesize': pageSize,
+    });
+    final List items;
+    if (raw is List) {
+      items = raw;
+    } else {
+      final json = asMap(raw);
+      final nested = asMap(json['data']);
+      items = asList(
+        json['songlist'] ??
+            json['info'] ??
+            json['songs'] ??
+            json['list'] ??
+            json['items'] ??
+            nested['songlist'] ??
+            nested['info'] ??
+            nested['songs'] ??
+            nested['list'],
+      );
+    }
+    final songs = items
+        .whereType<Map<String, dynamic>>()
+        .map(Song.fromRank)
+        .where((s) => s.hash.isNotEmpty)
+        .toList();
+    final total = raw is List
+        ? raw.length
+        : asInt(asMap(raw)['total']) ?? songs.length;
+    return RankSongPage(songs: songs, total: total);
+  }
+
+  Future<List<Song>> newSongs({int rankId = 0, int page = 1}) async {
+    final json = asMap(
+      await _client.get('/top/song', {'rank_id': rankId, 'page': page}),
+    );
+    final data = asMap(json['data']);
+    final items = asList(data['songs'] ?? data['info'] ?? data['list']);
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(Song.fromRank)
+        .where((s) => s.hash.isNotEmpty)
+        .toList();
+  }
+
   Future<List<AlbumShopItem>> albumShop({int page = 1, int pageSize = 30}) async {
     final json = asMap(
       await _client.get('/album/shop', {'page': page, 'pagesize': pageSize}),
@@ -676,6 +749,96 @@ class MusicApi {
         .whereType<Map<String, dynamic>>()
         .map(Song.fromSearch)
         .where((song) => song.hash.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<SearchArtistResult>> searchArtists(
+    String keywords, {
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    // 酷狗 complexsearch 不支持 singer 类型搜索，
+    // 改为搜索歌曲后从结果中提取去重歌手。
+    final songs = await searchSongs(keywords, page: page, pageSize: pageSize);
+    final seen = <String>{};
+    final artists = <SearchArtistResult>[];
+    for (final song in songs) {
+      for (final artist in song.artists) {
+        if (artist.id.isNotEmpty && seen.add(artist.id)) {
+          artists.add(SearchArtistResult(
+            id: artist.id,
+            name: artist.name,
+            avatarUrl: artist.avatarUrl,
+          ));
+        } else if (artist.id.isEmpty &&
+            artist.name.isNotEmpty &&
+            seen.add('name:${artist.name}')) {
+          artists.add(SearchArtistResult(id: '', name: artist.name));
+        }
+      }
+    }
+    // 搜索接口不返回头像，通过 artistDetail 并行补全
+    final needAvatar = artists.where((a) => a.id.isNotEmpty && (a.avatarUrl == null || a.avatarUrl!.isEmpty)).toList();
+    if (needAvatar.isNotEmpty) {
+      final details = await Future.wait(
+        needAvatar.map((a) async {
+          try {
+            return await artistDetail(a.id);
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      for (var i = 0; i < needAvatar.length; i++) {
+        final detail = details[i];
+        if (detail != null && detail.avatarUrl != null && detail.avatarUrl!.isNotEmpty) {
+          final idx = artists.indexOf(needAvatar[i]);
+          if (idx >= 0) {
+            artists[idx] = SearchArtistResult(
+              id: needAvatar[i].id,
+              name: needAvatar[i].name,
+              avatarUrl: detail.avatarUrl,
+              songCount: needAvatar[i].songCount,
+            );
+          }
+        }
+      }
+    }
+    return artists;
+  }
+
+  Future<List<SearchAlbumResult>> searchAlbums(
+    String keywords, {
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    final raw = await _client.get('/search', {
+      'keywords': keywords,
+      'page': page,
+      'pagesize': pageSize,
+      'type': 'album',
+    });
+    final List items;
+    if (raw is List) {
+      items = raw;
+    } else {
+      final json = asMap(raw);
+      // 兼容多种可能的字段名和嵌套结构
+      items = asList(
+        json['info'] ??
+            json['album'] ??
+            json['albums'] ??
+            json['list'] ??
+            json['lists'] ??
+            json['items'] ??
+            asMap(json['album'])['info'] ??
+            asMap(json['data'])['info'],
+      );
+    }
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(SearchAlbumResult.fromJson)
+        .where((a) => a.albumId.isNotEmpty)
         .toList();
   }
 

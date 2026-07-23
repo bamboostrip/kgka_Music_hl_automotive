@@ -890,6 +890,89 @@ class Song {
     );
   }
 
+  factory Song.fromRank(Map<String, dynamic> json) {
+    // 兼容两种格式：
+    // 1. 扁平格式：hash/filename/singername 在顶层
+    // 2. 嵌套格式：base/audio_info/album_info（与 fromAlbum 相同）
+    final base = asMap(json['base']);
+    final audioInfo = asMap(json['audio_info']);
+    final albumInfo = asMap(json['album_info']);
+
+    final artists = parseArtists(
+      json,
+      fallbackName:
+          asString(json['singername']) ??
+          asString(json['author_name']) ??
+          asString(json['singer_name']) ??
+          asString(base['author_name']),
+    );
+    final artistName = artists.map((a) => a.name).join(' / ');
+
+    final hash =
+        asString(json['hash']) ??
+        asString(json['hash_320']) ??
+        asString(json['hash_flac']) ??
+        asString(json['hash_128']) ??
+        asString(audioInfo['hash']) ??
+        asString(audioInfo['hash_320']) ??
+        asString(audioInfo['hash_flac']) ??
+        asString(audioInfo['hash_128']) ??
+        asString(audioInfo['hash_high']) ??
+        '';
+
+    return Song(
+      id:
+          asString(json['album_audio_id']) ??
+          asString(json['audio_id']) ??
+          asString(audioInfo['hash_128']) ??
+          asString(audioInfo['hash']) ??
+          asString(json['hash']) ??
+          '',
+      title:
+          asString(json['filename']) ??
+          asString(json['audio_name']) ??
+          asString(json['songname']) ??
+          asString(json['name']) ??
+          asString(base['audio_name']) ??
+          '未知歌曲',
+      artist: artistName.isNotEmpty
+          ? artistName
+          : asString(json['singername']) ??
+                asString(json['author_name']) ??
+                asString(base['author_name']) ??
+                '未知艺人',
+      hash: hash,
+      albumId:
+          asString(json['album_id']) ??
+          asString(base['album_id']),
+      albumAudioId:
+          asString(json['album_audio_id']) ??
+          asString(audioInfo['hash_128']) ??
+          asString(audioInfo['hash']) ??
+          asString(json['hash']),
+      albumName:
+          asString(json['album_name']) ??
+          asString(albumInfo['album_name']),
+      coverUrl: normalizeImageUrl(
+        asString(json['sizable_cover']) ??
+            asString(json['img']) ??
+            asString(json['cover']) ??
+            asString(albumInfo['sizable_cover']) ??
+            asString(albumInfo['cover']),
+      ),
+      artists: artists,
+      duration:
+          durationFromSeconds(json['time_length']) ??
+          durationFromMilliseconds(json['timelen']) ??
+          durationFromMilliseconds(json['timelength']) ??
+          durationFromMilliseconds(audioInfo['duration']) ??
+          durationFromMilliseconds(audioInfo['duration_128']) ??
+          durationFromMilliseconds(audioInfo['duration_320']) ??
+          durationFromMilliseconds(audioInfo['duration_flac']) ??
+          durationFromMilliseconds(audioInfo['duration_high']),
+    );
+  }
+
   Map<String, dynamic> toCache() => {
         'id': id,
         'title': title,
@@ -1808,6 +1891,134 @@ class SearchHotCategory {
           .toList(),
     );
   }
+}
+
+class SearchArtistResult {
+  const SearchArtistResult({
+    required this.id,
+    required this.name,
+    this.avatarUrl,
+    this.songCount = 0,
+  });
+
+  final String id;
+  final String name;
+  final String? avatarUrl;
+  final int songCount;
+
+  factory SearchArtistResult.fromJson(Map<String, dynamic> json) {
+    return SearchArtistResult(
+      id:
+          asString(json['singerid']) ??
+          asString(json['singer_id']) ??
+          asString(json['author_id']) ??
+          asString(json['id']) ??
+          '',
+      name:
+          asString(json['singername']) ??
+          asString(json['singer_name']) ??
+          asString(json['author_name']) ??
+          asString(json['name']) ??
+          '未知歌手',
+      avatarUrl: normalizeImageUrl(
+        asString(json['sizable_avatar']) ??
+            asString(json['avatar']) ??
+            asString(json['img']),
+      ),
+      songCount: asInt(json['songcount'] ?? json['song_count']) ?? 0,
+    );
+  }
+}
+
+class SearchAlbumResult {
+  const SearchAlbumResult({
+    required this.albumId,
+    required this.albumName,
+    this.artistName = '',
+    this.coverUrl,
+    this.songCount = 0,
+  });
+
+  final String albumId;
+  final String albumName;
+  final String artistName;
+  final String? coverUrl;
+  final int songCount;
+
+  factory SearchAlbumResult.fromJson(Map<String, dynamic> json) {
+    return SearchAlbumResult(
+      albumId:
+          asString(json['albumid']) ??
+          asString(json['album_id']) ??
+          asString(json['id']) ??
+          '',
+      albumName:
+          asString(json['albumname']) ??
+          asString(json['album_name']) ??
+          asString(json['name']) ??
+          '未知专辑',
+      artistName:
+          asString(json['singername']) ??
+          asString(json['author_name']) ??
+          asString(json['singer_name']) ??
+          '',
+      coverUrl: normalizeImageUrl(
+        asString(json['sizable_cover']) ??
+            asString(json['cover']) ??
+            asString(json['img']),
+      ),
+      songCount: asInt(json['songcount'] ?? json['song_count']) ?? 0,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 排行榜 (Rank)
+// ---------------------------------------------------------------------------
+
+class RankCategory {
+  const RankCategory({
+    required this.rankId,
+    required this.rankName,
+    this.rankType = 0,
+    this.imageUrl,
+    this.children = const [],
+    this.songs = const [],
+  });
+
+  final int rankId;
+  final String rankName;
+  final int rankType;
+  final String? imageUrl;
+  final List<RankCategory> children;
+  final List<Song> songs;
+
+  factory RankCategory.fromJson(Map<String, dynamic> json) {
+    final children = asList(json['children'])
+        .whereType<Map<String, dynamic>>()
+        .map(RankCategory.fromJson)
+        .toList();
+    final songs = asList(json['songlist'])
+        .whereType<Map<String, dynamic>>()
+        .map(Song.fromRank)
+        .where((s) => s.hash.isNotEmpty)
+        .toList();
+    return RankCategory(
+      rankId: asInt(json['rankid']) ?? 0,
+      rankName: asString(json['rankname']) ?? '未知榜单',
+      rankType: asInt(json['ranktype']) ?? 0,
+      imageUrl: normalizeImageUrl(asString(json['imgurl'])),
+      children: children,
+      songs: songs,
+    );
+  }
+}
+
+class RankSongPage {
+  const RankSongPage({required this.songs, this.total = 0});
+
+  final List<Song> songs;
+  final int total;
 }
 
 class QrCodeInfo {

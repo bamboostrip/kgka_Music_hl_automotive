@@ -6,8 +6,8 @@ use crate::error::{AppError, AppResult};
 use crate::kugou::session::KgSession;
 use crate::kugou::session_store::FileSessionStore;
 use crate::services::{
-    album, artist, comment, discover, fm, login, lyric, playlist, report, search, song, user,
-    youth,
+    album, artist, comment, discover, fm, login, lyric, playlist, rank, report, search, song,
+    user, youth,
 };
 
 pub struct KugouEngine {
@@ -269,6 +269,50 @@ impl KugouEngine {
                 )
                 .await
             }
+
+            ("GET", "/rank/list") => {
+                let withsong = params
+                    .get("withsong")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0i64);
+                rank::rank_list(client, session, withsong).await
+            }
+            ("GET", "/rank/info") => {
+                let rankid = params
+                    .get("rankid")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0i64);
+                let rank_cid = params
+                    .get("rank_cid")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0i64);
+                let album_img = params
+                    .get("album_img")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1i64);
+                let zone = params.get("zone").map(|s| s.as_str()).unwrap_or("");
+                rank::rank_info(client, session, rankid, rank_cid, album_img, zone).await
+            }
+            ("GET", "/rank/audio") => {
+                let rankid = params
+                    .get("rankid")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0i64);
+                let rank_cid = params
+                    .get("rank_cid")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0i64);
+                let page = params
+                    .get("page")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1i64);
+                let pagesize = params
+                    .get("pagesize")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(30i64);
+                rank::rank_audio(client, session, rankid, rank_cid, page, pagesize).await
+            }
+            ("GET", "/rank/top") => rank::rank_top(client, session).await,
 
             ("GET", "/album/shop") => album::album_shop(client, session).await,
             ("GET", "/album/songs") => {
