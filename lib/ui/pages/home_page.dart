@@ -114,31 +114,34 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _checkAndAutoPlay(_HomeData data) {
-    if (widget.player.autoPlayOnStartupEnabled &&
-        !_hasAutoPlayed &&
-        widget.player.currentSong == null) {
-      _hasAutoPlayed = true;
-      final songs = data.daily.songs;
-      if (songs.isNotEmpty) {
-        // 必须推迟到首帧构建完成后执行：_checkAndAutoPlay 会在 initState
-        // 阶段被同步调用，此时直接调用 playSong 会触发 notifyListeners()，
-        // 违反 Flutter "build 阶段不能触发 setState/notifyListeners" 规则。
-        // 叠加 Windows 平台 just_audio 的 WinRT MediaPlayer COM 线程在应用
-        // 启动早期尚未完全就绪，立即 setUrl()/play() 会与 UI 渲染竞争，
-        // 导致 "Lost connection to device" 进程崩溃。
-        // Windows 上额外延迟 300ms 让 native 层完全稳定后再启动播放。
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          final delay = Platform.isWindows
-              ? const Duration(milliseconds: 300)
-              : Duration.zero;
-          Future<void>.delayed(delay, () {
-            if (!mounted) return;
-            widget.player.playSong(songs.first, queue: songs);
-          });
-        });
-      }
-    }
+    if (!widget.player.autoPlayOnStartupEnabled || _hasAutoPlayed) return;
+    _hasAutoPlayed = true;
+
+    final hasRestored = widget.player.hasRestoredPlaybackState;
+    final songs = data.daily.songs;
+    if (!hasRestored && songs.isEmpty) return;
+
+    // 必须推迟到首帧构建完成后执行：_checkAndAutoPlay 会在 initState
+    // 阶段被同步调用，此时直接调用 playSong 会触发 notifyListeners()，
+    // 违反 Flutter "build 阶段不能触发 setState/notifyListeners" 规则。
+    // 叠加 Windows 平台 just_audio 的 WinRT MediaPlayer COM 线程在应用
+    // 启动早期尚未完全就绪，立即 setUrl()/play() 会与 UI 渲染竞争，
+    // 导致 "Lost connection to device" 进程崩溃。
+    // Windows 上额外延迟 300ms 让 native 层完全稳定后再启动播放。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final delay = Platform.isWindows
+          ? const Duration(milliseconds: 300)
+          : Duration.zero;
+      Future<void>.delayed(delay, () {
+        if (!mounted) return;
+        if (hasRestored) {
+          widget.player.resumePlayback();
+        } else {
+          widget.player.playSong(songs.first, queue: songs);
+        }
+      });
+    });
   }
 
   /// 后台静默刷新首页数据。
