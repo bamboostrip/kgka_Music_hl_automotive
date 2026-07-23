@@ -23,6 +23,7 @@ import '../../controllers/theme_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/local_music_controller.dart';
 import 'playback_history_page.dart';
+import 'rank_page.dart';
 import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -381,7 +382,7 @@ class _HomePageState extends State<HomePage> {
                         widget.onTabSwitch?.call(0); // Switch to My tab
                       } else {
                         setState(() => _sectionIndex = value);
-                        widget.onTabSwitch?.call(value == 0 ? 1 : 2);
+                        widget.onTabSwitch?.call(value + 1);
                       }
                     },
                     onDailyPlay: () {
@@ -431,6 +432,14 @@ class _HomePageState extends State<HomePage> {
                       ),
                       _PersistentTabPane(
                         visible: _sectionIndex == 1,
+                        child: RankPage(
+                          api: widget.api,
+                          auth: widget.auth,
+                          player: widget.player,
+                        ),
+                      ),
+                      _PersistentTabPane(
+                        visible: _sectionIndex == 2,
                         child: _RadioSection(
                           api: widget.api,
                           player: widget.player,
@@ -621,7 +630,7 @@ class _TopTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final tabs = ['推荐', '电台'];
+    final tabs = ['推荐', '排行榜', '电台'];
     return AnimatedBuilder(
       animation: auth,
       builder: (context, _) {

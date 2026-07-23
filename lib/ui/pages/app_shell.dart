@@ -44,7 +44,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   var _index = 1; // Default to '推荐' tab (index 1) in landscape
-  var _lastHomeTab = 1; // Tracks the last active Home sub-tab (1 for Recommend, 2 for Radio)
+  var _lastHomeTab = 1; // Tracks the last active Home sub-tab (1=推荐, 2=排行榜, 3=电台)
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   int _getPortraitIndex() {
@@ -117,11 +117,11 @@ class _AppShellState extends State<AppShell> {
                             theme: widget.theme,
                             downloads: widget.downloads,
                             localMusic: widget.localMusic,
-                            sectionIndex: _index == 2 ? 1 : 0,
+                            sectionIndex: _index > 0 ? _index - 1 : 0,
                             onTabSwitch: (index) {
                               setState(() {
                                 _index = index;
-                                if (index == 1 || index == 2) {
+                                if (index >= 1 && index <= 3) {
                                   _lastHomeTab = index;
                                 }
                               });
@@ -178,11 +178,11 @@ class _AppShellState extends State<AppShell> {
       theme: widget.theme,
       downloads: widget.downloads,
       localMusic: widget.localMusic,
-      sectionIndex: _index == 2 ? 1 : 0,
+      sectionIndex: _index > 0 ? _index - 1 : 0,
       onTabSwitch: (index) {
         setState(() {
           _index = index;
-          if (index == 1 || index == 2) {
+          if (index >= 1 && index <= 3) {
             _lastHomeTab = index;
           }
         });
@@ -315,7 +315,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _buildCarTopNavBar(BuildContext context, ColorScheme colorScheme) {
-    final tabs = ['我的', '推荐', '电台'];
+    final tabs = ['我的', '推荐', '排行榜', '电台'];
     final topInset = MediaQuery.paddingOf(context).top;
     return Container(
       // 顶部加上状态栏高度，避免导航栏内容被状态栏遮挡
@@ -389,7 +389,7 @@ class _AppShellState extends State<AppShell> {
                           if (selected) {
                             setState(() {
                               _index = entry.$1;
-                              if (entry.$1 == 1 || entry.$1 == 2) {
+                              if (entry.$1 >= 1 && entry.$1 <= 3) {
                                 _lastHomeTab = entry.$1;
                               }
                             });

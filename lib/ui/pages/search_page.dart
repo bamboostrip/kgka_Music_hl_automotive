@@ -15,6 +15,7 @@ import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
 import 'artist_detail_page.dart';
+import 'playlist_detail_page.dart';
 import 'dart:math' as math;
 
 class SearchPage extends StatefulWidget {
@@ -36,6 +37,9 @@ class SearchPage extends StatefulWidget {
 /// 搜索平台。
 enum _SearchPlatform { kugou, netease }
 
+/// 酷狗搜索类型。
+enum _SearchType { song, artist, album }
+
 class _SearchPageState extends State<SearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
@@ -45,9 +49,12 @@ class _SearchPageState extends State<SearchPage> {
   var _hotLoading = true;
   List<String> _suggestions = const [];
   List<Song> _results = const [];
+  List<SearchArtistResult> _artistResults = const [];
+  List<SearchAlbumResult> _albumResults = const [];
   bool _loading = false;
   bool _searched = false;
   _SearchPlatform _platform = _SearchPlatform.kugou;
+  _SearchType _searchType = _SearchType.song;
 
   // 搜索历史
   final _historyService = SearchHistoryService();
@@ -68,6 +75,8 @@ class _SearchPageState extends State<SearchPage> {
     _controller.dispose();
     _focusNode.dispose();
     _results = const [];
+    _artistResults = const [];
+    _albumResults = const [];
     _suggestions = const [];
     _hotCategories = const [];
     _searchHistory = const [];
@@ -130,16 +139,32 @@ class _SearchPageState extends State<SearchPage> {
       _searched = true;
     });
     try {
-      final songs = _platform == _SearchPlatform.netease
-          ? await widget.api.searchNetEaseSongs(keywords)
-          : await widget.api.searchSongs(keywords);
-      if (mounted) setState(() => _results = songs);
+      if (_platform == _SearchPlatform.netease) {
+        final songs = await widget.api.searchNetEaseSongs(keywords);
+        if (mounted) setState(() => _results = songs);
+      } else {
+        switch (_searchType) {
+          case _SearchType.song:
+            final songs = await widget.api.searchSongs(keywords);
+            if (mounted) setState(() => _results = songs);
+          case _SearchType.artist:
+            final artists = await widget.api.searchArtists(keywords);
+            if (mounted) setState(() => _artistResults = artists);
+          case _SearchType.album:
+            final albums = await widget.api.searchAlbums(keywords);
+            if (mounted) setState(() => _albumResults = albums);
+        }
+      }
       // 搜索成功后记录历史
       await _historyService.add(keywords);
       await _loadSearchHistory();
     } catch (error) {
       if (mounted) {
-        setState(() => _results = const []);
+        setState(() {
+          _results = const [];
+          _artistResults = const [];
+          _albumResults = const [];
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -163,6 +188,15 @@ class _SearchPageState extends State<SearchPage> {
     if (_platform == platform) return;
     setState(() => _platform = platform);
     // 如果已有搜索关键词，切换平台后自动重新搜索
+    final text = _controller.text.trim();
+    if (text.isNotEmpty && _searched) {
+      _search(text);
+    }
+  }
+
+  void _switchSearchType(_SearchType type) {
+    if (_searchType == type) return;
+    setState(() => _searchType = type);
     final text = _controller.text.trim();
     if (text.isNotEmpty && _searched) {
       _search(text);
@@ -368,6 +402,13 @@ class _SearchPageState extends State<SearchPage> {
         // 平台切换栏（仅搜索状态下显示）
         if (text.isNotEmpty || _searched)
           _PlatformSelector(platform: _platform, onChanged: _switchPlatform),
+        // 酷狗搜索类型切换
+        if ((text.isNotEmpty || _searched) &&
+            _platform == _SearchPlatform.kugou)
+          _SearchTypeSelector(
+            type: _searchType,
+            onChanged: _switchSearchType,
+          ),
         Expanded(child: _buildContent(context, text)),
       ],
     );
@@ -379,17 +420,53 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     if (_searched && text.isNotEmpty) {
-      return _results.isEmpty
-          ? _EmptyResults(keyword: text)
-          : _SearchResults(
-              songs: _results,
-              onPlay: _playSong,
-              isLiked: (song) => widget.auth.isLiked(song),
-              onLikeTap: (song) => widget.auth.toggleLike(song),
-              auth: widget.auth,
-              player: widget.player,
-              onViewArtist: _openArtist,
-            );
+      // 网易云只搜歌曲
+      if (_platform == _SearchPlatform.netease) {
+        return _results.isEmpty
+            ? _EmptyResults(keyword: text)
+            : _SearchResults(
+                songs: _results,
+                onPlay: _playSong,
+                isLiked: (song) => widget.auth.isLiked(song),
+                onLikeTap: (song) => widget.auth.toggleLike(song),
+                auth: widget.auth,
+                player: widget.player,
+                onViewArtist: _openArtist,
+              );
+      }
+      // 酷狗按类型显示
+      switch (_searchType) {
+        case _SearchType.song:
+          return _results.isEmpty
+              ? _EmptyResults(keyword: text)
+              : _SearchResults(
+                  songs: _results,
+                  onPlay: _playSong,
+                  isLiked: (song) => widget.auth.isLiked(song),
+                  onLikeTap: (song) => widget.auth.toggleLike(song),
+                  auth: widget.auth,
+                  player: widget.player,
+                  onViewArtist: _openArtist,
+                );
+        case _SearchType.artist:
+          return _artistResults.isEmpty
+              ? _EmptyResults(keyword: text)
+              : _ArtistResults(
+                  artists: _artistResults,
+                  api: widget.api,
+                  auth: widget.auth,
+                  player: widget.player,
+                );
+        case _SearchType.album:
+          return _albumResults.isEmpty
+              ? _EmptyResults(keyword: text)
+              : _AlbumResults(
+                  albums: _albumResults,
+                  api: widget.api,
+                  auth: widget.auth,
+                  player: widget.player,
+                );
+      }
     }
 
     if (text.isEmpty) {
@@ -1347,6 +1424,252 @@ class _CarHotSearchColumn extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 搜索类型选择器
+// ---------------------------------------------------------------------------
+
+class _SearchTypeSelector extends StatelessWidget {
+  const _SearchTypeSelector({required this.type, required this.onChanged});
+
+  final _SearchType type;
+  final ValueChanged<_SearchType> onChanged;
+
+  static const _labels = {
+    _SearchType.song: '歌曲',
+    _SearchType.artist: '歌手',
+    _SearchType.album: '专辑',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
+      child: Row(
+        children: [
+          for (final t in _SearchType.values) ...[
+            GestureDetector(
+              onTap: () => onChanged(t),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: type == t
+                      ? colorScheme.primary.withValues(alpha: .12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: type == t
+                        ? colorScheme.primary.withValues(alpha: .4)
+                        : colorScheme.outlineVariant.withValues(alpha: .5),
+                  ),
+                ),
+                child: Text(
+                  _labels[t]!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: type == t
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight:
+                        type == t ? FontWeight.w800 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 歌手搜索结果
+// ---------------------------------------------------------------------------
+
+class _ArtistResults extends StatelessWidget {
+  const _ArtistResults({
+    required this.artists,
+    required this.api,
+    required this.auth,
+    required this.player,
+  });
+
+  final List<SearchArtistResult> artists;
+  final MusicApi api;
+  final AuthController auth;
+  final PlayerController player;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: artists.length,
+      itemBuilder: (context, index) {
+        final artist = artists[index];
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ArtistDetailPage(
+                  api: api,
+                  auth: auth,
+                  artist: ArtistRef(id: artist.id, name: artist.name),
+                  player: player,
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Artwork(
+                  url: artist.avatarUrl,
+                  size: 52,
+                  borderRadius: 26,
+                  icon: Icons.person_rounded,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        artist.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      if (artist.songCount > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${artist.songCount} 首歌曲',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 专辑搜索结果
+// ---------------------------------------------------------------------------
+
+class _AlbumResults extends StatelessWidget {
+  const _AlbumResults({
+    required this.albums,
+    required this.api,
+    required this.auth,
+    required this.player,
+  });
+
+  final List<SearchAlbumResult> albums;
+  final MusicApi api;
+  final AuthController auth;
+  final PlayerController player;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: albums.length,
+      itemBuilder: (context, index) {
+        final album = albums[index];
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            final playlist = PlaylistSummary(
+              id: album.albumId,
+              title: album.albumName,
+              subtitle: album.artistName,
+              coverUrl: album.coverUrl,
+            );
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PlaylistDetailPage(
+                  api: api,
+                  auth: auth,
+                  player: player,
+                  playlist: playlist,
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Artwork(url: album.coverUrl, size: 52, borderRadius: 8),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        album.albumName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        [
+                          if (album.artistName.isNotEmpty) album.artistName,
+                          if (album.songCount > 0) '${album.songCount} 首',
+                        ].join(' · '),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

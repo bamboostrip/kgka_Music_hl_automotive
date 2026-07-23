@@ -8,7 +8,7 @@ pub mod login;
 pub mod lyric;
 // pub mod media_catalog; // unused
 pub mod playlist;
-// pub mod rank; // unused
+pub mod rank;
 // pub mod register; // unused
 pub mod report;
 pub mod search;
