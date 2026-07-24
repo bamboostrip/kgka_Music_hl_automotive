@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
@@ -70,12 +71,16 @@ class _RankPageState extends State<RankPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final size = MediaQuery.sizeOf(context);
+    final isCarLandscape =
+        size.width > size.height && ThemeController.instance.carModeEnabled;
+
     return FutureBuilder<List<RankCategory>>(
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return const _RankSkeleton();
+          return _RankSkeleton(isCarLandscape: isCarLandscape);
         }
         if (snapshot.hasError && !snapshot.hasData) {
           return _RankError(
@@ -115,21 +120,49 @@ class _RankPageState extends State<RankPage>
                 ],
               ),
             ),
-            // 榜单列表
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: ranks.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final rank = ranks[index];
-                return _RankCard(
-                  rank: rank,
-                  onTap: () => _openRankDetail(rank),
-                );
-              },
-            ),
+            // 榜单列表 / 网格
+            if (isCarLandscape)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final crossAxisCount = constraints.maxWidth > 600 ? 2 : 1;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 4.2,
+                      ),
+                      itemCount: ranks.length,
+                      itemBuilder: (context, index) {
+                        final rank = ranks[index];
+                        return _RankCard(
+                          rank: rank,
+                          onTap: () => _openRankDetail(rank),
+                        );
+                      },
+                    );
+                  },
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: ranks.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final rank = ranks[index];
+                  return _RankCard(
+                    rank: rank,
+                    onTap: () => _openRankDetail(rank),
+                  );
+                },
+              ),
             const SizedBox(height: 166),
           ],
         );
@@ -802,7 +835,9 @@ class _RankSongRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _RankSkeleton extends StatelessWidget {
-  const _RankSkeleton();
+  const _RankSkeleton({this.isCarLandscape = false});
+
+  final bool isCarLandscape;
 
   @override
   Widget build(BuildContext context) {
@@ -811,14 +846,8 @@ class _RankSkeleton extends StatelessWidget {
       color: colorScheme.surfaceContainerHighest.withValues(alpha: .5),
       borderRadius: BorderRadius.circular(10),
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: 8,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, index) => Container(
+
+    Widget buildItem() => Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLow,
@@ -834,7 +863,10 @@ class _RankSkeleton extends StatelessWidget {
                   children: [
                     Container(width: 120, height: 14, decoration: placeholder),
                     const SizedBox(height: 8),
-                    Container(width: double.infinity, height: 10, decoration: placeholder),
+                    Container(
+                        width: double.infinity,
+                        height: 10,
+                        decoration: placeholder),
                     const SizedBox(height: 6),
                     Container(width: 160, height: 10, decoration: placeholder),
                   ],
@@ -842,7 +874,39 @@ class _RankSkeleton extends StatelessWidget {
               ),
             ],
           ),
+        );
+
+    if (isCarLandscape) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final crossAxisCount = constraints.maxWidth > 600 ? 2 : 1;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 4.2,
+              ),
+              itemCount: 8,
+              itemBuilder: (context, index) => buildItem(),
+            );
+          },
         ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 8,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, index) => buildItem(),
       ),
     );
   }
