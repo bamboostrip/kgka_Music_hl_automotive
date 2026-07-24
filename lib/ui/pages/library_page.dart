@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
@@ -291,7 +292,7 @@ class _AccountRow extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      profile?.nickname ?? 'KA Music 用户',
+                      profile?.nickname ?? '${AppConfig.appName}用户',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(

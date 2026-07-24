@@ -1,3 +1,5 @@
+import '../config/app_config.dart';
+
 class LoginSession {
   const LoginSession({
     this.userId,
@@ -125,7 +127,7 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      nickname: asString(json['nickname']) ?? 'KA Music 用户',
+      nickname: asString(json['nickname']) ?? '${AppConfig.appName}用户',
       avatarUrl: normalizeImageUrl(asString(json['pic'])),
     );
   }
@@ -135,7 +137,7 @@ class UserProfile {
 
   factory UserProfile.fromCache(Map<String, dynamic> json) {
     return UserProfile(
-      nickname: asString(json['nickname']) ?? 'KA Music 用户',
+      nickname: asString(json['nickname']) ?? '${AppConfig.appName}用户',
       avatarUrl: asString(json['avatarUrl']),
     );
   }

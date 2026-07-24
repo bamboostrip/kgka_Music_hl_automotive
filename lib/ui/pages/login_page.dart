@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
@@ -305,7 +306,7 @@ class _LoginHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'KA Music',
+          AppConfig.appName,
           style: textTheme.headlineMedium?.copyWith(
             color: colorScheme.onSurface,
             fontWeight: FontWeight.w900,

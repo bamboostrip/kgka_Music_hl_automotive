@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "KA Music" "\0"
+            VALUE "FileDescription", "\x65F6\x97F3" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "kgka_music_hl" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "kgka_music_hl.exe" "\0"
-            VALUE "ProductName", "KA Music" "\0"
+            VALUE "ProductName", "\x65F6\x97F3" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
