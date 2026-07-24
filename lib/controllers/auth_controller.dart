@@ -11,7 +11,9 @@ import '../services/music_api.dart';
 import '../services/vip_background_task.dart';
 
 class AuthController extends ChangeNotifier {
-  AuthController(this._api, this._cacheService);
+  AuthController(this._api, this._cacheService) {
+    _vipBackgroundTask.onClaimSuccess = () => refreshProfile(silent: true);
+  }
 
   static const _tokenKey = 'ka_music_token';
   static const _t1Key = 'ka_music_t1';

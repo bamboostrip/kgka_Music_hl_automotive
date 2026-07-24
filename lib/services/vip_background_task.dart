@@ -29,6 +29,9 @@ class VipBackgroundTask extends ChangeNotifier {
 
   final MusicApi _api;
 
+  /// 领取成功后触发，供外部刷新 VIP 信息（如 AuthController.refreshProfile）。
+  VoidCallback? onClaimSuccess;
+
   static const _autoEnabledKey = 'settings.auto_claim_vip_enabled';
   static const _lastRunKeyKey = 'settings.vip_last_run_key';
   static const _lastStatusKey = 'settings.vip_last_status';
@@ -212,6 +215,9 @@ class VipBackgroundTask extends ChangeNotifier {
       _lastRunKey = runKey;
     }
     await _persistState();
+    if (result.status == VipClaimStatus.success) {
+      onClaimSuccess?.call();
+    }
     notifyListeners();
     return result;
   }
