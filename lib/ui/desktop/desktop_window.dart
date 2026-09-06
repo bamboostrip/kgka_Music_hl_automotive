@@ -23,6 +23,10 @@ class DesktopWindow {
   /// 初始化窗口：恢复上次几何 → 应用最小尺寸 → 显示窗口。
   /// 必须在 runApp 之前 await 调用。
   static Future<void> ensureInitialized() async {
+    // 重复调用会重复 addListener，残留旧 saver（几何双写、onWindowClose
+    // 双触发导致 quitGracefully 执行两次）。初始化只允许一次；
+    // 标志在成功完成后置位，中途异常允许调用方重试。
+    if (_initialized) return;
     if (!isDesktopFormFactor) {
       // 桌面宿主（Windows 等）在调试移动端形态时，调整窗口为手机竖屏比例便于预览
       if (isDesktopPlatform) {
@@ -40,14 +44,19 @@ class DesktopWindow {
           });
         } catch (_) {}
       }
+      _initialized = true;
       return;
     }
     await windowManager.ensureInitialized();
+    final prefs = await SharedPreferences.getInstance();
     // 关闭拦截尽早打开：恢复链（读取几何/钳制/最大化）耗时期间用户点 X
     // 也必须走 [_WindowGeometrySaver.onWindowClose]，否则窗口被原生直接
     // 销毁、进程退出，初始化中的服务被拦腰斩断。
+    // saver 先挂再开拦截：若顺序反过来，setPreventClose 生效到 addListener
+    // 之间点 X 会被拦截却无人处理（点击被静默吞掉，窗口关不掉也不隐藏）。
+    _saver = _WindowGeometrySaver(prefs);
+    windowManager.addListener(_saver!);
     await windowManager.setPreventClose(true);
-    final prefs = await SharedPreferences.getInstance();
     final geometry = DesktopWindowGeometry.load(prefs);
     final options = WindowOptions(
       size: geometry?.size ?? kDefaultSize,
@@ -71,11 +80,25 @@ class DesktopWindow {
       await windowManager.show();
       await windowManager.focus();
     });
-    _saver = _WindowGeometrySaver(prefs);
-    windowManager.addListener(_saver!);
+    _initialized = true;
   }
 
+  static bool _initialized = false;
+
   static _WindowGeometrySaver? _saver;
+
+  /// 解除关闭拦截（启动失败兜底路径使用）。
+  ///
+  /// 启动在 [ensureInitialized] 之后失败时，托盘永远不会创建（Tray.init
+  /// 在 ShiyinApp.initState），若保留 setPreventClose(true)，错误页点 X
+  /// 会被藏进不存在的托盘 → 进程永久隐形。解除后 X 直接原生关闭。
+  static Future<void> disableCloseInterception() async {
+    try {
+      await windowManager.setPreventClose(false);
+    } catch (error) {
+      debugPrint('DesktopWindow: 解除关闭拦截失败（忽略）: $error');
+    }
+  }
 
   /// "关闭时最小化到托盘"持久化键。
   static const String kCloseToTrayPrefKey = 'window.closeToTray';

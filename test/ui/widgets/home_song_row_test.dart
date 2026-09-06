@@ -119,8 +119,8 @@ void main() {
         ),
       );
 
-      // 未悬停时不显示播放按钮
-      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      // 未悬停时播放按钮不可见且不可命中（常驻树 + 透明度 0 实现浮现动画）
+      expect(find.byIcon(Icons.play_arrow_rounded).hitTestable(), findsNothing);
 
       // 模拟鼠标悬停到整行
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);

@@ -55,6 +55,9 @@ class _SearchPageState extends State<SearchPage> {
   List<SearchAlbumResult> _albumResults = const [];
   bool _loading = false;
   bool _searched = false;
+  // 搜索代际守卫：提交/点热门词/切平台/切类型都能并发触发 _search，
+  // 慢的旧响应若不识别代际会覆盖新结果（输入框已是 B、列表却是 A 的）。
+  int _searchSeq = 0;
   // 输入框焦点态：外层白卡边框据此染 primary，内层强制无边框，
   // 避免主题 focusedBorder 蓝圈和外卡叠成双边框。
   bool _searchFocused = false;
@@ -117,8 +120,13 @@ class _SearchPageState extends State<SearchPage> {
 
   /// 加载本地搜索历史。
   Future<void> _loadSearchHistory() async {
-    final history = await _historyService.getHistory();
-    if (mounted) setState(() => _searchHistory = history);
+    // initState/onDelete 处为 fire-and-forget 调用，失败不得外溢成未捕获异常。
+    try {
+      final history = await _historyService.getHistory();
+      if (mounted) setState(() => _searchHistory = history);
+    } catch (error) {
+      debugPrint('[search] 搜索历史加载失败（忽略）: $error');
+    }
   }
 
   void _onTextChanged() {
@@ -149,33 +157,41 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _search(String keywords) async {
     if (keywords.isEmpty) return;
     _debounce?.cancel();
+    final seq = ++_searchSeq;
     setState(() {
       _loading = true;
       _suggestions = const [];
       _searched = true;
     });
+    var searchSucceeded = false;
     try {
       if (_platform == _SearchPlatform.netease) {
         final songs = await widget.api.searchNetEaseSongs(keywords);
-        if (mounted) setState(() => _results = songs);
+        if (mounted && seq == _searchSeq) setState(() => _results = songs);
       } else {
         switch (_searchType) {
           case _SearchType.song:
             final songs = await widget.api.searchSongs(keywords);
-            if (mounted) setState(() => _results = songs);
+            if (mounted && seq == _searchSeq) setState(() => _results = songs);
           case _SearchType.artist:
             final artists = await widget.api.searchArtists(keywords);
-            if (mounted) setState(() => _artistResults = artists);
+            if (mounted && seq == _searchSeq) {
+              setState(() => _artistResults = artists);
+            }
           case _SearchType.album:
             final albums = await widget.api.searchAlbums(keywords);
-            if (mounted) setState(() => _albumResults = albums);
+            if (mounted && seq == _searchSeq) {
+              setState(() => _albumResults = albums);
+            }
         }
       }
-      // 搜索成功后记录历史
-      await _historyService.add(keywords);
-      await _loadSearchHistory();
+      // 已被更新的搜索取代：不落结果、不记历史、不动 loading
+      //（loading 由最新一次搜索的 finally 收口）。
+      if (seq != _searchSeq) return;
+      searchSucceeded = true;
     } catch (error) {
-      if (mounted) {
+      debugPrint('[search] 搜索失败: $error');
+      if (mounted && seq == _searchSeq) {
         setState(() {
           _results = const [];
           _artistResults = const [];
@@ -183,7 +199,16 @@ class _SearchPageState extends State<SearchPage> {
         });
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && seq == _searchSeq) setState(() => _loading = false);
+    }
+    // 历史记录与结果展示解耦：写入失败（磁盘满/通道故障）不得把已成功
+    // 展示的搜索结果清成"无结果"。
+    if (!searchSucceeded || !mounted) return;
+    try {
+      await _historyService.add(keywords);
+      await _loadSearchHistory();
+    } catch (error) {
+      debugPrint('[search] 搜索历史写入失败（忽略）: $error');
     }
   }
 

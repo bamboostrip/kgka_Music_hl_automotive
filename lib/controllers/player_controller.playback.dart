@@ -249,8 +249,16 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       width: 150,
       height: 150,
     );
+    // listener 必须在拿到图/出错后自摘（与 precacheImage 内部同款）：
+    // 常驻监听会让 ImageStreamCompleter 永远判定为 live，解码后的封面
+    // 脱离 ImageCache 的 LRU 淘汰，长会话播放数百首后内存持续累积。
     final stream = provider.resolve(ImageConfiguration.empty);
-    stream.addListener(ImageStreamListener((_, _) {}, onError: (_, _) {}));
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (_, _) => stream.removeListener(listener),
+      onError: (_, _) => stream.removeListener(listener),
+    );
+    stream.addListener(listener);
   }
 
   /// 解析播放地址。
@@ -436,7 +444,15 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       _pendingIdlePosition = null;
       await playSong(song, queue: queue, initialPosition: target);
     } else {
-      await seek(target);
+      try {
+        await seek(target);
+      } catch (error) {
+        // UI 调用方（歌词行点击等）丢弃本 Future：seek 在非 idle 引擎错误
+        // （蓝牙断开/后端抖动）下会故意 rethrow（见 seek 注释），这里不接住
+        // 就成了未捕获异步异常。与 queue.dart 的 _seekToStartSafe 同理。
+        debugPrint('[时音][player] seekToAndPlay 失败: $error');
+        return;
+      }
       if (!audioPlayer.playing) {
         await togglePlay();
       }
@@ -602,7 +618,7 @@ mixin _PlayerPlayback on _PlayerControllerBase {
   /// - [PlaybackMode.singleLoop]：不切歌，保留错误信息
   /// - [PlaybackMode.playlistLoop] / [PlaybackMode.shuffle]：自动切下一首重试
   ///
-  /// 返回 true 表示成功开始播放。
+  /// 返回 true 表示成功开始播放（或用户在恢复期间手动接管了播放）。
   Future<bool> resumePlayback() async {
     if (currentSong == null || queue.isEmpty) return false;
 
@@ -612,6 +628,9 @@ mixin _PlayerPlayback on _PlayerControllerBase {
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       errorMessage = null;
       await playSong(songToPlay, queue: queue);
+      // 恢复链可能耗时数秒（地址解析+重试），期间用户可能已手动点了别的歌：
+      // currentSong 已换人时立即收手，绝不再用 _nextSong() 抢占用户的选择。
+      if (currentSong?.hash != songToPlay.hash) return true;
       if (errorMessage == null) return true;
 
       if (playbackMode == PlaybackMode.singleLoop) {

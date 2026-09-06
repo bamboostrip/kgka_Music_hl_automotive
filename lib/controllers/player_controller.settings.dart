@@ -415,7 +415,11 @@ mixin _PlayerSettings on _PlayerControllerBase {
         unawaited(loadLyrics(restored));
         unawaited(_loadClimax(restored));
       }
-    } catch (_) {}
+    } catch (error) {
+      // 恢复失败不阻断启动，但持久化数据半损坏（字段类型变化等）时必须
+      // 留有线索，否则"重启后队列静默丢失"无从排查。
+      debugPrint('[时音][player] 播放状态恢复失败（跳过）: $error');
+    }
   }
 
   void _syncListeningTimeTracker() {

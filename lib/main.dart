@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -48,6 +49,12 @@ Future<void> main(List<String> args) async {
     return;
   }
   WidgetsFlutterBinding.ensureInitialized();
+  // 全局未捕获异步异常兜底：此前无任何 onError，异常只进控制台且 release
+  // 下不可见。这里仅记录并标记已处理（返回 true），不改变既有降级行为。
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[时音][fatal] 未捕获异步异常: $error\n$stack');
+    return true;
+  };
   // 图片缓存策略（车机 2-4GB RAM，内存有限但不宜过小）：
   // - maximumSizeBytes = 64MB：封面经 Artwork 解码后最大 600×600×4B ≈ 1.4MB/张，
   //   64MB 约可容纳 44 张满尺寸封面或数百张列表小图，来回切页基本全部命中缓存，
@@ -57,53 +64,109 @@ Future<void> main(List<String> args) async {
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 200;
   cache.maximumSizeBytes = 64 << 20;
-  final client = await RustApiClient.getInstance();
-  final api = MusicApi(client);
+  try {
+    final client = await RustApiClient.getInstance();
+    final api = MusicApi(client);
 
-  // 桌面形态（Windows 等）：初始化窗口尺寸/最小尺寸/几何记忆。
-  // 必须在 runApp 之前完成，避免首帧以错误尺寸渲染。
-  await DesktopWindow.ensureInitialized();
-  final themeController = ThemeController();
-  await themeController.detectAutomotive(const DeviceInfoService());
-  await themeController.load();
+    // 桌面形态（Windows 等）：初始化窗口尺寸/最小尺寸/几何记忆。
+    // 必须在 runApp 之前完成，避免首帧以错误尺寸渲染。
+    await DesktopWindow.ensureInitialized();
+    final themeController = ThemeController();
+    await themeController.detectAutomotive(const DeviceInfoService());
+    await themeController.load();
 
-  final channelConfig = resolvePlaybackNotificationChannel(
-    isCarMode: themeController.carModeEnabled,
-    isAutomotiveDevice: themeController.isAutomotiveDevice,
-  );
+    final channelConfig = resolvePlaybackNotificationChannel(
+      isCarMode: themeController.carModeEnabled,
+      isAutomotiveDevice: themeController.isAutomotiveDevice,
+    );
 
-  // Linux 桌面：just_audio 无官方 Linux 平台实现，注册社区 media_kit(libmpv)
-  // 后端（见 pubspec.yaml 依赖注释）。必须在创建首个 AudioPlayer
-  // （AudioService.init → MusicAudioHandler 字段初始化）之前调用；
-  // 仅在 Linux 分支注册，避免覆盖 Windows 的 just_audio_windows 后端。
-  // kIsWeb 前置：web 上访问 Platform.isLinux 会直接 throw（当前 web 构建
-  // 因 dart:io 无法编译，此为防御性收敛，保持与 form_factor 判定同构）。
-  if (!kIsWeb && Platform.isLinux) {
-    JustAudioMediaKit.ensureInitialized();
+    // Linux 桌面：just_audio 无官方 Linux 平台实现，注册社区 media_kit(libmpv)
+    // 后端（见 pubspec.yaml 依赖注释）。必须在创建首个 AudioPlayer
+    // （AudioService.init → MusicAudioHandler 字段初始化）之前调用；
+    // 仅在 Linux 分支注册，避免覆盖 Windows 的 just_audio_windows 后端。
+    // kIsWeb 前置：web 上访问 Platform.isLinux 会直接 throw（当前 web 构建
+    // 因 dart:io 无法编译，此为防御性收敛，保持与 form_factor 判定同构）。
+    if (!kIsWeb && Platform.isLinux) {
+      JustAudioMediaKit.ensureInitialized();
+    }
+
+    // 桌面系统媒体集成：Windows SMTC（音量浮层/媒体键/锁屏控件）与
+    // Linux MPRIS（GNOME/KDE 媒体控件/媒体键）。audio_service 在桌面默认
+    // 走 NoOp 平台实现，这里替换为对应平台实现；必须在 AudioService.init
+    // 之前调用（audio_service 的 _platform 懒初始化发生在 init 内）。
+    // 平台实现初始化失败（无 D-Bus 等）内部已降级，不会阻断启动。
+    registerDesktopSystemMediaPlatform();
+
+    final audioHandler = await AudioService.init(
+      builder: MusicAudioHandler.new,
+      config: AudioServiceConfig(
+        androidNotificationChannelId: channelConfig.channelId,
+        androidNotificationChannelName: channelConfig.channelName,
+        androidStopForegroundOnPause: false,
+      ),
+    );
+
+    runApp(
+      ShiyinApp(
+        client: client,
+        api: api,
+        audioHandler: audioHandler,
+        themeController: themeController,
+      ),
+    );
+  } catch (error, stack) {
+    // 启动初始化失败（最常见：Rust 引擎 dll/so 加载失败——被杀软隔离、
+    // cargo 产物缺失、架构不符；其次窗口/音频服务初始化异常）。此前直接
+    // 白屏/白窗且无任何提示。这里以最小依赖（纯 Flutter，不碰引擎）跑一个
+    // 错误说明页，至少让用户知道要重装或检查杀软。
+    debugPrint('[时音][fatal] 启动初始化失败: $error\n$stack');
+    // 若关闭拦截已开启而托盘不会创建（Tray.init 在 ShiyinApp.initState），
+    // 错误页点 X 会被藏进不存在的托盘，进程永久隐形。先解除拦截。
+    await DesktopWindow.disableCloseInterception();
+    _runStartupFailureApp(error);
   }
+}
 
-  // 桌面系统媒体集成：Windows SMTC（音量浮层/媒体键/锁屏控件）与
-  // Linux MPRIS（GNOME/KDE 媒体控件/媒体键）。audio_service 在桌面默认
-  // 走 NoOp 平台实现，这里替换为对应平台实现；必须在 AudioService.init
-  // 之前调用（audio_service 的 _platform 懒初始化发生在 init 内）。
-  // 平台实现初始化失败（无 D-Bus 等）内部已降级，不会阻断启动。
-  registerDesktopSystemMediaPlatform();
-
-  final audioHandler = await AudioService.init(
-    builder: MusicAudioHandler.new,
-    config: AudioServiceConfig(
-      androidNotificationChannelId: channelConfig.channelId,
-      androidNotificationChannelName: channelConfig.channelName,
-      androidStopForegroundOnPause: false,
-    ),
-  );
-
+/// 启动失败兜底界面。
+void _runStartupFailureApp(Object error) {
   runApp(
-    ShiyinApp(
-      client: client,
-      api: api,
-      audioHandler: audioHandler,
-      themeController: themeController,
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.light(useMaterial3: true),
+      darkTheme: ThemeData.dark(useMaterial3: true),
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.error_outline, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  '${AppConfig.appName} 启动失败',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '音频引擎初始化失败。可能是杀毒软件隔离了程序组件，'
+                  '或安装文件不完整。请尝试重新安装；若反复出现，'
+                  '请在杀毒软件中恢复并信任本程序的文件。',
+                ),
+                const SizedBox(height: 12),
+                SelectableText(
+                  error.toString(),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -209,6 +272,7 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
     _windowTitleBinder?.detach();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(NetworkMonitor.instance.stop());
+    NetworkMonitor.instance.dispose();
     _auth.dispose();
     _player.dispose();
     _downloads.dispose();

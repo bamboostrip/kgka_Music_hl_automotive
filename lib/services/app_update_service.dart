@@ -398,7 +398,11 @@ class AppUpdateService {
       if (await file.exists()) {
         try {
           await file.delete();
-        } catch (_) {}
+        } catch (deleteError) {
+          // 文件被占用（如杀软扫描）时删除失败：坏包残留下载目录，
+          // 用户可能手动误双击，必须留日志。
+          debugPrint('[AppUpdate] 清理半成品安装包失败: $deleteError');
+        }
       }
       if (error is DioException && error.type == DioExceptionType.cancel) {
         throw StateError('已取消下载');
@@ -420,7 +424,9 @@ class AppUpdateService {
       debugPrint('[AppUpdate] sha256 sidecar 校验异常（按损坏处理）: $error');
       try {
         await file.delete();
-      } catch (_) {}
+      } catch (deleteError) {
+        debugPrint('[AppUpdate] 删除校验失败的安装包失败: $deleteError');
+      }
       throw StateError('安装包完整性校验失败');
     }
     return destPath;
@@ -469,7 +475,9 @@ class AppUpdateService {
     if (actual != expected) {
       try {
         await file.delete();
-      } catch (_) {}
+      } catch (deleteError) {
+        debugPrint('[AppUpdate] 删除校验不一致的安装包失败: $deleteError');
+      }
       throw StateError(
         '安装包校验不一致（本地 $actual ≠ 发布 $expected），已删除，请重试',
       );

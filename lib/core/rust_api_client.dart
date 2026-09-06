@@ -47,7 +47,13 @@ class RustApiClient implements ApiClientInterface {
         throw ApiException(response.body, statusCode: response.statusCode);
       }
       if (response.body.trim().isEmpty) return null;
-      return jsonDecode(response.body);
+      try {
+        return jsonDecode(response.body);
+      } catch (e) {
+        // 第三方 API 返回 HTML 错误页/非 JSON 时包装成统一异常，
+        // 调用方拿到可读错误而非裸 FormatException。
+        throw ApiException('响应不是有效 JSON: $e', statusCode: 502);
+      }
     } finally {
       client.close();
     }

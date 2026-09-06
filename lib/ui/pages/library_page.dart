@@ -255,16 +255,37 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     if (confirmed != true) return;
 
+    // 逐个删除并统计：批量操作部分失败必须可见，否则用户会误以为全部删掉了。
+    var deleted = 0;
+    var failed = 0;
+    String? firstError;
     for (final playlist in targets) {
       try {
         await widget.auth.deleteOrUncollectPlaylist(playlist);
-      } catch (_) {}
+        // deleteOrUncollectPlaylist 内部经 _run 执行：API 失败只写
+        // errorMessage 不抛出（_run 每次开头会清空它），因此它是唯一
+        // 可靠的成败信号；同步守卫（系统歌单/缺 listid）才会走 catch。
+        final error = widget.auth.errorMessage;
+        if (error != null) {
+          failed++;
+          firstError ??= error;
+          debugPrint('[library] 歌单删除失败: $error');
+        } else {
+          deleted++;
+        }
+      } catch (error) {
+        failed++;
+        firstError ??= error.toString();
+        debugPrint('[library] 歌单删除失败: $error');
+      }
     }
     if (!mounted) return;
-    if (widget.auth.errorMessage != null) {
-      Toast.error('删除失败：${widget.auth.errorMessage}');
-    } else {
+    if (failed == 0) {
       Toast.success('已删除 ${targets.length} 个歌单');
+    } else if (deleted == 0) {
+      Toast.error('删除失败：${firstError ?? '未知错误'}');
+    } else {
+      Toast.info('已删除 $deleted 个歌单，$failed 个失败');
     }
     _exitMultiSelect();
   }

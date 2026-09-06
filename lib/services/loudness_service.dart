@@ -86,6 +86,9 @@ class LoudnessService {
   bool _initialized = false;
   // setVolume 渐变定时器,新 ramp 开始前取消旧的,保证只有一条 ramp 在跑。
   Timer? _volumeRampTimer;
+  // 在途 ramp 的完成信号。取消/出错时必须了结（complete），否则 await
+  // _setVolumeRamped 的调用方（applyGain→notifyListeners 链）永久悬挂。
+  Completer<void>? _volumeRampCompleter;
 
   /// 当前活跃的渐进式分析进度回调。同一时刻只允许一个分析在途(切歌时由
   /// controller 调 cancelAnalysis 取消旧的)。原生反向 invokeMethod
@@ -530,7 +533,10 @@ class LoudnessService {
     double targetVolume, [
     bool instant = false,
   ]) async {
-    _volumeRampTimer?.cancel();
+    // 换新 ramp 前了结在途的 completer：旧 ramp 的目标已被新目标取代，
+    // 正常放行 await 方即可；只 cancel timer 不 complete 会让上一次
+    // applyGain 的 await 永久悬挂、后续 notifyListeners 不再执行。
+    _abortVolumeRamp();
     final maxVolume = _platformMaxVolume;
     final clampedTarget = targetVolume.clamp(0.0, maxVolume);
     final current = audioPlayer.volume;
@@ -543,21 +549,53 @@ class LoudnessService {
     final stepDuration = _rampDurationMs ~/ steps;
     var i = 0;
     final completer = Completer<void>();
+    _volumeRampCompleter = completer;
+    void finish() {
+      if (!completer.isCompleted) completer.complete();
+    }
+
     _volumeRampTimer = Timer.periodic(
       Duration(milliseconds: stepDuration),
       (t) {
         i++;
         final t01 = i / steps;
         final v = current + (clampedTarget - current) * t01;
-        audioPlayer.setVolume(v.clamp(0.0, maxVolume));
-        if (i >= steps) {
+        // 引擎释放/后端异常时 setVolume 会抛错：必须停表并放行 await 方，
+        // 否则 periodic 持续抛未捕获异常且 completer 永不完成。
+        // 清字段前做身份校验：迟到的旧 ramp 回调不得清掉新 ramp 的 completer。
+        audioPlayer.setVolume(v.clamp(0.0, maxVolume)).then((_) {
+          if (i >= steps && !completer.isCompleted) {
+            t.cancel();
+            if (identical(_volumeRampCompleter, completer)) {
+              _volumeRampCompleter = null;
+            }
+            audioPlayer
+                .setVolume(clampedTarget)
+                .then((_) => finish(), onError: (_, _) => finish());
+          }
+        }, onError: (Object error, StackTrace stack) {
+          debugPrint('[loudness] 音量渐变 setVolume 失败（终止 ramp）: $error');
           t.cancel();
-          audioPlayer.setVolume(clampedTarget);
-          completer.complete();
-        }
+          if (identical(_volumeRampCompleter, completer)) {
+            _volumeRampCompleter = null;
+          }
+          finish();
+        });
       },
     );
     return completer.future;
+  }
+
+  /// 取消在途音量渐变并放行其 await 方（新 ramp 接管 / 释放时调用）。
+  void _abortVolumeRamp() {
+    _volumeRampTimer?.cancel();
+    _volumeRampTimer = null;
+    final pending = _volumeRampCompleter;
+    _volumeRampCompleter = null;
+    // 自然跑完的 ramp 字段仍指向已完成的 completer，不能重复 complete。
+    if (pending != null && !pending.isCompleted) {
+      pending.complete();
+    }
   }
 
   /// 禁用原生 LoudnessEnhancer(切到 setVolume 衰减模式时调用)。
@@ -606,7 +644,7 @@ class LoudnessService {
 
   /// 释放原生 LoudnessEnhancer(App 退出/释放时)。
   Future<void> releaseNative() async {
-    _volumeRampTimer?.cancel();
+    _abortVolumeRamp();
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {
         await _channel.invokeMethod<bool>('releaseLoudnessGain');

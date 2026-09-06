@@ -20,9 +20,11 @@ dependencies:
   # Linux 桌面音频后端：just_audio 官方不出 Linux 实现，社区方案为
   # media_kit(libmpv) 适配。仅在 main.dart 的 Platform.isLinux 分支注册，
   # 不影响 Windows 的 just_audio_windows。运行期依赖系统 libmpv2。
-  # 本地 vendored 副本（packages/just_audio_media_kit）：仅含 load() 时
-  # 清空 _setPosition 的最小补丁（上游 2.1.0 跨歌残留 seek 目标 bug），
-  # 升级上游版本时需确认该修复是否已包含。
+  # 本地 vendored 副本（packages/just_audio_media_kit），含两处补丁：
+  # 1) load() 时清空 _setPosition（上游 2.1.0 跨歌残留 seek 目标 bug）；
+  # 2) 构造时设置 volume-max=400（响度均衡 +12dB 余量，配套
+  #    loudness_service 的 _linuxMaxBoostVolume=2.0 钳制）。
+  # 升级上游版本时两处都需确认是否已包含/需重新移植。
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   # Linux MPRIS 系统媒体集成：audio_service 的 Linux 平台实现，
@@ -58,6 +60,13 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 dependency_overrides:
+  # 本地 vendored 副本（packages/window_manager），勿直接换回 pub.dev 版本：
+  # windows/runner 下两处关键补丁——
+  # 1) 全局静态 MethodChannel 改为实例成员 channel_：desktop_multi_window
+  #    子窗二次注册插件时，上游全局 channel 会被覆盖/析构置空，导致主窗
+  #    窗口事件（几何保存/关闭拦截）全部失效；
+  # 2) SetSkipTaskbar/SetProgressBar 的 taskbar_ 懒初始化 + 空 HWND 防护。
+  # 升级 window_manager 时必须把这两处补丁重新移植。
   window_manager:
     path: packages/window_manager
   # 见上方依赖注释：本地最小补丁副本。

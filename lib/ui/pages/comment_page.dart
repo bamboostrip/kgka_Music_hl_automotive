@@ -25,6 +25,9 @@ class _CommentPageState extends State<CommentPage> {
   var _hasMore = true;
   var _nextPage = 1;
   String? _errorMessage;
+  // 加载代际：初始加载（重试）会清空列表并复位 _nextPage，此时若有
+  // 在途 loadMore，其旧页响应落地会造成重复/乱序，必须按代际丢弃。
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -43,8 +46,11 @@ class _CommentPageState extends State<CommentPage> {
   }
 
   Future<void> _loadInitial() async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
+      // 复位在途 loadMore 标记：其响应将被代际守卫丢弃，不复位会卡住后续翻页。
+      _isLoadingMore = false;
       _errorMessage = null;
       _nextPage = 1;
       _hasMore = true;
@@ -57,7 +63,7 @@ class _CommentPageState extends State<CommentPage> {
         page: 1,
         pageSize: _pageSize,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       final list = data.list ?? const [];
       setState(() {
         _comments.addAll(list);
@@ -66,7 +72,7 @@ class _CommentPageState extends State<CommentPage> {
         _isLoading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _errorMessage = error.toString();
         _isLoading = false;
@@ -83,6 +89,7 @@ class _CommentPageState extends State<CommentPage> {
 
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
+    final generation = _loadGeneration;
     setState(() => _isLoadingMore = true);
 
     try {
@@ -91,7 +98,8 @@ class _CommentPageState extends State<CommentPage> {
         page: _nextPage,
         pageSize: _pageSize,
       );
-      if (!mounted) return;
+      // 初始加载/重试已重建列表：旧页响应作废（_isLoadingMore 已被复位）。
+      if (!mounted || generation != _loadGeneration) return;
       final list = data.list ?? const [];
       setState(() {
         _comments.addAll(list);
@@ -100,7 +108,7 @@ class _CommentPageState extends State<CommentPage> {
         _isLoadingMore = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() => _isLoadingMore = false);
     }
   }

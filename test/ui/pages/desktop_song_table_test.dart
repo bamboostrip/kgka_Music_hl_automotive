@@ -228,9 +228,10 @@ void main() {
         ),
       );
 
-      // 未悬停时显示时长文本
+      // 未悬停时显示时长文本。封面播放按钮常驻树（透明度 0 + IgnorePointer）
+      // 以实现浮现动画，断言其不可命中而非不存在。
       expect(find.text('04:29'), findsOneWidget);
-      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      expect(find.byIcon(Icons.play_arrow_rounded).hitTestable(), findsNothing);
 
       // 模拟鼠标悬停进入
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -293,8 +294,8 @@ void main() {
         ),
       );
 
-      // 未悬停时不显示播放按钮
-      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      // 未悬停时封面播放按钮不可见且不可命中（常驻树 + 透明度 0 实现浮现动画）
+      expect(find.byIcon(Icons.play_arrow_rounded).hitTestable(), findsNothing);
 
       // 模拟鼠标悬停到整行
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -653,9 +654,10 @@ void main() {
       await gesture.moveTo(tester.getCenter(find.byType(DesktopSongTableRow)));
       await tester.pumpAndSettle();
 
-      // 悬停时仍显示时长文本，操作图标全部隐藏
+      // 悬停时仍显示时长文本，操作图标全部隐藏；封面播放按钮不参与
+      // hover（showHoverActions=false），同样不可命中。
       expect(find.text('04:29'), findsOneWidget);
-      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      expect(find.byIcon(Icons.play_arrow_rounded).hitTestable(), findsNothing);
       expect(find.byIcon(Icons.favorite_border_rounded), findsNothing);
       expect(find.byIcon(Icons.playlist_add_rounded), findsNothing);
       expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
