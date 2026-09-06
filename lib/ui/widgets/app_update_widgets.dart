@@ -261,6 +261,9 @@ class _WindowsUpdateDialogState extends State<_WindowsUpdateDialog> {
         },
       );
       if (!mounted) {
+        // 弹窗已不在（极端情况下仍可能被移除）：包其实已下载完成，
+        // 用全局 Toast 告知用户可从更新入口继续安装，避免静默丢失。
+        Toast.success('安装包已下载完成，可在更新入口安装');
         return;
       }
       setState(() {
@@ -268,11 +271,24 @@ class _WindowsUpdateDialogState extends State<_WindowsUpdateDialog> {
         _setupPath = path;
       });
     } catch (error) {
+      // 用户主动取消给中性提示，不当作失败。
+      final cancelled = error is DioException &&
+          error.type == DioExceptionType.cancel;
+      final message = cancelled ? '已取消下载' : '下载失败：${_cleanError(error)}';
       if (!mounted) {
+        if (cancelled) {
+          Toast.info(message);
+        } else {
+          Toast.error(message);
+        }
         return;
       }
       setState(() => _phase = _UpdatePhase.idle);
-      Toast.error('下载失败：${_cleanError(error)}');
+      if (cancelled) {
+        Toast.info(message);
+      } else {
+        Toast.error(message);
+      }
     }
   }
 
@@ -324,7 +340,9 @@ class _WindowsUpdateDialogState extends State<_WindowsUpdateDialog> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return PopScope(
-      canPop: !widget.force,
+      // 下载中禁止关闭（遮罩点击/Esc/返回键都会被拦下），
+      // 避免弹窗消失后下载被静默遗弃、用户毫无反馈。
+      canPop: !widget.force && _phase != _UpdatePhase.downloading,
       child: AlertDialog(
         icon: const Icon(Icons.system_update_alt_rounded),
         title: Text(

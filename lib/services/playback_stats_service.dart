@@ -88,6 +88,16 @@ class PlaybackStats {
 class PlaybackStatsService {
   static const _key = 'playback_stats';
 
+  /// 读改写互斥链：recordPlay / addListenTime 的 get→mutate→save 串行执行，
+  /// 避免并发交错时后写覆盖前写丢更新。链上吞掉错误，保证后续任务不被卡死。
+  Future<void> _mutationLock = Future.value();
+
+  Future<void> _enqueueMutation(Future<void> Function() task) {
+    final result = _mutationLock.then((_) => task());
+    _mutationLock = result.catchError((Object _) {});
+    return result;
+  }
+
   /// 读取当前统计；无数据时返回空的 [PlaybackStats]。
   Future<PlaybackStats> getStats() async {
     final prefs = await SharedPreferences.getInstance();
@@ -103,38 +113,42 @@ class PlaybackStatsService {
   }
 
   /// 记录一次播放：累加播放次数，统计歌手/歌曲计数。
-  Future<void> recordPlay(Song song) async {
-    final stats = await getStats();
-    final artistCount = Map<String, int>.of(stats.artistPlayCount);
-    final songCount = Map<String, int>.of(stats.songPlayCount);
+  Future<void> recordPlay(Song song) {
+    return _enqueueMutation(() async {
+      final stats = await getStats();
+      final artistCount = Map<String, int>.of(stats.artistPlayCount);
+      final songCount = Map<String, int>.of(stats.songPlayCount);
 
-    final artistKey = song.artist.trim().isEmpty ? '未知艺人' : song.artist;
-    final songKey = song.title.trim().isEmpty ? '未知歌曲' : song.title;
-    artistCount[artistKey] = (artistCount[artistKey] ?? 0) + 1;
-    songCount[songKey] = (songCount[songKey] ?? 0) + 1;
+      final artistKey = song.artist.trim().isEmpty ? '未知艺人' : song.artist;
+      final songKey = song.title.trim().isEmpty ? '未知歌曲' : song.title;
+      artistCount[artistKey] = (artistCount[artistKey] ?? 0) + 1;
+      songCount[songKey] = (songCount[songKey] ?? 0) + 1;
 
-    final updated = PlaybackStats(
-      totalPlays: stats.totalPlays + 1,
-      totalListenTime: stats.totalListenTime,
-      artistPlayCount: artistCount,
-      songPlayCount: songCount,
-      firstPlayDate: stats.firstPlayDate ?? DateTime.now(),
-    );
-    await _save(updated);
+      final updated = PlaybackStats(
+        totalPlays: stats.totalPlays + 1,
+        totalListenTime: stats.totalListenTime,
+        artistPlayCount: artistCount,
+        songPlayCount: songCount,
+        firstPlayDate: stats.firstPlayDate ?? DateTime.now(),
+      );
+      await _save(updated);
+    });
   }
 
   /// 累加听歌时长。
-  Future<void> addListenTime(Duration duration) async {
-    if (duration <= Duration.zero) return;
-    final stats = await getStats();
-    final updated = PlaybackStats(
-      totalPlays: stats.totalPlays,
-      totalListenTime: stats.totalListenTime + duration,
-      artistPlayCount: stats.artistPlayCount,
-      songPlayCount: stats.songPlayCount,
-      firstPlayDate: stats.firstPlayDate,
-    );
-    await _save(updated);
+  Future<void> addListenTime(Duration duration) {
+    return _enqueueMutation(() async {
+      if (duration <= Duration.zero) return;
+      final stats = await getStats();
+      final updated = PlaybackStats(
+        totalPlays: stats.totalPlays,
+        totalListenTime: stats.totalListenTime + duration,
+        artistPlayCount: stats.artistPlayCount,
+        songPlayCount: stats.songPlayCount,
+        firstPlayDate: stats.firstPlayDate,
+      );
+      await _save(updated);
+    });
   }
 
   /// 清空统计。

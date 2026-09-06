@@ -162,6 +162,13 @@ class _FakeDownloadService implements DownloadService {
   }
 
   @override
+  String cacheKeyFor(Song song, AudioQuality quality) =>
+      '${song.hash}_${quality.apiValue}';
+
+  @override
+  Set<String> inFlightKeysFor(DownloadTaskKind kind) => const {};
+
+  @override
   Future<int> fileSize(String path) async => 1024;
 
   @override

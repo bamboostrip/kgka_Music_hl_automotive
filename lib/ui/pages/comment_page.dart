@@ -24,6 +24,7 @@ class _CommentPageState extends State<CommentPage> {
   var _isLoadingMore = false;
   var _hasMore = true;
   var _nextPage = 1;
+  var _loadMoreError = false;
   String? _errorMessage;
   // 加载代际：初始加载（重试）会清空列表并复位 _nextPage，此时若有
   // 在途 loadMore，其旧页响应落地会造成重复/乱序，必须按代际丢弃。
@@ -90,7 +91,10 @@ class _CommentPageState extends State<CommentPage> {
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
     final generation = _loadGeneration;
-    setState(() => _isLoadingMore = true);
+    setState(() {
+      _isLoadingMore = true;
+      _loadMoreError = false;
+    });
 
     try {
       final data = await widget.api.musicComments(
@@ -109,7 +113,10 @@ class _CommentPageState extends State<CommentPage> {
       });
     } catch (_) {
       if (!mounted || generation != _loadGeneration) return;
-      setState(() => _isLoadingMore = false);
+      setState(() {
+        _isLoadingMore = false;
+        _loadMoreError = true;
+      });
     }
   }
 
@@ -180,6 +187,19 @@ class _CommentPageState extends State<CommentPage> {
       itemCount: _comments.length + (_hasMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _comments.length) {
+          // 加载更多失败时展示点击重试，避免页脚永远转圈（样式对齐云盘页 _LoadMoreFooter）
+          if (_loadMoreError) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: _loadMore,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('加载失败，点击重试'),
+                ),
+              ),
+            );
+          }
           return const Padding(
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator()),

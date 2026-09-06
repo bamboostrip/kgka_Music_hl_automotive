@@ -131,7 +131,7 @@ class PlayerAudioQualityPill extends StatelessWidget {
   }
 }
 
-class Progress extends StatelessWidget {
+class Progress extends StatefulWidget {
   const Progress({
     super.key,
     required this.player,
@@ -144,8 +144,20 @@ class Progress extends StatelessWidget {
   final bool compact;
 
   @override
+  State<Progress> createState() => _ProgressState();
+}
+
+/// 拖拽值保存在本 State 局部，不触碰 controller 的 scrub 锁：
+/// 即使拖拽中组件被移除（如 Esc 关闭页面导致 onChangeEnd 不触发），
+/// 也不会残留 scrubbing 状态导致进度/歌词冻结
+/// （与桌面底部播放栏 `_ProgressBar` 同一套方案）。
+class _ProgressState extends State<Progress> {
+  double? _dragValue;
+
+  @override
   Widget build(BuildContext context) {
-    final textColor = bright
+    final player = widget.player;
+    final textColor = widget.bright
         ? Colors.white.withValues(alpha: .64)
         : Theme.of(context).colorScheme.onSurfaceVariant;
 
@@ -156,7 +168,13 @@ class Progress extends StatelessWidget {
             ? 1.0
             : player.duration.inMilliseconds.toDouble();
         final pos = player.smoothPosition;
-        final value = pos.inMilliseconds.clamp(0, max.toInt()).toDouble();
+        // 拖拽中显示拖拽位置，其余时刻跟随播放进度。
+        final value = (_dragValue ?? pos.inMilliseconds)
+            .clamp(0, max.toInt())
+            .toDouble();
+        final shownPosition = _dragValue != null
+            ? Duration(milliseconds: _dragValue!.round())
+            : pos;
         // 高潮起始位置映射为 0..1，在轨道内部画一个小标记。
         final climax = player.climax;
         final durationMs = player.duration.inMilliseconds;
@@ -175,23 +193,23 @@ class Progress extends StatelessWidget {
           children: [
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                trackHeight: compact ? 3 : 5,
+                trackHeight: widget.compact ? 3 : 5,
                 thumbShape: RoundSliderThumbShape(
-                  enabledThumbRadius: compact ? 4 : 5,
+                  enabledThumbRadius: widget.compact ? 4 : 5,
                 ),
                 overlayShape: RoundSliderOverlayShape(
-                  overlayRadius: compact ? 10 : 14,
+                  overlayRadius: widget.compact ? 10 : 14,
                 ),
-                activeTrackColor: bright
+                activeTrackColor: widget.bright
                     ? Colors.white.withValues(alpha: .86)
                     : Theme.of(context).colorScheme.primary,
-                inactiveTrackColor: bright
+                inactiveTrackColor: widget.bright
                     ? Colors.white.withValues(alpha: .25)
                     : Theme.of(context).colorScheme.surfaceContainerHighest,
                 thumbColor: Colors.white,
                 trackShape: _ClimaxSliderTrackShape(
                   climaxStart: climaxStart,
-                  markerColor: bright
+                  markerColor: widget.bright
                       ? Colors.white.withValues(alpha: .55)
                       : Theme.of(
                           context,
@@ -201,8 +219,7 @@ class Progress extends StatelessWidget {
               child: Slider(
                 value: value,
                 max: max,
-                onChanged: (value) =>
-                    player.previewSeek(Duration(milliseconds: value.round())),
+                onChanged: (value) => setState(() => _dragValue = value),
                 onChangeEnd: (value) async {
                   try {
                     await player.seek(
@@ -211,18 +228,21 @@ class Progress extends StatelessWidget {
                   } catch (_) {
                     Toast.error('定位失败，请重试');
                   }
+                  if (mounted) {
+                    setState(() => _dragValue = null);
+                  }
                 },
               ),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
+              padding: EdgeInsets.symmetric(horizontal: widget.compact ? 2 : 4),
               child: Row(
                 children: [
                   Text(
-                    formatDuration(pos),
+                    formatDuration(shownPosition),
                     style: TextStyle(
                       color: textColor,
-                      fontSize: compact ? 12 : null,
+                      fontSize: widget.compact ? 12 : null,
                     ),
                   ),
                   const Spacer(),
@@ -230,7 +250,7 @@ class Progress extends StatelessWidget {
                     formatDuration(player.duration),
                     style: TextStyle(
                       color: textColor,
-                      fontSize: compact ? 12 : null,
+                      fontSize: widget.compact ? 12 : null,
                     ),
                   ),
                 ],

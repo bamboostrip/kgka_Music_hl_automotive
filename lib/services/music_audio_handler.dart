@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
@@ -66,6 +67,9 @@ class MusicAudioHandler extends BaseAudioHandler
   int _queueIndex = 0;
 
   HttpServer? _proxy;
+  /// 进行中的代理端口绑定：并发首载共享同一次 bind，避免各自绑定一个
+  /// HttpServer（多余的那个永远泄漏）。失败时置空以便下次重试。
+  Future<HttpServer>? _binding;
   final Map<int, _ProxyRoute> _proxyRoutes = {};
   int _loadSeq = 0;
 
@@ -107,10 +111,26 @@ class MusicAudioHandler extends BaseAudioHandler
 
   Future<void> _ensureProxy() async {
     if (_proxy != null) return;
-    _proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    _proxy!.listen(_onProxyRequest, onError: (Object e) {
-      debugPrint('[AudioHandler] proxy error: $e');
-    });
+    // 绑定调用跨越 await，不能只靠 _proxy 判重：并发首载必须共享同一个
+    // bind future，否则会绑出两个 HttpServer（其中一个泄漏）。
+    final binding = _binding;
+    if (binding != null) {
+      await binding;
+      return;
+    }
+    final future = HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    _binding = future;
+    try {
+      final server = await future;
+      server.listen(_onProxyRequest, onError: (Object e) {
+        debugPrint('[AudioHandler] proxy error: $e');
+      });
+      _proxy = server;
+    } catch (e) {
+      // 绑定失败清空在途标记，下次 load 可重试。
+      _binding = null;
+      rethrow;
+    }
   }
 
   void _onProxyRequest(HttpRequest req) async {
@@ -134,8 +154,8 @@ class MusicAudioHandler extends BaseAudioHandler
       await req.response.close();
       return;
     }
+    final client = HttpClient();
     try {
-      final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 10);
       final targetUri = Uri.parse(target);
       final upstream = await client.openUrl(req.method, targetUri);
@@ -175,12 +195,15 @@ class MusicAudioHandler extends BaseAudioHandler
       req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
 
       await resp.pipe(req.response);
-      client.close();
     } catch (e) {
       try {
         req.response.statusCode = HttpStatus.badGateway;
         await req.response.close();
       } catch (_) {}
+    } finally {
+      // 每请求一个 client，无论成功还是 seek/切歌导致的中止都必须关闭，
+      // 否则每次中止都泄漏一个 socket。
+      client.close(force: true);
     }
   }
 
@@ -214,10 +237,29 @@ class MusicAudioHandler extends BaseAudioHandler
 
       if (range != null && range.startsWith('bytes=')) {
         final parts = range.substring(6).split('-');
-        final start = int.tryParse(parts[0]) ?? 0;
-        // 起点越界（文件比后端以为的短，如缓存被清理）必须 416：
-        // end<start 会让 contentLength 为负，直接抛异常挂在请求上。
-        if (start >= fileSize) {
+        int? start;
+        int? end;
+        // 合法形态仅三种：`start-end` / `start-` / `-suffix`；其余（含
+        // `bytes=-`、段数不对、非数字）视为畸形，直接 416。
+        if (parts.length == 2 && parts[0].isNotEmpty) {
+          start = int.tryParse(parts[0]);
+          if (parts[1].isNotEmpty) end = int.tryParse(parts[1]);
+        } else if (parts.length == 2 && parts[1].isNotEmpty) {
+          // 后缀范围 bytes=-N：取文件末尾 N 字节（此前误实现为开头 N 字节）。
+          final suffix = int.tryParse(parts[1]);
+          if (suffix != null && suffix > 0) {
+            start = math.max(0, fileSize - suffix);
+            end = fileSize - 1;
+          }
+        }
+        // 不满足/畸形必须 416：
+        // - 解析不出起点（畸形或 N<=0 的后缀）；
+        // - 起点越界（文件比后端以为的短，如缓存被清理，end<start 会让
+        //   contentLength 为负，直接抛异常挂在请求上）；
+        // - 显式 end < start。
+        if (start == null ||
+            start >= fileSize ||
+            (end != null && end < start)) {
           req.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
           req.response.headers.set(
             HttpHeaders.contentRangeHeader,
@@ -226,15 +268,15 @@ class MusicAudioHandler extends BaseAudioHandler
           await req.response.close();
           return;
         }
-        final end = parts.length > 1 && parts[1].isNotEmpty
-            ? int.tryParse(parts[1]) ?? fileSize - 1
-            : fileSize - 1;
-        final length = end - start + 1;
+        // 显式 end 超出 EOF 必须 clamp 到 fileSize-1：否则 contentLength
+        // 超过实际可发字节，客户端会一直等剩余数据直至挂起。
+        final actualEnd = math.min(end ?? fileSize - 1, fileSize - 1);
+        final length = actualEnd - start + 1;
         req.response.statusCode = HttpStatus.partialContent;
         req.response.headers.set(
-            HttpHeaders.contentRangeHeader, 'bytes $start-$end/$fileSize');
+            HttpHeaders.contentRangeHeader, 'bytes $start-$actualEnd/$fileSize');
         req.response.headers.contentLength = length;
-        final stream = file.openRead(start, end + 1);
+        final stream = file.openRead(start, actualEnd + 1);
         await stream.pipe(req.response);
       } else {
         req.response.statusCode = HttpStatus.ok;

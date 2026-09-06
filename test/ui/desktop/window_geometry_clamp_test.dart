@@ -84,7 +84,7 @@ void main() {
       );
     });
 
-    test('窗口比区域（减 80px）更宽/更高 → 贴第一个区域左上角', () {
+    test('窗口比区域（减 80px）更宽/更高 → 贴第一个区域左上角并钳制尺寸', () {
       const geometry = DesktopWindowGeometry(
         left: -3000,
         top: -3000,
@@ -95,16 +95,33 @@ void main() {
         geometry,
         const [Rect.fromLTWH(0, 0, 1920, 1080)],
       );
-      // max(0, 1920 - 80 - 1900) = 0、max(0, 1080 - 80 - 1200) = 0
+      // max(0, 1920 - 80 - 1900) = 0、max(0, 1080 - 80 - 1200) = 0；
+      // 尺寸钳到所有可见区域的包围盒：宽 1900 ≤ 1920 不变，高 1200 → 1080。
       expect(
         result,
         const DesktopWindowGeometry(
           left: 0,
           top: 0,
           width: 1900,
-          height: 1200,
+          height: 1080,
         ),
       );
+    });
+
+    test('默认 1280x800 落在 1366x768 小屏 → 高度钳到 768', () {
+      // 记忆/默认尺寸超过屏幕时必须缩窗，否则底部播放条永远探出屏幕。
+      const geometry = DesktopWindowGeometry(
+        left: 0,
+        top: 0,
+        width: 1280,
+        height: 800,
+      );
+      final result = DesktopWindowGeometry.clampToVisibleAreas(
+        geometry,
+        const [Rect.fromLTWH(0, 0, 1366, 768)],
+      );
+      expect(result.width, 1280);
+      expect(result.height, 768);
     });
 
     test('多个区域互不相交 → 落到第一个区域', () {

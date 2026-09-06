@@ -279,8 +279,9 @@ class UserVipInfo {
       busiVip: asList(
         json['busi_vip'],
       ).whereType<Map>().map((e) => BusiVipInfo.fromJson(asMap(e))).toList(),
-      isSuperVip: json['isSuperVip'] as bool?,
-      isConceptVip: json['isConceptVip'] as bool?,
+      // 原始 API JSON 类型不稳定（可能下发 1/0），容错解析；缺失/为 null 时保持 null。
+      isSuperVip: asBool(json['isSuperVip']),
+      isConceptVip: asBool(json['isConceptVip']),
     );
   }
 }

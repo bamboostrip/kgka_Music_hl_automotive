@@ -79,15 +79,18 @@ mixin _MusicApiPlaylist on _MusicApiBase {
     final allSongs = <Song>[];
     var currentPage = 1;
     const perPage = 200;
-    while (true) {
+    // 与 rankAudioAll 同构：某页 rawItemCount 不足一页即终止；并设防御页数
+    // 上限，防止上游异常数据（永远满页）导致死循环。不提前按"过滤后为空"
+    // break：满页全是无 hash 下架歌曲时 rawItemCount 仍满页，提前 break 会
+    // 截断列表；空页 rawItemCount 为 0 同样能正确终止。
+    const maxPages = 30;
+    while (currentPage <= maxPages) {
       final songPage = await playlistSongPage(
         id,
         page: currentPage,
         pageSize: perPage,
       );
-      final songs = songPage.songs;
-      if (songs.isEmpty) break;
-      allSongs.addAll(songs);
+      allSongs.addAll(songPage.songs);
       if (songPage.rawItemCount < perPage) break;
       currentPage++;
     }

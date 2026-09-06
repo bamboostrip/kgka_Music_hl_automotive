@@ -23,6 +23,17 @@ class KaraokeLinePainter extends CustomPainter {
       textAlign: textAlign,
       maxLines: maxLines,
     )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
+    // 高亮 painter 与主 painter 同配置（仅颜色不同），构造时布局一次，
+    // 逐字进度绘制时复用，避免每字每帧重复构建/排版。
+    _highlightPainter = TextPainter(
+      text: TextSpan(
+        text: line.text,
+        style: style.copyWith(color: activeColor),
+      ),
+      textDirection: textDirection,
+      textAlign: textAlign,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
   }
 
   final LyricLine line;
@@ -35,6 +46,7 @@ class KaraokeLinePainter extends CustomPainter {
   final int? maxLines;
   final double maxWidth;
   late final TextPainter _textPainter;
+  late final TextPainter _highlightPainter;
 
   double get width => _textPainter.width;
   double get height => _textPainter.height;
@@ -67,16 +79,6 @@ class KaraokeLinePainter extends CustomPainter {
     final boxes = _textPainter.getBoxesForSelection(selection);
     if (boxes.isEmpty) return;
 
-    final highlightPainter = TextPainter(
-      text: TextSpan(
-        text: line.text,
-        style: style.copyWith(color: activeColor),
-      ),
-      textDirection: textDirection,
-      textAlign: textAlign,
-      maxLines: maxLines,
-    )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
-
     for (final box in boxes) {
       final rect = box.toRect();
       final clipWidth = rect.width * progress.clamp(0, 1);
@@ -86,11 +88,10 @@ class KaraokeLinePainter extends CustomPainter {
       canvas.clipRect(
         Rect.fromLTWH(rect.left, rect.top, clipWidth, rect.height),
       );
-      highlightPainter.paint(canvas, Offset.zero);
+      _highlightPainter.paint(canvas, Offset.zero);
       canvas.restore();
     }
   }
-
   @override
   bool shouldRepaint(covariant KaraokeLinePainter oldDelegate) {
     return oldDelegate.position != position ||

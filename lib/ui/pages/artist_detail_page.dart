@@ -63,6 +63,9 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
   String? _errorMessage;
   String? _loadMoreError;
 
+  /// 专辑卡片路由防重入时间戳（桌面双击会连触两次 onTap）。
+  DateTime? _lastAlbumNavAt;
+
   @override
   void initState() {
     super.initState();
@@ -230,8 +233,10 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
   }
 
   void _maybeLoadMore() {
+    // 初始骨架也可滚动：初始加载期间禁止加载更多，避免重复拉第 1 页。
     if (!_scrollController.hasClients ||
         !_hasMore ||
+        _isInitialLoading ||
         _isLoadingMore ||
         _isProgressiveLoading) {
       return;
@@ -285,6 +290,15 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
   }
 
   void _openAlbum(ArtistAlbum album) {
+    // 路由防重入：桌面端双击会连续触发两次 onTap，600ms 内只 push 一次，
+    // 避免叠两层相同专辑页。
+    final now = DateTime.now();
+    final last = _lastAlbumNavAt;
+    if (last != null &&
+        now.difference(last) < const Duration(milliseconds: 600)) {
+      return;
+    }
+    _lastAlbumNavAt = now;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PlaylistDetailPage(

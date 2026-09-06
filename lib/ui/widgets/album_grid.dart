@@ -34,7 +34,10 @@ int albumGridColumns(
 /// 单元格 = 方形圆角封面 + 间距 + 专辑名（至多 2 行，显式行高）+
 /// 发行日期（1 行，显式行高）。用固定像素高度而非 childAspectRatio，
 /// 避免不同列宽下文字溢出。
-double albumGridCellExtent(double cellWidth) => cellWidth + 64;
+/// [textScale] 为字体缩放系数（1.0 = 不缩放）：+64 的文字预留随
+/// 系统字体缩放同步放大，避免大字体下文字溢出单元格。
+double albumGridCellExtent(double cellWidth, {double textScale = 1.0}) =>
+    cellWidth + 64 * textScale;
 
 /// 专辑网格横向 / 纵向间距。
 const double _kAlbumGridSpacing = 14;
@@ -84,6 +87,10 @@ class AlbumSliverGridSection extends StatelessWidget {
         final cellWidth =
             ((contentWidth - spacing * (columns - 1)) / columns)
                 .clamp(0.0, double.infinity);
+        // 以卡片标题字号（13）为代表值取缩放系数，文字预留同步放大，
+        // 避免系统大字体下 RenderFlex 溢出。
+        final textScale =
+            MediaQuery.textScalerOf(context).scale(13.0) / 13.0;
         return SliverMainAxisGroup(
           slivers: [
             // section 标题（“专辑 20”），样式与改造前完全一致。
@@ -106,7 +113,10 @@ class AlbumSliverGridSection extends StatelessWidget {
                   crossAxisCount: columns,
                   crossAxisSpacing: _kAlbumGridSpacing,
                   mainAxisSpacing: _kAlbumGridSpacing,
-                  mainAxisExtent: albumGridCellExtent(cellWidth),
+                  mainAxisExtent: albumGridCellExtent(
+                    cellWidth,
+                    textScale: textScale,
+                  ),
                 ),
                 delegate: SliverChildBuilderDelegate(
                   childCount: albums.length,

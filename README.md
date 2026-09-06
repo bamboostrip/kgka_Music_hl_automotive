@@ -14,17 +14,14 @@
   <img src="https://img.shields.io/badge/Flutter-3.11+-02569B?logo=flutter&logoColor=white" alt="Flutter" />
   <img src="https://img.shields.io/badge/Dart-3.11+-0175C2?logo=dart&logoColor=white" alt="Dart" />
   <img src="https://img.shields.io/badge/Rust-engine-DEA584?logo=rust&logoColor=white" alt="Rust" />
-  <img src="https://img.shields.io/badge/Version-2.4.0-4CAF50" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-2.5.1-4CAF50" alt="Version" />
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Platform-Automotive-FF6F00?logo=androidauto&logoColor=white" alt="Automotive" />
-  <img src="https://img.shields.io/badge/Platform-iOS-000000?logo=apple&logoColor=white" alt="iOS" />
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white" alt="Windows" />
-  <img src="https://img.shields.io/badge/Platform-macOS-000000?logo=apple&logoColor=white" alt="macOS" />
   <img src="https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black" alt="Linux" />
-  <img src="https://img.shields.io/badge/Platform-Web-4285F4?logo=google-chrome&logoColor=white" alt="Web" />
 </p>
 
 ---
@@ -215,7 +212,6 @@ flutter pub get
 flutter run          # 自动检测设备
 flutter run -d android
 flutter run -d windows
-flutter run -d macos
 flutter run -d linux
 ```
 

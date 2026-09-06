@@ -78,7 +78,10 @@ mixin _MusicApiArtist on _MusicApiBase {
     final limit = pageSize.clamp(1, 50);
     final songs = <Song>[];
     var currentPage = page;
-    while (true) {
+    // 防御页数上限（与 rankAudioAll 的 maxPages 同构）：
+    // 防止上游异常数据（永远满页）导致翻页死循环。
+    const maxPages = 30;
+    for (var fetched = 0; fetched < maxPages; fetched++) {
       final songPage = await albumSongPage(
         id,
         page: currentPage,

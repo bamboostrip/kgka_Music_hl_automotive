@@ -287,12 +287,15 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.resumed:
-        if (_player.desktopLyricsEnabled) _player.setAppForeground(true);
+        // 无条件同步前后台状态：setAppForeground 内部会对未变化提前返回，
+        // 且副作用仅在桌面歌词开启时生效；若这里加开关门槛，后台关闭歌词后
+        // _isAppForeground 会滞留为 false，重新开启歌词时弹窗遮挡前台应用。
+        _player.setAppForeground(true);
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
         if (_player.desktopLyricsEnabled) _player.setAppForeground(false);
       case AppLifecycleState.paused:
-        if (_player.desktopLyricsEnabled) _player.setAppForeground(false);
+        _player.setAppForeground(false);
         // 图片缓存内存保护（后台驻留时不长期占用大量解码位图）：
         // - 缓存量较小时保留，切后台再回前台不重新下载，避免反复加载；
         // - 缓存量较大（>24MB）才整体释放，兼顾车机有限内存与加载体感。

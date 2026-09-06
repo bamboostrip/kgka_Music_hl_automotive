@@ -54,9 +54,10 @@ class _LibraryPageState extends State<LibraryPage> {
   // 歌单排序模式
   _PlaylistSortMode _sortMode = _PlaylistSortMode.defaultOrder;
 
-  // 多选管理状态
+  // 多选管理状态（存歌单 ID 而非下标：列表会因 auth 通知重排/重建，
+  // 下标会被后台重排静默映射到别的歌单，导致误删）。
   bool _multiSelectMode = false;
-  final Set<int> _selectedIndices = {};
+  final Set<String> _selectedIds = {};
   String _selectedSection = 'created'; // 'created' | 'collected' | 'albums'
 
   void _openPlaylist(PlaylistSummary playlist) {
@@ -194,30 +195,31 @@ class _LibraryPageState extends State<LibraryPage> {
         );
       },
     );
+    if (!mounted) return;
     if (selected != null && selected != _sortMode) {
       setState(() => _sortMode = selected);
     }
   }
 
-  void _enterMultiSelect(String section, int index) {
+  void _enterMultiSelect(String section, PlaylistSummary playlist) {
     setState(() {
       _selectedSection = section;
       _multiSelectMode = true;
-      _selectedIndices
+      _selectedIds
         ..clear()
-        ..add(index);
+        ..add(playlist.id);
     });
   }
 
-  void _toggleSelected(int index) {
+  void _toggleSelected(PlaylistSummary playlist) {
     setState(() {
-      if (_selectedIndices.contains(index)) {
-        _selectedIndices.remove(index);
-        if (_selectedIndices.isEmpty) {
+      if (_selectedIds.contains(playlist.id)) {
+        _selectedIds.remove(playlist.id);
+        if (_selectedIds.isEmpty) {
           _multiSelectMode = false;
         }
       } else {
-        _selectedIndices.add(index);
+        _selectedIds.add(playlist.id);
       }
     });
   }
@@ -225,14 +227,14 @@ class _LibraryPageState extends State<LibraryPage> {
   void _exitMultiSelect() {
     setState(() {
       _multiSelectMode = false;
-      _selectedIndices.clear();
+      _selectedIds.clear();
     });
   }
 
   Future<void> _deleteSelected(List<PlaylistSummary> currentList) async {
-    final targets = _selectedIndices
-        .where((i) => i >= 0 && i < currentList.length)
-        .map((i) => currentList[i])
+    // 按当前列表把 ID 解析回对象；列表已刷新导致条目消失时跳过。
+    final targets = currentList
+        .where((playlist) => _selectedIds.contains(playlist.id))
         .toList();
     if (targets.isEmpty) return;
 
@@ -427,14 +429,14 @@ class _LibraryPageState extends State<LibraryPage> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _MultiSelectBar(
-                                    selectedCount: _selectedIndices.length,
+                                    selectedCount: _selectedIds.length,
                                     onCancel: _exitMultiSelect,
                                     onDelete: () => _deleteSelected(sortedCreated),
                                   ),
                                   _PlaylistGroup(
                                     playlists: sortedCreated,
                                     multiSelectMode: true,
-                                    selectedIndices: _selectedIndices,
+                                    selectedIds: _selectedIds,
                                     onOpen: _openPlaylist,
                                     onTapInMultiSelect: _toggleSelected,
                                   ),
@@ -445,8 +447,8 @@ class _LibraryPageState extends State<LibraryPage> {
                                 : _PlaylistGroup(
                                     playlists: sortedCreated,
                                     onOpen: _openPlaylist,
-                                    onLongPress: (i) =>
-                                        _enterMultiSelect('created', i),
+                                    onLongPress: (playlist) =>
+                                        _enterMultiSelect('created', playlist),
                                   )),
                       ),
                     ),
@@ -1234,7 +1236,7 @@ class _PlaylistGroup extends StatelessWidget {
     required this.playlists,
     required this.onOpen,
     this.multiSelectMode = false,
-    this.selectedIndices = const {},
+    this.selectedIds = const {},
     this.onLongPress,
     this.onTapInMultiSelect,
   });
@@ -1242,9 +1244,9 @@ class _PlaylistGroup extends StatelessWidget {
   final List<PlaylistSummary> playlists;
   final void Function(PlaylistSummary) onOpen;
   final bool multiSelectMode;
-  final Set<int> selectedIndices;
-  final void Function(int index)? onLongPress;
-  final void Function(int index)? onTapInMultiSelect;
+  final Set<String> selectedIds;
+  final void Function(PlaylistSummary playlist)? onLongPress;
+  final void Function(PlaylistSummary playlist)? onTapInMultiSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -1271,12 +1273,12 @@ class _PlaylistGroup extends StatelessWidget {
             child: _PlaylistRow(
               borderRadius: BorderRadius.circular(AppRadius.lg),
               playlist: playlists[i],
-              selected: multiSelectMode && selectedIndices.contains(i),
+              selected: multiSelectMode && selectedIds.contains(playlists[i].id),
               multiSelectMode: multiSelectMode,
               onTap: multiSelectMode
-                  ? () => onTapInMultiSelect?.call(i)
+                  ? () => onTapInMultiSelect?.call(playlists[i])
                   : () => onOpen(playlists[i]),
-              onLongPress: () => onLongPress?.call(i),
+              onLongPress: () => onLongPress?.call(playlists[i]),
             ),
           );
         },
@@ -1293,12 +1295,12 @@ class _PlaylistGroup extends StatelessWidget {
             _PlaylistRow(
               borderRadius: BorderRadius.circular(AppRadius.md),
               playlist: playlists[i],
-              selected: multiSelectMode && selectedIndices.contains(i),
+              selected: multiSelectMode && selectedIds.contains(playlists[i].id),
               multiSelectMode: multiSelectMode,
               onTap: multiSelectMode
-                  ? () => onTapInMultiSelect?.call(i)
+                  ? () => onTapInMultiSelect?.call(playlists[i])
                   : () => onOpen(playlists[i]),
-              onLongPress: () => onLongPress?.call(i),
+              onLongPress: () => onLongPress?.call(playlists[i]),
             ),
             if (i < playlists.length - 1)
               Divider(

@@ -122,10 +122,9 @@ mixin _PlayerLyrics on _PlayerControllerBase {
         );
       }
     } catch (_) {
-      if (currentSong?.hash == song.hash && lyrics.isEmpty) {
-        lyrics = const [];
-        notifyListeners();
-      }
+      // 拉取失败保持静默：此时 lyrics 若非空必为本歌缓存数据（切歌时
+      // playSong 已先清空），清掉只会丢好数据；若为空则任何通知都会与
+      // 进页兜底（ensureLyricsLoaded）互相触发，形成无限重拉循环。
     }
     if (currentSong?.hash == song.hash) {
       _syncDesktopLyrics();
@@ -138,7 +137,17 @@ mixin _PlayerLyrics on _PlayerControllerBase {
   Future<void> ensureLyricsLoaded() async {
     final song = currentSong;
     if (song == null || lyrics.isNotEmpty) return;
-    await loadLyrics(song);
+    // 同一首歌的拉取已在进行中则跳过，防止页面 didUpdateWidget 反复触发并发重拉。
+    if (_lyricsFetchInFlightHash == song.hash) return;
+    _lyricsFetchInFlightHash = song.hash;
+    try {
+      await loadLyrics(song);
+    } finally {
+      // 无论成功失败都释放，切歌后新歌的兜底拉取不被卡住。
+      if (_lyricsFetchInFlightHash == song.hash) {
+        _lyricsFetchInFlightHash = null;
+      }
+    }
   }
 
   void _syncSuperLyricFromPosition() {

@@ -252,6 +252,12 @@ class DesktopWindowGeometry {
   /// [kMinVisibleEdge] 的可见边，避免显示器配置变化后窗口恢复到屏幕外
   /// 或仅剩几像素可见（用户无法拖回）。
   /// [visibleAreas] 为各显示器的可见区域（左上角 + 尺寸）。
+  ///
+  /// 除位置外同时钳制尺寸：窗口本身可能比可见区域还大（如 1280x800
+  /// 的默认/记忆尺寸落在 1366x768 屏），不缩窗则底部/右侧永远探出屏幕。
+  /// 尺寸上限取所有可见区域的包围盒而非单一显示器，避免误缩
+  /// 跨双屏使用的合法大窗口；下限为最小窗口，可见范围比最小窗口还小
+  /// 时以可见范围为准（保证窗口完整可见、可拖）。
   static DesktopWindowGeometry clampToVisibleAreas(
     DesktopWindowGeometry geometry,
     List<Rect> visibleAreas,
@@ -259,14 +265,32 @@ class DesktopWindowGeometry {
     // 无可用显示器信息时无从钳制，原样返回。
     if (visibleAreas.isEmpty) return geometry;
     final windowRect = geometry.rect;
+    // 所有可见区域的包围盒，作为尺寸钳制上限。
+    var union = visibleAreas.first;
+    for (final area in visibleAreas.skip(1)) {
+      union = union.expandToInclude(area);
+    }
     // 任一可见区域与窗口有足量交集（至少 kMinVisibleEdge 见方）→ 可见
-    // 且可拖动，原样返回。仅数像素交集视为不可用（拔显示器/DPI 换算后
+    // 且可拖动，仅数像素交集视为不可用（拔显示器/DPI 换算后
     // 贴边的典型残余），走下方重定位。
     for (final area in visibleAreas) {
       final intersection = area.intersect(windowRect);
       if (intersection.width >= kMinVisibleEdge &&
           intersection.height >= kMinVisibleEdge) {
-        return geometry;
+        return DesktopWindowGeometry(
+          left: geometry.left,
+          top: geometry.top,
+          width: _clampExtent(
+            geometry.width,
+            DesktopWindow.kMinSize.width,
+            union.width,
+          ),
+          height: _clampExtent(
+            geometry.height,
+            DesktopWindow.kMinSize.height,
+            union.height,
+          ),
+        );
       }
     }
     // 不可见/不可用 → 放进第一个可见区域，右/下边至少留出 80px 可见；
@@ -279,9 +303,26 @@ class DesktopWindowGeometry {
     return DesktopWindowGeometry(
       left: clampedLeft,
       top: clampedTop,
-      width: geometry.width,
-      height: geometry.height,
+      width: _clampExtent(
+        geometry.width,
+        DesktopWindow.kMinSize.width,
+        union.width,
+      ),
+      height: _clampExtent(
+        geometry.height,
+        DesktopWindow.kMinSize.height,
+        union.height,
+      ),
     );
+  }
+
+  /// 单边尺寸钳制：不超过 [visibleExtent]；不小于 [minSize]；
+  /// 可见范围不比最小窗口大时以可见范围为准。
+  static double _clampExtent(double value, double minSize, double visibleExtent) {
+    if (visibleExtent <= minSize) {
+      return visibleExtent;
+    }
+    return math.min(math.max(value, minSize), visibleExtent);
   }
 
   /// 按字段值判等，便于断言"存取往返后几何一致"。

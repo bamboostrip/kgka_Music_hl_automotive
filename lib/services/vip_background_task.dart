@@ -147,9 +147,11 @@ class VipBackgroundTask extends ChangeNotifier {
 
   String? _buildRunKey(LoginSession? session) {
     if (session?.isValid != true) return null;
-    final identity =
-        session?.userId ?? session?.sessionId ?? session?.token ?? '';
-    if (identity.isEmpty) return null;
+    // 取第一个"非空"身份：QR 登录会话的 userId 是空字符串（非 null），
+    // ?? 链会停在空串上导致返回 null，自动领取在重启后静默失效。
+    final identity = [session?.userId, session?.sessionId, session?.token]
+        .firstWhere((s) => s != null && s.isNotEmpty, orElse: () => null);
+    if (identity == null || identity.isEmpty) return null;
     final today = DateTime.now().toIso8601String().split('T').first;
     return '$identity@$today';
   }

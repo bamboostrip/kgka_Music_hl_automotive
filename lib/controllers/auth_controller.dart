@@ -55,6 +55,19 @@ class AuthController extends ChangeNotifier {
   final Map<String, int> _hashToFileId = {};
   StreamSubscription<void>? _networkRestoredSub;
 
+  /// 收藏写操作互斥链：服务端全量同步（清空重建）、单曲点赞增删、
+  /// 歌单批量增删对收藏集合的写改统一串行执行，
+  /// 避免并发写互相覆盖（刚点下的赞被同步的旧列表清掉）。
+  Future<void> _likedMutationLock = Future.value();
+
+  /// 入队一段已持锁的收藏集合变更。链上吞掉错误保证后续任务不被卡死；
+  /// 返回原 task 供调用方感知错误（不得在已持有锁的上下文内调用）。
+  Future<void> _enqueueLikedMutation(Future<void> Function() body) {
+    final task = _likedMutationLock.then((_) => body());
+    _likedMutationLock = task.catchError((Object _) {});
+    return task;
+  }
+
   bool get isLoggedIn => session?.isValid == true;
 
   bool isLiked(Song song) => _likedHashes.contains(song.hash);
@@ -75,45 +88,52 @@ class AuthController extends ChangeNotifier {
     final targetListId = playlist.listId?.isNotEmpty == true
         ? playlist.listId!
         : playlist.id;
-    try {
-      Map<String, dynamic>? resp;
-      if (liked) {
-        var fileId = _resolvePlaylistFileId(song);
-        if (fileId == null) {
-          await _syncLikedSongs();
-          fileId = _hashToFileId[song.hash];
-        }
-        if (fileId == null) return;
-        resp = await _api.removeSongsFromPlaylist(
-          targetListId,
-          [song],
-          fileIds: [fileId],
-        );
-        _likedHashes.remove(song.hash);
-        _hashToFileId.remove(song.hash);
-      } else {
-        resp = await _api.addToPlaylist(targetListId, song);
-        _likedHashes.add(song.hash);
-        if (resp != null) {
-          final info = resp['info'];
-          if (info is List && info.isNotEmpty) {
-            final fid = info[0]['fileid'];
-            if (fid is int) _hashToFileId[song.hash] = fid;
+    // 服务端增删 + 本地集合变更整体入互斥链，避免被并发的全量同步覆盖。
+    final task = _likedMutationLock.then((_) async {
+      try {
+        Map<String, dynamic>? resp;
+        if (liked) {
+          var fileId = _resolvePlaylistFileId(song);
+          if (fileId == null) {
+            // 已持有互斥锁，直接跑同步执行体；再入队会等待自身，死锁。
+            await _syncLikedSongsLocked();
+            fileId = _hashToFileId[song.hash];
+          }
+          if (fileId == null) return;
+          resp = await _api.removeSongsFromPlaylist(
+            targetListId,
+            [song],
+            fileIds: [fileId],
+          );
+          _likedHashes.remove(song.hash);
+          _hashToFileId.remove(song.hash);
+        } else {
+          resp = await _api.addToPlaylist(targetListId, song);
+          _likedHashes.add(song.hash);
+          if (resp != null) {
+            final info = resp['info'];
+            if (info is List && info.isNotEmpty) {
+              final fid = info[0]['fileid'];
+              if (fid is int) _hashToFileId[song.hash] = fid;
+            }
           }
         }
+        _updateLikedCountFromResponse(resp);
+        await _persistLikedHashes();
+        notifyListeners();
+      } catch (error) {
+        if (liked) {
+          _likedHashes.add(song.hash);
+        } else {
+          _likedHashes.remove(song.hash);
+          _hashToFileId.remove(song.hash);
+        }
+        rethrow;
       }
-      _updateLikedCountFromResponse(resp);
-      await _persistLikedHashes();
-      notifyListeners();
-    } catch (error) {
-      if (liked) {
-        _likedHashes.add(song.hash);
-      } else {
-        _likedHashes.remove(song.hash);
-        _hashToFileId.remove(song.hash);
-      }
-      rethrow;
-    }
+    });
+    // 链上吞掉错误，保证后续互斥任务不被前置失败卡死；调用方仍感知原错误。
+    _likedMutationLock = task.catchError((Object _) {});
+    await task;
   }
 
   PlaylistSummary? get likedPlaylist {
@@ -240,25 +260,28 @@ class AuthController extends ChangeNotifier {
       final resp = await _api.addSongsToPlaylist(listId, songs);
       playlists = await _loadUserPlaylistsWithCache();
       if (playlist.isLikedPlaylist) {
-        for (final song in songs) {
-          if (song.hash.isNotEmpty) {
-            _likedHashes.add(song.hash);
+        // 收藏集合写改入互斥链，避免与并发的全量同步互相覆盖。
+        await _enqueueLikedMutation(() async {
+          for (final song in songs) {
+            if (song.hash.isNotEmpty) {
+              _likedHashes.add(song.hash);
+            }
           }
-        }
-        final info = resp?['info'];
-        if (info is List) {
-          for (var i = 0; i < info.length && i < songs.length; i++) {
-            final item = info[i];
-            if (item is Map) {
-              final fid = item['fileid'];
-              final hash = songs[i].hash;
-              if (fid is int && hash.isNotEmpty) {
-                _hashToFileId[hash] = fid;
+          final info = resp?['info'];
+          if (info is List) {
+            for (var i = 0; i < info.length && i < songs.length; i++) {
+              final item = info[i];
+              if (item is Map) {
+                final fid = item['fileid'];
+                final hash = songs[i].hash;
+                if (fid is int && hash.isNotEmpty) {
+                  _hashToFileId[hash] = fid;
+                }
               }
             }
           }
-        }
-        await _persistLikedHashes();
+          await _persistLikedHashes();
+        });
       }
     });
   }
@@ -301,11 +324,14 @@ class AuthController extends ChangeNotifier {
       );
       playlists = await _loadUserPlaylistsWithCache();
       if (target.isLikedPlaylist) {
-        for (final song in songs) {
-          _likedHashes.remove(song.hash);
-          _hashToFileId.remove(song.hash);
-        }
-        await _persistLikedHashes();
+        // 收藏集合写改入互斥链，避免与并发的全量同步互相覆盖。
+        await _enqueueLikedMutation(() async {
+          for (final song in songs) {
+            _likedHashes.remove(song.hash);
+            _hashToFileId.remove(song.hash);
+          }
+          await _persistLikedHashes();
+        });
       }
     });
   }
@@ -567,11 +593,17 @@ class AuthController extends ChangeNotifier {
     playlists[index] = playlists[index].copyWith(songCount: count);
   }
 
-  Future<void> _syncLikedSongs() async {
-    final playlist = likedPlaylist;
-    if (playlist == null) return;
+  /// 全量同步入队入口（外部调用走互斥链）。
+  Future<void> _syncLikedSongs() {
+    return _enqueueLikedMutation(_syncLikedSongsLocked);
+  }
 
+  /// 全量同步执行体：只在已持有 [_likedMutationLock] 时调用
+  /// （toggleLike 任务体内与 [_syncLikedSongs] 入队后各一处）。
+  Future<void> _syncLikedSongsLocked() async {
     try {
+      final playlist = likedPlaylist;
+      if (playlist == null) return;
       final songs = await _api.playlistSongs(playlist.id, fetchAll: true);
       _likedHashes.clear();
       _hashToFileId.clear();
@@ -582,7 +614,9 @@ class AuthController extends ChangeNotifier {
       }
       await _persistLikedHashes();
     } catch (_) {
-      await _loadLikedHashes();
+      try {
+        await _loadLikedHashes();
+      } catch (_) {}
     }
   }
 
@@ -696,6 +730,7 @@ class AuthController extends ChangeNotifier {
     _api.setSession(null);
     await prefs.remove(_tokenKey);
     await prefs.remove(_t1Key);
+    await prefs.remove(_sessionIdKey);
     await prefs.remove(_userIdKey);
     await prefs.remove(_playlistCacheKey);
     await prefs.remove(_playlistEmptyCountKey);

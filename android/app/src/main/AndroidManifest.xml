@@ -20,6 +20,7 @@
         <application
             android:label="时音"
             android:name=".MusicApplication"
+            android:allowBackup="false"
             android:usesCleartextTraffic="true"
             android:icon="@mipmap/ic_launcher">
         <!-- 渲染引擎由 gradle flavor 决定（见 build.gradle.kts productFlavors）：

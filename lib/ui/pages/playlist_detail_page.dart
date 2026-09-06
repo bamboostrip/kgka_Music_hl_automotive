@@ -104,6 +104,16 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   _SongSortMode _sortMode = _SongSortMode.defaultOrder;
   String? _focusedSongKey;
 
+  // _filteredSongs 记忆化缓存：行构建器/吸顶代理/滚动监听每帧会多次调用
+  // 该 getter，全量拷贝 + 拼音排序开销大。影响结果的输入（_songs、
+  // _searchQuery、_sortMode）只在 setState 中变更，因此重写 setState
+  // 统一递增版本号使缓存失效（宽失效：宁可多算一次也不返回旧结果）。
+  int _filteredVersion = 0;
+  List<Song>? _filteredCache;
+  int? _filteredCacheVersion;
+  String? _filteredCacheQuery;
+  _SongSortMode? _filteredCacheSort;
+
   bool get _showDesktopTableHeader =>
       isDesktopFormFactor && _filteredSongs.isNotEmpty;
 
@@ -190,6 +200,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         );
       },
     );
+    if (!mounted) return;
     if (selected != null && selected != _sortMode) {
       setState(() => _sortMode = selected);
     }
@@ -206,6 +217,14 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       widget.auth.addListener(_onLikedChanged);
     }
     _loadInitial();
+  }
+
+  /// 见 _filteredSongs 的记忆化说明：任何 setState 都可能改了过滤/排序
+  /// 输入，统一递增版本号让缓存失效。
+  @override
+  void setState(VoidCallback fn) {
+    _filteredVersion++;
+    super.setState(fn);
   }
 
   @override
@@ -235,6 +254,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   }
 
   List<Song> get _filteredSongs {
+    final cached = _filteredCache;
+    if (cached != null &&
+        _filteredCacheVersion == _filteredVersion &&
+        _filteredCacheQuery == _searchQuery &&
+        _filteredCacheSort == _sortMode) {
+      return cached;
+    }
     List<Song> list;
     if (_searchQuery.isEmpty) {
       list = List<Song>.of(_songs);
@@ -263,6 +289,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       case _SongSortMode.defaultOrder:
         break;
     }
+    _filteredCache = list;
+    _filteredCacheVersion = _filteredVersion;
+    _filteredCacheQuery = _searchQuery;
+    _filteredCacheSort = _sortMode;
     return list;
   }
 
@@ -328,7 +358,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       if (_disposed || gen != _loadGeneration) return;
 
       List<Song> allSongs;
-      if (fullCached != null) {
+      // 过期视为未命中，走网络重新拉全量，避免全量缓存永不失效。
+      if (fullCached != null && !fullCached.isStale) {
         // 分片解析：大单 fromCache 同步循环每片让出一帧，避免卡顿；
         // 中途代际变化直接放弃。
         final raw =
@@ -405,7 +436,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   /// 当前可播放队列：已加载列表（搜索时为过滤结果）。
   /// 不阻塞等待未分页内容，避免因 count 含无版权曲而误提示「加载完整歌单」。
   List<Song> _playbackQueueNow() {
-    if (_searchQuery.isNotEmpty) return _filteredSongs;
+    // 缓存列表只读复用：出队列前拷贝，避免调用方原地修改污染缓存。
+    if (_searchQuery.isNotEmpty) return List<Song>.of(_filteredSongs);
     return _songs.where((s) => s.hash.isNotEmpty).toList();
   }
 
@@ -536,6 +568,9 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
               .toList(),
         );
         _isInitialLoading = false;
+        // 基础缓存只存第 1 页（pageSize 50）：网络降级失败时，滚动
+        // 加载才能从第 2 页续传，否则会重复拉第 1 页造成列表重复。
+        _nextPage = 2;
       });
     }
 
@@ -643,8 +678,24 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     } catch (_) {}
   }
 
+  /// 路由防重入：桌面端双击会连续触发两次 onTap，600ms 内同一目标只
+  /// push 一次，避免叠两层相同页面。
+  final _navThrottleTimes = <String, DateTime>{};
+
+  bool _isNavThrottled(String key) {
+    final now = DateTime.now();
+    final last = _navThrottleTimes[key];
+    if (last != null &&
+        now.difference(last) < const Duration(milliseconds: 600)) {
+      return true;
+    }
+    _navThrottleTimes[key] = now;
+    return false;
+  }
+
   /// 打开相似歌单详情。
   void _openSimilarPlaylist(PlaylistSummary playlist) {
+    if (_isNavThrottled('similar_${playlist.id}')) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PlaylistDetailPage(
@@ -658,7 +709,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   }
 
   void _maybeLoadMore() {
-    if (!_scrollController.hasClients || !_hasMore || _isLoadingMore) {
+    // 初始加载/后台全量补全期间禁止加载更多，避免并发拉页导致列表重复。
+    if (!_scrollController.hasClients ||
+        !_hasMore ||
+        _isLoadingMore ||
+        _isInitialLoading ||
+        _isLoadingAllSongs ||
+        _isExpandingQueue) {
       return;
     }
 
@@ -788,10 +845,13 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
     final topInset = MediaQuery.paddingOf(context).top;
     // 折叠后 SliverAppBar 工具栏高度 + 粘性歌曲条（含 padding）+
-    // 列表顶部 padding；歌曲行高 68 + 分隔 2。
+    // 列表顶部 padding；移动端行高 72（50 封面 + 上下 10 padding + 2 边框）
+    // + 分隔 8 = 80，桌面端行高 48（DesktopSongTableRow.rowHeight）。
     final actionsHeight = _showDesktopTableHeader ? 104.0 : 68.0;
     const listTopPadding = 4.0;
-    final rowExtent = isDesktopFormFactor ? 44.0 : 70.0;
+    final rowExtent = isDesktopFormFactor
+        ? _DesktopSongTableRow.rowHeight
+        : 80.0;
     final targetOffset =
         kToolbarHeight +
         topInset +
@@ -1016,6 +1076,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     if (confirmed != true) return;
     await _runMutation(() async {
       await widget.auth.removeSongsFromPlaylist(_libraryPlaylist, songs);
+      // AuthController 失败只写 errorMessage 不抛出：此时不做本地乐观删除。
+      if (widget.auth.errorMessage != null) return;
       if (!mounted) return;
       final keys = songs.map(_songKey).toSet();
       setState(() {
@@ -1084,8 +1146,11 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     final confirmed = await _confirm(title: title, message: message);
     if (confirmed != true) return;
 
-    await _runMutation(() => widget.auth.deleteOrUncollectPlaylist(target));
-    if (mounted) {
+    // 仅在删除/取消收藏成功后才退出页面，失败留在本页并提示。
+    final ok = await _runMutation(
+      () => widget.auth.deleteOrUncollectPlaylist(target),
+    );
+    if (ok && mounted) {
       Navigator.of(context).pop();
     }
   }
@@ -1095,6 +1160,8 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     if (confirmed != true) return;
     await _runMutation(() async {
       await widget.auth.removeSongFromPlaylist(_libraryPlaylist, song);
+      // AuthController 失败只写 errorMessage 不抛出：此时不做本地乐观删除。
+      if (widget.auth.errorMessage != null) return;
       if (mounted) {
         setState(() => _songs.removeWhere((item) => item.id == song.id));
       }
@@ -1364,8 +1431,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     }
   }
 
-  Future<void> _runMutation(Future<void> Function() action) async {
-    if (_isMutating) return;
+  /// 执行写操作：返回 true 表示成功（AuthController 失败只写 errorMessage
+  /// 不抛出，这里统一转成布尔，调用方据此决定是否继续本地收尾动作）。
+  Future<bool> _runMutation(Future<void> Function() action) async {
+    if (_isMutating) return false;
     setState(() => _isMutating = true);
     try {
       await action();
@@ -1373,8 +1442,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         throw Exception(widget.auth.errorMessage);
       }
       Toast.success('操作完成');
+      return true;
     } catch (error) {
       Toast.error('操作失败：$error');
+      return false;
     } finally {
       if (mounted) {
         setState(() => _isMutating = false);

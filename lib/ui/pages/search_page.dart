@@ -7,6 +7,7 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
+import '../../services/network_monitor.dart';
 import '../../services/search_history_service.dart';
 import '../widgets/artwork.dart';
 import '../widgets/horizontal_wheel_scroll.dart';
@@ -46,15 +47,19 @@ class _SearchPageState extends State<SearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
+  StreamSubscription<void>? _hotReloadSub;
 
   List<SearchHotCategory> _hotCategories = const [];
   var _hotLoading = true;
+  var _hotFailed = false;
   List<String> _suggestions = const [];
   List<Song> _results = const [];
   List<SearchArtistResult> _artistResults = const [];
   List<SearchAlbumResult> _albumResults = const [];
   bool _loading = false;
   bool _searched = false;
+  // 搜索失败标记：区分"真无结果"与"网络失败"，失败时展示重试入口。
+  String? _searchError;
   // 搜索代际守卫：提交/点热门词/切平台/切类型都能并发触发 _search，
   // 慢的旧响应若不识别代际会覆盖新结果（输入框已是 B、列表却是 A 的）。
   int _searchSeq = 0;
@@ -77,6 +82,10 @@ class _SearchPageState extends State<SearchPage> {
     _loadHotKeywords();
     _loadSearchHistory();
     _controller.addListener(_onTextChanged);
+    // 热搜加载失败停留空白时，网络恢复后自动重载。
+    _hotReloadSub = NetworkMonitor.instance.onConnectivityRestored.listen((_) {
+      if (mounted && _hotFailed) _loadHotKeywords();
+    });
   }
 
   void _handleFocusChanged() {
@@ -90,6 +99,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _hotReloadSub?.cancel();
     _focusNode.removeListener(_handleFocusChanged);
     _controller.dispose();
     _focusNode.dispose();
@@ -103,6 +113,10 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _loadHotKeywords() async {
+    setState(() {
+      _hotLoading = true;
+      _hotFailed = false;
+    });
     try {
       final categories = await widget.api.searchHotKeywords();
       if (mounted) {
@@ -113,7 +127,10 @@ class _SearchPageState extends State<SearchPage> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _hotLoading = false);
+        setState(() {
+          _hotLoading = false;
+          _hotFailed = true;
+        });
       }
     }
   }
@@ -132,14 +149,19 @@ class _SearchPageState extends State<SearchPage> {
   void _onTextChanged() {
     _debounce?.cancel();
     final text = _controller.text.trim();
-    if (text.isEmpty) {
-      setState(() {
+    // 每次输入都刷新 UI（清除按钮/内边距等依赖文本状态）：
+    // 建议词请求失败时 catch 不触发 setState，不刷新会滞留旧状态。
+    // 网络请求仍由防抖收敛，这里的 setState 仅重建轻量输入区。
+    setState(() {
+      // 文本变化后旧搜索错误不再适用，清除以免对未搜过的词展示"搜索失败"。
+      _searchError = null;
+      if (text.isEmpty) {
         _suggestions = const [];
         _results = const [];
         _searched = false;
-      });
-      return;
-    }
+      }
+    });
+    if (text.isEmpty) return;
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _fetchSuggestions(text);
     });
@@ -162,6 +184,7 @@ class _SearchPageState extends State<SearchPage> {
       _loading = true;
       _suggestions = const [];
       _searched = true;
+      _searchError = null;
     });
     var searchSucceeded = false;
     try {
@@ -196,6 +219,7 @@ class _SearchPageState extends State<SearchPage> {
           _results = const [];
           _artistResults = const [];
           _albumResults = const [];
+          _searchError = error.toString();
         });
       }
     } finally {
@@ -561,6 +585,13 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     if (_searched && text.isNotEmpty) {
+      // 搜索失败：与"真无结果"区分，展示错误提示与重试（catch 已清空结果列表）。
+      if (_searchError != null) {
+        return _SearchErrorView(
+          keyword: text,
+          onRetry: () => _search(text),
+        );
+      }
       // 网易云只搜歌曲
       if (_platform == _SearchPlatform.netease) {
         return _results.isEmpty
@@ -613,6 +644,17 @@ class _SearchPageState extends State<SearchPage> {
     if (text.isEmpty) {
       if (_hotLoading) {
         return const _HotSearchSkeleton();
+      }
+
+      // 热搜加载失败：给出重试入口，避免面板永久空白。
+      if (_hotFailed && _hotCategories.isEmpty) {
+        return Center(
+          child: TextButton.icon(
+            onPressed: _loadHotKeywords,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('加载失败，点击重试'),
+          ),
+        );
       }
 
       final size = MediaQuery.sizeOf(context);
@@ -1436,6 +1478,52 @@ class _EmptyResults extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 搜索失败视图：与空结果视图同版式，附加重试按钮。
+class _SearchErrorView extends StatelessWidget {
+  const _SearchErrorView({required this.keyword, required this.onRetry});
+
+  final String keyword;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 60, 28, 160),
+      child: Column(
+        children: [
+          Icon(
+            Icons.wifi_off_rounded,
+            size: 48,
+            color: colorScheme.primary.withValues(alpha: .64),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '「$keyword」搜索失败',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '网络开小差了，请检查网络后重试',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('重试'),
           ),
         ],
       ),

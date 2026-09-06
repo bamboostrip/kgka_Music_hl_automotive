@@ -16,6 +16,20 @@ int? asInt(Object? value) {
   return int.tryParse(value.toString());
 }
 
+bool? asBool(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value == 1;
+  }
+  final text = value.toString().trim().toLowerCase();
+  return text == 'true' || text == '1';
+}
+
 List<dynamic> asList(Object? value) {
   if (value is List) {
     return value;

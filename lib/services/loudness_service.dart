@@ -489,6 +489,8 @@ class LoudnessService {
         log(
           'applyGain AMPLIFY(android) gain=${clampedGain.toStringAsFixed(2)}dB gainMb=$gainMb instant=$instant user=$user',
         );
+        // 直设前中止在途 ramp,防止迟到的渐变步进覆盖直设值。
+        _abortVolumeRamp();
         await audioPlayer.setVolume(user);
         return;
       } on PlatformException catch (e) {
@@ -514,6 +516,8 @@ class LoudnessService {
     log(
       'applyGain AMPLIFY_SKIP($defaultTargetPlatform) gain=${clampedGain.toStringAsFixed(2)}dB (平台不支持放大,保持用户音量 $user)',
     );
+    // 直设前中止在途 ramp,防止迟到的渐变步进覆盖直设值。
+    _abortVolumeRamp();
     await audioPlayer.setVolume(user);
   }
 

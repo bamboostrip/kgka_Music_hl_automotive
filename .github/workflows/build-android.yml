@@ -102,6 +102,20 @@ jobs:
           cp "$SRC" "$DST"
           echo "path=$DST" >> "$GITHUB_OUTPUT"
           ls -lh "$DST"
+          # 版本一致性守卫（仅 tag 为 x.y.z 时校验）：tag 与 pubspec.yaml
+          # 的 version 必须一致，否则 APK 版本漂移会破坏应用内更新比对。
+          if [[ "${{ github.ref_name }}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            tag_ver="${BASH_REMATCH[1]}"
+            pub_ver=$(grep -m1 -E '^version:' pubspec.yaml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+            if [ -z "$pub_ver" ]; then
+              echo "::error::pubspec.yaml 中未找到 version: x.y.z"
+              exit 1
+            fi
+            if [ "$pub_ver" != "$tag_ver" ]; then
+              echo "::error::版本不一致：tag v$tag_ver 与 pubspec.yaml $pub_ver 不匹配，请对齐后再打 tag（见 docs/release-process.md）"
+              exit 1
+            fi
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

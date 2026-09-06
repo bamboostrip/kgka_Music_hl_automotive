@@ -101,7 +101,8 @@ class _DownloadedList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: downloads,
+      // 同时监听下载列表与播放器，保证当前播放歌曲高亮随播放状态刷新
+      animation: Listenable.merge([downloads, player]),
       builder: (context, _) {
         final entries = downloads.downloadEntries;
         final completed = entries

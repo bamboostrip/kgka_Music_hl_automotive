@@ -900,12 +900,15 @@ class _RankDetailPageState extends State<RankDetailPage> {
   }
 
   void _maybeLoadMore() {
+    // 首屏加载中不触发加载更多，避免并发请求第 1 页导致重复数据
+    if (_isLoading) return;
     if (!_scrollController.hasClients || !_hasMore || _isLoadingMore) return;
     if (_scrollController.position.extentAfter < 400) _loadMore();
   }
 
   Future<void> _loadMore() async {
-    if (_isLoadingMore || !_hasMore) return;
+    // 首屏加载中不触发加载更多，避免并发请求第 1 页导致重复数据
+    if (_isLoading || _isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
     try {
       final result = await widget.api.rankAudio(

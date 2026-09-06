@@ -82,6 +82,8 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
   }
 
   Future<void> _selectCacheLimit(BuildContext context) async {
+    // 已有清理/修改操作进行中时忽略重复点击，避免并发操作。
+    if (_clearing) return;
     final downloads = widget.downloads;
     if (downloads == null) return;
 
@@ -188,6 +190,8 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
                   _dataCacheSize != null &&
                   _dataCacheSize! > 0
               ? () async {
+                  // 清理进行中忽略重复点击，避免并发清理。
+                  if (_clearing) return;
                   setState(() => _clearing = true);
                   try {
                     await widget.cache!.clearAllCache();
@@ -223,6 +227,8 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
                   _playCacheSize != null &&
                   _playCacheSize! > 0
               ? () async {
+                  // 清理进行中忽略重复点击，避免并发清理。
+                  if (_clearing) return;
                   setState(() => _clearing = true);
                   try {
                     await widget.downloads!.clearPlayCache();
@@ -319,6 +325,8 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
             size: '${widget.player!.loudnessCacheCount} 首',
             onClear: widget.player!.loudnessCacheCount > 0
                 ? () async {
+                    // 清理进行中忽略重复点击，避免并发清理。
+                    if (_clearing) return;
                     setState(() => _clearing = true);
                     try {
                       await widget.player!.clearLoudnessCache();

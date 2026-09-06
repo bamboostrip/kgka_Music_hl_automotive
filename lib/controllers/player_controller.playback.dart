@@ -330,13 +330,15 @@ mixin _PlayerPlayback on _PlayerControllerBase {
         final playUrl = await _api.songUrl(song, quality: audioQuality);
         if (playUrl.url.isNotEmpty) {
           errorMessage = null;
-          // 重新走完整播放流程（保留定位与高潮武装）
+          // 重新走完整播放流程（保留定位与高潮武装）；
+          // isRetry 防止服务端反复在"下发 URL"与 VIP 异常之间抖动时形成无限领取/重试递归。
           unawaited(
             playSong(
               song,
               queue: queue,
               initialPosition: initialPosition,
               preserveClimax: preserveClimax,
+              isRetry: true,
             ),
           );
           return true;

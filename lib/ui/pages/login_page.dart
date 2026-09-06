@@ -38,6 +38,8 @@ class _LoginPageState extends State<LoginPage> {
   bool _qrLoading = false;
   bool _qrExpired = false;
   Timer? _qrPollTimer;
+  // 上一次轮询请求尚未返回时跳过本次 tick，避免弱网下请求堆积
+  bool _qrPollInFlight = false;
 
   @override
   void dispose() {
@@ -245,6 +247,9 @@ class _LoginPageState extends State<LoginPage> {
   void _startQrPolling(String key) {
     _qrPollTimer?.cancel();
     _qrPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      // 上一次检查还在进行中，跳过本次 tick
+      if (_qrPollInFlight) return;
+      _qrPollInFlight = true;
       try {
         final result = await widget.api.checkQrStatus(key);
         if (!mounted) return;
@@ -278,6 +283,8 @@ class _LoginPageState extends State<LoginPage> {
         });
       } catch (_) {
         if (!mounted) return;
+      } finally {
+        _qrPollInFlight = false;
       }
     });
   }
@@ -286,7 +293,6 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -317,15 +323,11 @@ class _LoginPageState extends State<LoginPage> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      22,
-                      34,
-                      22,
-                      keyboardInset + 24,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(22, 34, 22, 24),
                     child: ConstrainedBox(
+                      // clamp 防止横屏矮屏下 maxHeight - 58 为负导致断言失败
                       constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight - 58,
+                        minHeight: math.max(0.0, constraints.maxHeight - 58),
                       ),
                       child: Center(
                         child: ConstrainedBox(
@@ -340,7 +342,12 @@ class _LoginPageState extends State<LoginPage> {
                                 selectedIndex: _tabIndex,
                                 onChanged: (i) {
                                   setState(() => _tabIndex = i);
-                                  if (i == 1) _loadQrCode();
+                                  if (i == 1) {
+                                    _loadQrCode();
+                                  } else {
+                                    // 切回手机号登录时停止二维码轮询
+                                    _qrPollTimer?.cancel();
+                                  }
                                 },
                               ),
                               const SizedBox(height: 20),

@@ -219,8 +219,14 @@ mixin _PlayerSettings on _PlayerControllerBase {
           _sleepTimer?.cancel();
           _sleepTimer = null;
           _sleepTimerEnd = null;
-          _sleepFinishCurrentSong = true;
-          notifyListeners();
+          // 到期时若并未在播放，不存在"当前歌曲播完"，直接执行休眠清空状态；
+          // 否则标记会残留，导致之后某个会话突然暂停。
+          if (!isPlaying) {
+            _executeSleepTimer();
+          } else {
+            _sleepFinishCurrentSong = true;
+            notifyListeners();
+          }
         } else {
           _executeSleepTimer();
         }

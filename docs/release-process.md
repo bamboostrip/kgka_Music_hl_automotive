@@ -4,6 +4,7 @@
 > CI 工作流：
 > - `.github/workflows/build-android.yml`（打 `v*` tag 自动构建 skia/impeller 双变体 arm64 APK 并按固定顺序附加到 Release）
 > - `.github/workflows/build-windows.yml`（打 `v*` tag 自动构建 Windows 便携包 + 安装包并附加到 Release）
+> - `.github/workflows/build-linux.yml`（打 `v*` tag 自动构建 Linux 便携包 + deb 包并附加到 Release）
 
 ---
 
@@ -45,7 +46,7 @@ Windows 分发无签名要求（不做代码签名），但 Inno 的 `AppId` 一
 
 版本号规则：
 - `versionName`：语义化版本 `major.minor.patch`
-- `versionCode`：`major * 10000 + minor * 100 + patch`（如 `2.4.2` → `20402`，简写 `242`）
+- `versionCode`：`major * 100 + minor * 10 + patch`（如 `2.4.2` → `242`，pubspec 写作 `2.4.2+242`）
 
 ## 四、更新更新日志
 

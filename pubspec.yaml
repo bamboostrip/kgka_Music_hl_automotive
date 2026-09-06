@@ -65,7 +65,8 @@ dependency_overrides:
   # 1) 全局静态 MethodChannel 改为实例成员 channel_：desktop_multi_window
   #    子窗二次注册插件时，上游全局 channel 会被覆盖/析构置空，导致主窗
   #    窗口事件（几何保存/关闭拦截）全部失效；
-  # 2) SetSkipTaskbar/SetProgressBar 的 taskbar_ 懒初始化 + 空 HWND 防护。
+  # 2) SetSkipTaskbar/SetProgressBar 的 taskbar_ 懒初始化 + 空 HWND 防护
+  #    + 析构 Release()（~WindowManager 中释放 COM 接口防泄漏）。
   # 升级 window_manager 时必须把这两处补丁重新移植。
   window_manager:
     path: packages/window_manager

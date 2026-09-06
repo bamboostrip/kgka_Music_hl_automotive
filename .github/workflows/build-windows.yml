@@ -67,6 +67,17 @@ jobs:
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "ver=$ver" >> $env:GITHUB_OUTPUT
           "filever=$fileVer" >> $env:GITHUB_OUTPUT
+          # 版本一致性守卫（仅 tag 为 x.y.z 时校验）：tag 与 pubspec.yaml
+          # 的 version 必须一致，否则安装包/应用版本漂移会破坏应用内更新比对。
+          if ($tag -match '^v(\d+\.\d+\.\d+)') {
+            $tagVer = $Matches[1]
+            $pubMatch = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\d+\.\d+\.\d+)'
+            if (-not $pubMatch) { throw 'pubspec.yaml 中未找到 version: x.y.z' }
+            $pubVer = $pubMatch.Matches[0].Groups[1].Value
+            if ($pubVer -ne $tagVer) {
+              throw "版本不一致：tag v$tagVer 与 pubspec.yaml $pubVer 不匹配，请对齐后再打 tag（见 docs/release-process.md）"
+            }
+          }
 
       # portable.zip 与 setup.exe 共用同一份暂存负载（exe 改名为 ShiYinMusic.exe）。
       # 产物统一放 build/dist/（Flutter 约定，build/ 已在 .gitignore 且 flutter clean 会清理）。
@@ -76,6 +87,12 @@ jobs:
           $src = 'build\windows\x64\runner\Release'
           if (-not (Test-Path "$src\kgka_music_hl.exe")) {
             throw "未找到构建产物：$src\kgka_music_hl.exe"
+          }
+          # Rust 引擎库是应用运行硬依赖（frb 运行时按 kugou_engine.dll 加载），
+          # 缺失时 exe 能启动但所有曲库/搜索功能不可用，必须在暂存前拦截
+          # （对齐 build-linux.yml 的 Verify bundle 步骤）。
+          if (-not (Test-Path "$src\kugou_engine.dll")) {
+            throw "缺少 kugou_engine.dll：$src"
           }
           New-Item -ItemType Directory -Force -Path build\dist\portable | Out-Null
           Copy-Item "$src\*" build\dist\portable -Recurse -Force

@@ -95,6 +95,8 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
   }
 
   void _maybeLoadMore() {
+    // 首屏加载中或已出错时不触发加载更多，避免并发请求第 1 页导致重复数据
+    if (_isInitialLoading || _errorMessage != null) return;
     if (!_scrollController.hasClients || !_hasMore || _isLoadingMore) {
       return;
     }

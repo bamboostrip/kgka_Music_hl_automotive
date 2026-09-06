@@ -368,43 +368,53 @@ class CarLeftPlayerPanel extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Text(
-                        '播放队列',
-                        style: Theme.of(sheetContext)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${player.queue.length} 首',
-                        style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
+                // 头部（队列数 + 清空按钮可用态）同样监听 player，
+                // 面板打开期间队列变化时保持刷新（与桌面端 DesktopQueuePanel 一致）。
+                AnimatedBuilder(
+                  animation: player,
+                  builder: (context, _) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Text(
+                            '播放队列',
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${player.queue.length} 首',
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: player.queue.length > 1
+                                ? () {
+                                    final current = player.currentSong;
+                                    if (current == null) return;
+                                    Navigator.of(sheetContext).pop();
+                                    // 与移动端队列语义对齐：静默换队不重载，驾驶时不断流
+                                    unawaited(player.replaceQueue([current]));
+                                    Toast.success('已清空播放队列');
+                                  }
+                                : null,
+                            child: Text(
+                              '清空',
+                              style: TextStyle(color: colorScheme.error),
                             ),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: player.queue.length > 1
-                            ? () {
-                                final current = player.currentSong;
-                                if (current == null) return;
-                                Navigator.of(sheetContext).pop();
-                                // 与移动端队列语义对齐：静默换队不重载，驾驶时不断流
-                                unawaited(player.replaceQueue([current]));
-                                Toast.success('已清空播放队列');
-                              }
-                            : null,
-                        child: Text(
-                          '清空',
-                          style: TextStyle(color: colorScheme.error),
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
                 Flexible(
                   child: AnimatedBuilder(

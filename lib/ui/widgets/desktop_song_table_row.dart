@@ -11,6 +11,7 @@ import 'artwork.dart';
 import 'cover_play_overlay.dart';
 import 'desktop_anchored_menu.dart';
 import 'now_playing_badge.dart';
+import 'toast.dart';
 
 /// PC 桌面端专业歌曲表格行通用粘性表头委托（表头高度 36px）。
 class DesktopSongTableStickyHeaderDelegate
@@ -505,7 +506,14 @@ class _DesktopSongTableRowState extends State<DesktopSongTableRow> {
                                         ? Colors.redAccent
                                         : null,
                                     tooltip: isLiked ? '取消收藏' : '收藏',
-                                    onTap: () => auth.toggleLike(song),
+                                    // toggleLike 失败会 rethrow，这里兜底提示避免未处理的异步错误。
+                                    onTap: () => auth
+                                        .toggleLike(song)
+                                        .then(
+                                          (_) {},
+                                          onError: (Object _) =>
+                                              Toast.error('收藏失败，请重试'),
+                                        ),
                                   ),
                                   const SizedBox(width: 2),
                                   _DesktopRowIconButton(
@@ -615,7 +623,10 @@ class _HoverTipTextState extends State<_HoverTipText> {
       maxLines: 1,
       textScaler: MediaQuery.textScalerOf(context),
     )..layout();
-    return painter.didExceedMaxLines || painter.width > box.size.width + 0.5;
+    final truncated =
+        painter.didExceedMaxLines || painter.width > box.size.width + 0.5;
+    painter.dispose();
+    return truncated;
   }
 
   void _showTip() {

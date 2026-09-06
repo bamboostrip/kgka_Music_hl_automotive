@@ -10,6 +10,7 @@ import '../models/music_models.dart';
 import '../services/desktop_system_integration.dart';
 import '../services/download_service.dart';
 import '../services/music_api.dart';
+import '../ui/widgets/toast.dart';
 
 /// 下载状态枚举。
 enum DownloadStatus { notDownloaded, downloading, downloaded, failed }
@@ -114,6 +115,10 @@ class DownloadController extends ChangeNotifier {
   // （Song/路径对象本身不复制），千条约几十 KB，车机可忽略。
   final Map<String, Set<String>> _playCacheByHash = {};
   bool _initialized = false;
+
+  /// 在途播放缓存任务（cacheKey 去重）：同一首歌重复触发缓存时直接跳过，
+  /// 避免并发任务争抢同一个 .part 文件（service 层同键去重是第二道兜底）。
+  final Set<String> _inFlightCacheKeys = {};
 
   /// 桌面下载完成通知（仅桌面形态由 main.dart 注入；移动端/车机为 null，
   /// 全部通知逻辑零开销跳过）。
@@ -378,9 +383,15 @@ class DownloadController extends ChangeNotifier {
   /// 用户主动下载歌曲。
   Future<void> download(Song song, AudioQuality quality) async {
     final hash = song.hash;
+    final key = _service.cacheKeyFor(song, quality);
     final existing = _downloads[hash];
     if (existing?.status == DownloadStatus.downloading) return;
     if (existing?.status == DownloadStatus.downloaded) return;
+    // 同键下载任务已在途/排队（service 按 kind:cacheKey 去重，此处为
+    // 快速路径）：跳过。播放缓存与下载写不同目录，互不阻塞。
+    if (_service.inFlightKeysFor(DownloadTaskKind.download).contains(key)) {
+      return;
+    }
 
     _downloads[hash] = DownloadEntry(
       song: song,
@@ -397,6 +408,9 @@ class DownloadController extends ChangeNotifier {
       }
       await _transfer(song, quality, playUrl.url);
     } catch (error) {
+      // 等待地址解析期间已被清空/取消（条目移除）：不再写回失败条目。
+      // _transfer 内部自捕获不会抛到此处，能到这里只会是解析本身失败。
+      if (_downloads[hash]?.status != DownloadStatus.downloading) return;
       _downloads[hash] = DownloadEntry(
         song: song,
         quality: quality,
@@ -464,6 +478,13 @@ class DownloadController extends ChangeNotifier {
         tracker?.trackStarted();
         try {
           final playUrl = await _api.songUrl(song, quality: quality);
+          // 等待解析期间已被清空/取消（代际过期或条目不在下载态）：
+          // 静默中止，不写回条目；tracker 仍要结束计数以保守恒。
+          if (gen != _generation ||
+              _downloads[hash]?.status != DownloadStatus.downloading) {
+            tracker?.trackFinished(succeeded: false);
+            continue;
+          }
           if (playUrl.url.isEmpty) {
             _downloads[hash] = DownloadEntry(
               song: song,
@@ -487,6 +508,11 @@ class DownloadController extends ChangeNotifier {
             ),
           );
         } catch (error) {
+          if (gen != _generation ||
+              _downloads[hash]?.status != DownloadStatus.downloading) {
+            tracker?.trackFinished(succeeded: false);
+            continue;
+          }
           _downloads[hash] = DownloadEntry(
             song: song,
             quality: quality,
@@ -529,6 +555,13 @@ class DownloadController extends ChangeNotifier {
     final gen = _generation;
     var succeeded = false;
     try {
+      // 启动前复核：等待地址解析期间条目可能已被清空/取消（移除），
+      // 此时不再发起传输，避免已清空的歌"复活"。守卫放 try 内，
+      // finally 的桌面通知/tracker 记账仍恰好一次（单曲失败不弹、
+      // 批次照常 trackFinished，计数守恒不破坏）。
+      if (_downloads[hash]?.status != DownloadStatus.downloading) {
+        return;
+      }
       final path = await _service.download(
         song: song,
         quality: quality,
@@ -638,12 +671,20 @@ class DownloadController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 目标路径是否为当前正在播放的文件（在播保护，同 [clearPlayCache] 口径）。
+  bool _isPlayingFile(String path) => playingPathProvider?.call() == path;
+
   /// 删除单个已下载歌曲。
   Future<void> deleteDownload(Song song) async {
     final hash = song.hash;
     final entry = _downloads[hash];
     if (entry?.filePath != null) {
-      await _service.deleteFile(entry!.filePath!);
+      if (_isPlayingFile(entry!.filePath!)) {
+        // 在播文件删了会打断播放（代理后续 Range 404），保留条目待播完再删。
+        Toast.show('正在播放，已跳过文件删除');
+        return;
+      }
+      await _service.deleteFile(entry.filePath!);
     }
     _downloads.remove(hash);
     notifyListeners();
@@ -688,9 +729,11 @@ class DownloadController extends ChangeNotifier {
     String url,
   ) async {
     final key = _service.cacheKeyFor(song, quality);
-    // 已有缓存或已在下载则跳过
+    // 已有缓存、已在下载或在途缓存任务则跳过
     if (_playCache[key] != null) return;
     if (_downloads[song.hash]?.status == DownloadStatus.downloading) return;
+    if (_inFlightCacheKeys.contains(key)) return;
+    _inFlightCacheKeys.add(key);
 
     try {
       final path = await _service.cacheForPlayback(
@@ -715,6 +758,8 @@ class DownloadController extends ChangeNotifier {
       await _prunePlayCache(excludePaths: {path});
     } catch (_) {
       // 播放缓存失败静默忽略
+    } finally {
+      _inFlightCacheKeys.remove(key);
     }
   }
 
@@ -727,7 +772,7 @@ class DownloadController extends ChangeNotifier {
     final effective = <String>{...excludePaths};
     final playing = playingPathProvider?.call();
     if (playing != null) effective.add(playing);
-    final inFlight = _service.inFlightCacheKeys;
+    final inFlight = _service.inFlightKeysFor(DownloadTaskKind.playCache);
     await _service.clearPlayCacheDir(excludePaths: effective);
     _playCache.removeWhere(
       (key, e) =>
@@ -745,13 +790,17 @@ class DownloadController extends ChangeNotifier {
   Future<void> deletePlayCache(Song song, AudioQuality quality) async {
     final key = _service.cacheKeyFor(song, quality);
     final entry = _playCache[key];
-    if (entry != null) {
-      await _service.deleteFile(entry.filePath);
-      _playCache.remove(key);
-      _unindexPlayCacheEntry(entry);
-      notifyListeners();
-      await _persistPlayCache();
+    if (entry == null) return;
+    if (_isPlayingFile(entry.filePath)) {
+      // 在播文件暂不删（播一半 404），保留条目，与 clearPlayCache 的在播保护一致。
+      Toast.show('正在播放，已跳过文件删除');
+      return;
     }
+    await _service.deleteFile(entry.filePath);
+    _playCache.remove(key);
+    _unindexPlayCacheEntry(entry);
+    notifyListeners();
+    await _persistPlayCache();
   }
 
   Future<void> _prunePlayCache({Set<String> excludePaths = const {}}) async {

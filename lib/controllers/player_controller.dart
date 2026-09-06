@@ -154,6 +154,8 @@ class PlayerController extends _PlayerControllerBase
     });
     // Send timing anchors; Android animates karaoke progress at display refresh.
     SchedulerBinding.instance.addPersistentFrameCallback((_) {
+      // 控制器销毁后持久帧回调仍会被调度，直接跳过避免访问已释放状态。
+      if (_disposed) return;
       if (_shouldShowDesktopLyrics &&
           isPlaying &&
           lyrics.isNotEmpty &&
@@ -350,6 +352,8 @@ abstract class _PlayerControllerBase extends ChangeNotifier {
   Duration? _pendingIdlePosition;
   Duration? _pendingInitialPosition;
   bool _disposed = false;
+  /// 进行中的歌词拉取（按歌曲 hash 去重），防止进页兜底与并发触发重复请求。
+  String? _lyricsFetchInFlightHash;
 
   Song? currentSong;
   List<Song> queue = const [];

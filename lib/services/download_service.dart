@@ -47,6 +47,38 @@ class DownloadService {
   final int _maxConcurrent = AppConfig.maxConcurrentDownloads;
   int _running = 0;
   final List<_PendingTask> _queue = [];
+  // 在途/排队任务索引（kind:cacheKey → 任务）：同键同类请求复用现有任务的
+  // 完成 future，防止重复入队后两个 dio 流追加同一个 .part 文件、互相覆盖
+  // 取消令牌/半成品注册表。
+  final Map<String, _PendingTask> _tasksByKey = {};
+
+  static String _registryKey(DownloadTaskKind kind, String cacheKey) =>
+      '${kind.name}:$cacheKey';
+
+  /// 取同键在途/排队任务，否则创建并入队。
+  _PendingTask _taskFor({
+    required DownloadTaskKind kind,
+    required Song song,
+    required AudioQuality quality,
+    required String url,
+    void Function(int received, int total)? onProgress,
+  }) {
+    final existing = _tasksByKey[_registryKey(kind, cacheKeyFor(song, quality))];
+    if (existing != null) {
+      return existing;
+    }
+    final task = _PendingTask(
+      kind: kind,
+      song: song,
+      quality: quality,
+      url: url,
+      completer: Completer<String>(),
+      onProgress: onProgress,
+    );
+    _tasksByKey[_registryKey(kind, cacheKeyFor(song, quality))] = task;
+    _enqueue(task);
+    return task;
+  }
 
   /// 持久下载目录。
   ///
@@ -173,18 +205,15 @@ class DownloadService {
     required AudioQuality quality,
     required String url,
     required void Function(int received, int total) onProgress,
-  }) async {
-    final completer = Completer<String>();
-    final task = _PendingTask(
+  }) {
+    final task = _taskFor(
       kind: DownloadTaskKind.download,
       song: song,
       quality: quality,
       url: url,
-      completer: completer,
       onProgress: onProgress,
     );
-    _enqueue(task);
-    return completer.future;
+    return task.completer.future;
   }
 
   /// 下载到临时缓存目录（播放缓存）。无进度上报（静默）。
@@ -192,17 +221,14 @@ class DownloadService {
     required Song song,
     required AudioQuality quality,
     required String url,
-  }) async {
-    final completer = Completer<String>();
-    final task = _PendingTask(
+  }) {
+    final task = _taskFor(
       kind: DownloadTaskKind.playCache,
       song: song,
       quality: quality,
       url: url,
-      completer: completer,
     );
-    _enqueue(task);
-    return completer.future;
+    return task.completer.future;
   }
 
   void _enqueue(_PendingTask task) {
@@ -235,6 +261,11 @@ class DownloadService {
     } catch (error) {
       task.completer.completeError(error);
     } finally {
+      // 出注册表后同键新请求才会重新入队；其间到达的请求拿到已完成的
+      // future（成功得路径/失败得错误），不会重复下载。
+      _tasksByKey.remove(
+        _registryKey(task.kind, cacheKeyFor(task.song, task.quality)),
+      );
       _running--;
       _processQueue();
     }
@@ -259,8 +290,11 @@ class DownloadService {
       } catch (_) {}
     }
     final cancelToken = CancelToken();
-    _cancelTokens[key] = cancelToken;
-    _partPaths[key] = partPath;
+    // 注册表按 kind:cacheKey 隔离：下载与播放缓存写不同目录的 .part，
+    // 同歌同音质可并行；若共用平键会互相覆盖取消令牌注册。
+    final registryKey = _registryKey(task.kind, key);
+    _cancelTokens[registryKey] = cancelToken;
+    _partPaths[registryKey] = partPath;
 
     try {
       try {
@@ -307,8 +341,8 @@ class DownloadService {
 
       return finalPath;
     } finally {
-      _cancelTokens.remove(key);
-      _partPaths.remove(key);
+      _cancelTokens.remove(registryKey);
+      _partPaths.remove(registryKey);
     }
   }
 
@@ -415,12 +449,19 @@ class DownloadService {
     }
   }
 
-  /// 在途任务 key 快照（清理时保留对应索引条目，任务结束会自己写回）。
-  Set<String> get inFlightCacheKeys => Set.of(_cancelTokens.keys);
+  /// 指定 kind 的在途/排队任务 key 快照（平键，与调用方索引键同构；
+  /// 清理时保留对应索引条目，任务结束会自己写回）。
+  Set<String> inFlightKeysFor(DownloadTaskKind kind) => _tasksByKey.keys
+      .where((k) => k.startsWith('${kind.name}:'))
+      .map((k) => k.substring(kind.name.length + 1))
+      .toSet();
 
   /// 取消下载/缓存任务。
-  Future<void> cancel(String cacheKey) async {
-    final token = _cancelTokens[cacheKey];
+  Future<void> cancel(
+    String cacheKey, {
+    DownloadTaskKind kind = DownloadTaskKind.download,
+  }) async {
+    final token = _cancelTokens[_registryKey(kind, cacheKey)];
     if (token != null && !token.isCancelled) {
       token.cancel();
     }

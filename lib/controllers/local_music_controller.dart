@@ -41,6 +41,8 @@ class LocalMusicController extends ChangeNotifier {
   List<Song> _rawSongs = [];
   final Set<String> _excludedFolders = {};
   bool _isScanning = false;
+  /// 扫描进行中收到根目录增删触发的重扫请求：收尾时补跑一次，避免变更被静默丢弃。
+  bool _rescanPending = false;
 
   // 本地专辑封面字节缓存上限（LRU，按插入顺序淘汰最早项）。
   // 50 → 100：封面为压缩字节（常见 500×500 JPEG ≈ 50-200KB），
@@ -307,7 +309,7 @@ class LocalMusicController extends ChangeNotifier {
     _desktopRoots.add(normalized);
     notifyListeners();
     await _persistDesktopRoots();
-    await scanLocalMusic();
+    await _scanAfterRootChange();
   }
 
   /// 移除桌面扫描根目录并重新扫描（歌曲列表即时收敛）。
@@ -319,6 +321,16 @@ class LocalMusicController extends ChangeNotifier {
       _rawSongs = [];
       _applyFolderFilter();
       notifyListeners();
+      return;
+    }
+    await _scanAfterRootChange();
+  }
+
+  /// 根目录增删后触发重扫：若扫描正在进行（_scanDesktopMusic 会直接 no-op），
+  /// 标记待办，由扫描收尾补跑一次，保证变更不被静默丢弃。
+  Future<void> _scanAfterRootChange() async {
+    if (_isScanning) {
+      _rescanPending = true;
       return;
     }
     await scanLocalMusic();
@@ -382,6 +394,13 @@ class LocalMusicController extends ChangeNotifier {
     _scanSubscription = null;
     _isScanning = false;
     notifyListeners();
+
+    // 扫描期间根目录发生过增删：补跑一次，收敛到最新根目录集合
+    // （单次补跑即可，补跑中若再有变更会再次标记，不会无限递归）。
+    if (_rescanPending) {
+      _rescanPending = false;
+      await _scanDesktopMusic();
+    }
   }
 
   /// Rust 扫描条目 → Song。标签缺失回退"文件名猜标题"

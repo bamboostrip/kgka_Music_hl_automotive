@@ -279,7 +279,11 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _future = future;
     });
-    await future;
+    // FutureBuilder 各自处理错误，这里只需等待完成，忽略异常，
+    // 避免刷新按钮/下拉刷新/网络恢复监听等 fire-and-forget 调用产生未处理异常。
+    try {
+      await future;
+    } catch (_) {}
   }
 
   Future<void> _checkForUpdates() async {
@@ -1943,7 +1947,20 @@ class _RadioSectionState extends State<_RadioSection> {
     setState(() {
       _future = future;
     });
-    await future;
+    // 与 initState 相同：静态缓存只保留成功结果，失败时清掉缓存，
+    // 避免下一个页面实例复用同一个错误 future。
+    unawaited(
+      future.then(
+        (_) {},
+        onError: (_) {
+          if (identical(_cachedFuture, future)) _cachedFuture = null;
+        },
+      ),
+    );
+    // FutureBuilder 已处理错误，这里吞掉异常避免 fire-and-forget 调用方产生未处理异常。
+    try {
+      await future;
+    } catch (_) {}
   }
 
   Future<void> _playStation(FmStation station) async {

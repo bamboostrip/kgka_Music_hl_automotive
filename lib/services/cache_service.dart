@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 缓存读取结果。
@@ -171,7 +172,13 @@ class CacheService {
     // 2. 后台静默刷新
     try {
       final fresh = await fetch();
-      await write(key, encode(fresh));
+      // 写缓存失败只记录，不作为本次刷新失败：新数据照常上屏，
+      // 否则"拿到新数据却当失败降级显示旧缓存"。
+      try {
+        await write(key, encode(fresh));
+      } catch (writeError) {
+        debugPrint('CacheService: swr 写缓存失败 key=$key: $writeError');
+      }
       onData(fresh);
     } catch (error) {
       if (cached != null) {

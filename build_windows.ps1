@@ -236,6 +236,16 @@ if (-not $NoInstaller) {
     }
 }
 
+# ── 3c. sha256 sidecar（与 CI build-windows.yml 完全同格式）──
+# 格式："<小写 hex>  <文件名>"（两个空格，无换行结尾），应用内更新下载
+# setup.exe 后会拉取同 URL 的 .sha256 比对（AppUpdateService._verifySha256Sidecar）。
+# 本地构建若不带 sidecar，手动附加到 Release 会被客户端静默跳过完整性校验。
+Get-ChildItem (Join-Path $distDir 'shiyin-*.zip'), (Join-Path $distDir 'shiyin-*.exe') | ForEach-Object {
+    $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+    "$hash  $($_.Name)" | Out-File -Encoding ascii -NoNewline "$($_.FullName).sha256"
+    Write-Host "  [sidecar] $($_.Name).sha256" -ForegroundColor DarkGray
+}
+
 # ── 汇总 ──
 Write-Host ''
 Write-Host '============================================'
