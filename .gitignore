@@ -58,7 +58,8 @@ android/app/src/main/jniLibs/
 # Release signing
 android/app/release.keystore
 key.properties
-# 签名 keystore 不应入库（曾误提交）；此规则在其移出索引后生效
+# 2026-09-07 确认为废弃旧钥匙（与实际签名用的 android/app/release.keystore
+# 指纹不同、全仓零引用）并移出索引；git 历史中仍存在，勿再引入
 /buildKey.keystore
 
 # 本地运行日志（开发期在仓库根目录生成）
