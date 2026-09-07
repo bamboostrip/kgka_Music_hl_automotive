@@ -23,8 +23,8 @@ class KaraokeLinePainter extends CustomPainter {
       textAlign: textAlign,
       maxLines: maxLines,
     )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
-    // 高亮 painter 与主 painter 同配置（仅颜色不同），构造时布局一次，
-    // 逐字进度绘制时复用，避免每字每帧重复构建/排版。
+    // 高亮 painter 必须与主 painter 共享同一份排版参数（仅颜色不同），
+    // 否则逐字裁剪矩形会与高亮文字错位。paint() 只做裁剪与复绘。
     _highlightPainter = TextPainter(
       text: TextSpan(
         text: line.text,

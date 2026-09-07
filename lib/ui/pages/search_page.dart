@@ -63,6 +63,9 @@ class _SearchPageState extends State<SearchPage> {
   // 搜索代际守卫：提交/点热门词/切平台/切类型都能并发触发 _search，
   // 慢的旧响应若不识别代际会覆盖新结果（输入框已是 B、列表却是 A 的）。
   int _searchSeq = 0;
+  // 上次输入框文本是否为空：清除按钮/右内边距只依赖"有无文字"，
+  // 仅在跨越空/非空边界时才需要整页 setState（见 _onTextChanged）。
+  bool _lastTextWasEmpty = true;
   // 输入框焦点态：外层白卡边框据此染 primary，内层强制无边框，
   // 避免主题 focusedBorder 蓝圈和外卡叠成双边框。
   bool _searchFocused = false;
@@ -149,18 +152,23 @@ class _SearchPageState extends State<SearchPage> {
   void _onTextChanged() {
     _debounce?.cancel();
     final text = _controller.text.trim();
-    // 每次输入都刷新 UI（清除按钮/内边距等依赖文本状态）：
-    // 建议词请求失败时 catch 不触发 setState，不刷新会滞留旧状态。
-    // 网络请求仍由防抖收敛，这里的 setState 仅重建轻量输入区。
-    setState(() {
-      // 文本变化后旧搜索错误不再适用，清除以免对未搜过的词展示"搜索失败"。
-      _searchError = null;
-      if (text.isEmpty) {
-        _suggestions = const [];
-        _results = const [];
-        _searched = false;
-      }
-    });
+    // 只在 UI 依赖文本状态的时刻重建整页：跨越空/非空边界（清除按钮、
+    // 无文字时的右内边距显隐）或残留搜索错误需要清除时。连续输入
+    // （非空→非空）不重建，避免每个按键重排热搜/结果区；建议词由
+    // 防抖后的 _fetchSuggestions 自行 setState 刷新。
+    final crossedEmptyBoundary = text.isEmpty != _lastTextWasEmpty;
+    _lastTextWasEmpty = text.isEmpty;
+    if (crossedEmptyBoundary || _searchError != null) {
+      setState(() {
+        // 文本变化后旧搜索错误不再适用，清除以免对未搜过的词展示"搜索失败"。
+        _searchError = null;
+        if (text.isEmpty) {
+          _suggestions = const [];
+          _results = const [];
+          _searched = false;
+        }
+      });
+    }
     if (text.isEmpty) return;
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _fetchSuggestions(text);

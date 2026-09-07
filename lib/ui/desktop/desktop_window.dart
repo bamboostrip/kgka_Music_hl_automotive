@@ -54,7 +54,11 @@ class DesktopWindow {
     // 销毁、进程退出，初始化中的服务被拦腰斩断。
     // saver 先挂再开拦截：若顺序反过来，setPreventClose 生效到 addListener
     // 之间点 X 会被拦截却无人处理（点击被静默吞掉，窗口关不掉也不隐藏）。
+    // 上次执行中途抛出后的重试会带着残留的旧 saver 到这里，必须先摘除：
+    // 不摘则监听翻倍，几何双写、onWindowClose 双触发（quitGracefully×2）。
+    final staleSaver = _saver;
     _saver = _WindowGeometrySaver(prefs);
+    if (staleSaver != null) windowManager.removeListener(staleSaver);
     windowManager.addListener(_saver!);
     await windowManager.setPreventClose(true);
     final geometry = DesktopWindowGeometry.load(prefs);

@@ -20,18 +20,24 @@ void main() {
     expect(semverToCode('2.5.1'), lessThan(semverToCode('3.0.0')));
   });
 
+  // 后两个用例以 AppConfig.appVersion 为基准动态构造 tag，发版升版后
+  // 无需同步修改本文件（此前硬编码 v2.5.1/v2.5.2，升版必红）。
   test('同版本 GitHub 信息不判为更新（口径分叉回归）', () {
     final fromGithub = AppVersionInfo.fromGitHubRelease(
-      const {'tag_name': 'v2.5.1', 'body': '', 'assets': []},
+      {'tag_name': 'v${AppConfig.appVersion}', 'body': '', 'assets': []},
     );
-    final current = normalizedVersionCode(AppConfig.appVersionCode);
-    expect(fromGithub.versionCode, current);
+    expect(
+      fromGithub.versionCode,
+      normalizedVersionCode(AppConfig.appVersionCode),
+    );
     expect(fromGithub.isNewerThanCurrent, isFalse);
   });
 
   test('高版本 GitHub 仍判为更新', () {
+    final parts = AppConfig.appVersion.split('.');
+    final bumped = '${parts[0]}.${parts[1]}.${int.parse(parts[2]) + 1}';
     final newer = AppVersionInfo.fromGitHubRelease(
-      const {'tag_name': 'v2.5.2', 'body': '', 'assets': []},
+      {'tag_name': 'v$bumped', 'body': '', 'assets': []},
     );
     expect(newer.isNewerThanCurrent, isTrue);
   });
