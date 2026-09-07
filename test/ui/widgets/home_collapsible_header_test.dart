@@ -1,0 +1,364 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shiyin_music/controllers/auth_controller.dart';
+import 'package:shiyin_music/controllers/player_controller.dart';
+import 'package:shiyin_music/models/music_models.dart';
+import 'package:shiyin_music/services/music_api.dart';
+import 'package:shiyin_music/ui/pages/search_page.dart';
+import 'package:shiyin_music/ui/widgets/home_collapsible_header.dart';
+
+class _FakeMusicApi implements MusicApi {
+  @override
+  Future<List<SearchHotCategory>> searchHotKeywords() async => const [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeAuthController extends ChangeNotifier implements AuthController {
+  @override
+  bool isLiked(Song song) => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakePlayerController extends ChangeNotifier implements PlayerController {
+  @override
+  Song? currentSong;
+
+  @override
+  bool isPlaying = false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+void main() {
+  late _FakeMusicApi api;
+  late _FakeAuthController auth;
+  late _FakePlayerController player;
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    api = _FakeMusicApi();
+    auth = _FakeAuthController();
+    player = _FakePlayerController();
+  });
+
+  group('HomeCollapsibleHeaderDelegate extents & rebuild', () {
+    test('computes default minExtent and maxExtent correctly', () {
+      final delegate = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 0,
+        onSectionChanged: (_) {},
+      );
+
+      // minExtent = topPadding(0) + tabBarHeight(42) + bottomPadding(8) = 50.0
+      expect(delegate.minExtent, 50.0);
+      // maxExtent = topPadding(0) + searchBarHeight(44) + spacing(10) + tabBarHeight(42) + bottomPadding(8) = 104.0
+      expect(delegate.maxExtent, 104.0);
+      expect(delegate.maxExtent - delegate.minExtent, 54.0);
+    });
+
+    test('computes minExtent and maxExtent with custom topPadding and heights', () {
+      final delegate = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 0,
+        onSectionChanged: (_) {},
+        topPadding: 24.0,
+        searchBarHeight: 48.0,
+        tabBarHeight: 40.0,
+        bottomPadding: 12.0,
+        spacing: 8.0,
+      );
+
+      // minExtent = 24 + 40 + 12 = 76.0
+      expect(delegate.minExtent, 76.0);
+      // maxExtent = 24 + 48 + 8 + 40 + 12 = 132.0
+      expect(delegate.maxExtent, 132.0);
+      expect(delegate.maxExtent - delegate.minExtent, 56.0);
+    });
+
+    test('shouldRebuild returns true when relevant properties change', () {
+      final delegate1 = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 0,
+        onSectionChanged: (_) {},
+        topPadding: 0.0,
+      );
+
+      final delegateSame = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 0,
+        onSectionChanged: delegate1.onSectionChanged,
+        topPadding: 0.0,
+      );
+
+      final delegateIndexChanged = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 1,
+        onSectionChanged: delegate1.onSectionChanged,
+        topPadding: 0.0,
+      );
+
+      final delegatePaddingChanged = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 0,
+        onSectionChanged: delegate1.onSectionChanged,
+        topPadding: 20.0,
+      );
+
+      final delegateRefreshChanged = HomeCollapsibleHeaderDelegate(
+        api: api,
+        auth: auth,
+        player: player,
+        sectionIndex: 0,
+        onSectionChanged: delegate1.onSectionChanged,
+        topPadding: 0.0,
+        onRefresh: () async {},
+      );
+
+      expect(delegate1.shouldRebuild(delegateSame), isFalse);
+      expect(delegate1.shouldRebuild(delegateIndexChanged), isTrue);
+      expect(delegate1.shouldRebuild(delegatePaddingChanged), isTrue);
+      expect(delegate1.shouldRebuild(delegateRefreshChanged), isTrue);
+    });
+  });
+
+  group('HomeSearchBar Widget', () {
+    testWidgets('renders placeholder text and search icon', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeSearchBar(
+              api: api,
+              auth: auth,
+              player: player,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
+      expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+    });
+
+    testWidgets('calls custom onTap when provided', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeSearchBar(
+              onTap: () => tapped = true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('搜索歌曲、歌手、专辑'));
+      expect(tapped, isTrue);
+    });
+
+    testWidgets('navigates to SearchPage when tapped without custom onTap', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeSearchBar(
+              api: api,
+              auth: auth,
+              player: player,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('搜索歌曲、歌手、专辑'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SearchPage), findsOneWidget);
+    });
+  });
+
+  group('HomeCapsuleTabBar Widget', () {
+    testWidgets('renders all tabs and highlights selected tab', (tester) async {
+      int? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeCapsuleTabBar(
+              selectedIndex: 0,
+              onTabSelected: (i) => selected = i,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('推荐'), findsOneWidget);
+      expect(find.text('排行榜'), findsOneWidget);
+      expect(find.text('电台'), findsOneWidget);
+
+      final textRecommend = tester.widget<Text>(find.text('推荐'));
+      final textRank = tester.widget<Text>(find.text('排行榜'));
+
+      expect(textRecommend.style?.fontWeight, FontWeight.w800);
+      expect(textRank.style?.fontWeight, FontWeight.w600);
+
+      await tester.tap(find.text('排行榜'));
+      expect(selected, 1);
+    });
+
+    testWidgets('shows refresh button when onRefresh is provided', (tester) async {
+      var refreshCalled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeCapsuleTabBar(
+              selectedIndex: 0,
+              onTabSelected: (_) {},
+              onRefresh: () async {
+                refreshCalled = true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('刷新'), findsOneWidget);
+      await tester.tap(find.byTooltip('刷新'));
+      expect(refreshCalled, isTrue);
+    });
+
+    testWidgets('hides refresh button when onRefresh is null', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeCapsuleTabBar(
+              selectedIndex: 0,
+              onTabSelected: (_) {},
+              onRefresh: null,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('刷新'), findsNothing);
+    });
+  });
+
+  group('HomeCollapsibleHeader in CustomScrollView', () {
+    testWidgets('collapses search bar on scroll and pins tab bar', (tester) async {
+      var selected = 0;
+      final scrollController = ScrollController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: HomeCollapsibleHeaderDelegate(
+                    api: api,
+                    auth: auth,
+                    player: player,
+                    sectionIndex: selected,
+                    onSectionChanged: (i) => selected = i,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Container(
+                    height: 1200,
+                    color: Colors.blueGrey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Initially expanded
+      expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
+      expect(find.text('推荐'), findsOneWidget);
+
+      final initialSearchOpacity = tester.widget<Opacity>(
+        find.ancestor(
+          of: find.text('搜索歌曲、歌手、专辑'),
+          matching: find.byType(Opacity),
+        ).first,
+      );
+      expect(initialSearchOpacity.opacity, 1.0);
+
+      // Scroll down by 100 pixels (past 54px collapse extent)
+      scrollController.jumpTo(100.0);
+      await tester.pumpAndSettle();
+
+      // Search bar opacity should be 0.0 and IgnorePointer active
+      final collapsedSearchOpacity = tester.widget<Opacity>(
+        find.ancestor(
+          of: find.text('搜索歌曲、歌手、专辑'),
+          matching: find.byType(Opacity),
+        ).first,
+      );
+      expect(collapsedSearchOpacity.opacity, 0.0);
+
+      final ignorePointer = tester.widget<IgnorePointer>(
+        find.ancestor(
+          of: find.text('搜索歌曲、歌手、专辑'),
+          matching: find.byType(IgnorePointer),
+        ).first,
+      );
+      expect(ignorePointer.ignoring, isTrue);
+
+      // Tabs should still be pinned and clickable
+      expect(find.text('排行榜'), findsOneWidget);
+      await tester.tap(find.text('排行榜'));
+      expect(selected, 1);
+    });
+
+    testWidgets('adapts to dark mode and transparent background', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark().copyWith(
+            scaffoldBackgroundColor: Colors.transparent,
+          ),
+          home: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: CustomScrollView(
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: HomeCollapsibleHeaderDelegate(
+                    api: api,
+                    auth: auth,
+                    player: player,
+                    sectionIndex: 0,
+                    onSectionChanged: (_) {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
+      expect(find.text('推荐'), findsOneWidget);
+    });
+  });
+}
