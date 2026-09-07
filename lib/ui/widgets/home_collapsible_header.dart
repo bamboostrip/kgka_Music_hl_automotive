@@ -19,10 +19,12 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
     this.pageOffset,
     this.onRefresh,
     this.topPadding = 0.0,
+    this.topMargin = 8.0,
     this.searchBarHeight = 36.0,
     this.tabBarHeight = 36.0,
     this.bottomPadding = 6.0,
     this.spacing = 8.0,
+    this.pinnedTopOffset = 4.0,
   });
 
   final MusicApi api;
@@ -33,23 +35,28 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   final double? pageOffset;
   final Future<void> Function()? onRefresh;
   final double topPadding;
+  final double topMargin;
   final double searchBarHeight;
   final double tabBarHeight;
   final double bottomPadding;
   final double spacing;
+  final double pinnedTopOffset;
 
   @override
-  double get minExtent => topPadding + tabBarHeight + bottomPadding;
+  double get minExtent =>
+      topPadding + pinnedTopOffset + tabBarHeight + bottomPadding;
 
   @override
   double get maxExtent =>
-      topPadding + searchBarHeight + spacing + tabBarHeight + bottomPadding;
+      topPadding + topMargin + searchBarHeight + spacing + tabBarHeight + bottomPadding;
 
   @override
   bool shouldRebuild(covariant HomeCollapsibleHeaderDelegate oldDelegate) {
     return oldDelegate.sectionIndex != sectionIndex ||
         oldDelegate.pageOffset != pageOffset ||
         oldDelegate.topPadding != topPadding ||
+        oldDelegate.topMargin != topMargin ||
+        oldDelegate.pinnedTopOffset != pinnedTopOffset ||
         oldDelegate.onRefresh != onRefresh ||
         oldDelegate.searchBarHeight != searchBarHeight ||
         oldDelegate.tabBarHeight != tabBarHeight ||
@@ -73,7 +80,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
         ? (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0)
         : 0.0;
 
-    final opacity = (1.0 - progress * 1.6).clamp(0.0, 1.0);
+    final opacity = (1.0 - progress * 1.5).clamp(0.0, 1.0);
     final scaffoldBg = theme.scaffoldBackgroundColor;
     final isTransparent =
         scaffoldBg == Colors.transparent || scaffoldBg.a == 0;
@@ -109,28 +116,36 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
         ),
         child: Stack(
           children: [
-            // 搜索框：随着滚动平滑淡出并上移
+            // 顶行：Logo品牌 + 搜索框（参考 IT 之家布局，随着滚动平滑淡出并上移）
             Positioned(
-              top: topPadding - effectiveOffset,
-              left: 0,
-              right: 0,
+              top: topPadding + topMargin - effectiveOffset,
+              left: 16,
+              right: 16,
               height: searchBarHeight,
               child: Opacity(
                 opacity: opacity,
                 child: IgnorePointer(
-                  ignoring: progress >= 0.8,
-                  child: HomeSearchBar(
-                    api: api,
-                    auth: auth,
-                    player: player,
-                    height: searchBarHeight,
+                  ignoring: progress >= 0.75,
+                  child: Row(
+                    children: [
+                      const HomeBrandHeader(),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: HomeSearchBar(
+                          api: api,
+                          auth: auth,
+                          player: player,
+                          height: searchBarHeight,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-            // 胶囊标签栏：收折后紧贴 topPadding 常驻吸顶
+            // 胶囊标签栏：收折后紧贴 topPadding + pinnedTopOffset 常驻吸顶
             Positioned(
-              top: topPadding + (searchBarHeight + spacing) - effectiveOffset,
+              top: topPadding + topMargin + searchBarHeight + spacing - effectiveOffset,
               left: 0,
               right: 0,
               height: tabBarHeight,
@@ -149,7 +164,73 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-/// 首页顶部搜索框组件。
+/// 首页顶部品牌 Logo 与应用名展示组件（参考 IT 之家品牌标识区）
+class HomeBrandHeader extends StatelessWidget {
+  const HomeBrandHeader({
+    super.key,
+    this.size = 28.0,
+    this.title = '时音',
+  });
+
+  final double size;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(size * 0.28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
+                blurRadius: 4,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(size * 0.28),
+            child: Image.asset(
+              'lib/assets/logo.png',
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                color: colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.music_note_rounded,
+                  size: size * 0.7,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.2,
+            color: colorScheme.onSurface,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 首页顶部搜索框组件（参考 IT 之家轻量胶囊样式）。
 class HomeSearchBar extends StatelessWidget {
   const HomeSearchBar({
     super.key,
@@ -159,6 +240,7 @@ class HomeSearchBar extends StatelessWidget {
     this.onTap,
     this.height = 36.0,
     this.hintText = '搜索歌曲、歌手、专辑',
+    this.margin,
   });
 
   final MusicApi? api;
@@ -167,6 +249,7 @@ class HomeSearchBar extends StatelessWidget {
   final VoidCallback? onTap;
   final double height;
   final String hintText;
+  final EdgeInsetsGeometry? margin;
 
   void _handleTap(BuildContext context) {
     if (onTap != null) {
@@ -187,65 +270,61 @@ class HomeSearchBar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(height / 2),
-          onTap: () => _handleTap(context),
-          child: Container(
-            height: height,
-            decoration: BoxDecoration(
+    Widget content = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(height / 2),
+        onTap: () => _handleTap(context),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFF1F3F6),
+            borderRadius: BorderRadius.circular(height / 2),
+            border: Border.all(
               color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : const Color(0xFFF1F3F6),
-              borderRadius: BorderRadius.circular(height / 2),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.04),
-                width: 0.8,
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
+              width: 0.8,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                size: 16.5,
+                color: colorScheme.onSurfaceVariant.withValues(
+                  alpha: isDark ? 0.7 : 0.55,
+                ),
               ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: 17,
-                  color: colorScheme.onSurfaceVariant.withValues(
-                    alpha: isDark ? 0.7 : 0.55,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    hintText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant.withValues(
-                            alpha: isDark ? 0.75 : 0.65,
-                          ),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 13.5,
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  hintText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: isDark ? 0.75 : 0.65,
                         ),
-                  ),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 13.5,
+                      ),
                 ),
-                Icon(
-                  Icons.graphic_eq_rounded,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant.withValues(
-                    alpha: isDark ? 0.5 : 0.4,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
+
+    if (margin != null) {
+      content = Padding(padding: margin!, child: content);
+    }
+
+    return content;
   }
 }
 

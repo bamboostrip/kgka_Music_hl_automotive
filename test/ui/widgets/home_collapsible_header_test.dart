@@ -57,11 +57,11 @@ void main() {
         onSectionChanged: (_) {},
       );
 
-      // minExtent = topPadding(0) + tabBarHeight(36) + bottomPadding(6) = 42.0
-      expect(delegate.minExtent, 42.0);
-      // maxExtent = topPadding(0) + searchBarHeight(36) + spacing(8) + tabBarHeight(36) + bottomPadding(6) = 86.0
-      expect(delegate.maxExtent, 86.0);
-      expect(delegate.maxExtent - delegate.minExtent, 44.0);
+      // minExtent = topPadding(0) + pinnedTopOffset(4) + tabBarHeight(36) + bottomPadding(6) = 46.0
+      expect(delegate.minExtent, 46.0);
+      // maxExtent = topPadding(0) + topMargin(8) + searchBarHeight(36) + spacing(8) + tabBarHeight(36) + bottomPadding(6) = 94.0
+      expect(delegate.maxExtent, 94.0);
+      expect(delegate.maxExtent - delegate.minExtent, 48.0);
     });
 
     test('computes minExtent and maxExtent with custom topPadding and heights', () {
@@ -78,11 +78,11 @@ void main() {
         spacing: 8.0,
       );
 
-      // minExtent = 24 + 40 + 12 = 76.0
-      expect(delegate.minExtent, 76.0);
-      // maxExtent = 24 + 48 + 8 + 40 + 12 = 132.0
-      expect(delegate.maxExtent, 132.0);
-      expect(delegate.maxExtent - delegate.minExtent, 56.0);
+      // minExtent = 24 + 4 + 40 + 12 = 80.0
+      expect(delegate.minExtent, 80.0);
+      // maxExtent = 24 + 8 + 48 + 8 + 40 + 12 = 140.0
+      expect(delegate.maxExtent, 140.0);
+      expect(delegate.maxExtent - delegate.minExtent, 60.0);
     });
 
     test('shouldRebuild returns true when relevant properties change', () {
@@ -136,6 +136,21 @@ void main() {
       expect(delegate1.shouldRebuild(delegateIndexChanged), isTrue);
       expect(delegate1.shouldRebuild(delegatePaddingChanged), isTrue);
       expect(delegate1.shouldRebuild(delegateRefreshChanged), isTrue);
+    });
+  });
+
+  group('HomeBrandHeader Widget', () {
+    testWidgets('renders brand title and logo', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: HomeBrandHeader(title: '时音'),
+          ),
+        ),
+      );
+
+      expect(find.text('时音'), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
     });
   });
 
