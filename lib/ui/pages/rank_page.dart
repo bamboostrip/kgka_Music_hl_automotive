@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
+import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../../services/network_monitor.dart';
 import '../adaptive_layout.dart';
 import '../form_factor.dart';
+import '../widgets/app_feedback.dart' show friendlyServiceErrorMessage;
 import '../widgets/artwork.dart';
 import '../widgets/horizontal_wheel_scroll.dart';
 import '../widgets/mini_player.dart';
@@ -26,11 +29,13 @@ class RankPage extends StatefulWidget {
     required this.api,
     required this.auth,
     required this.player,
+    required this.cache,
   });
 
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
+  final CacheService cache;
 
   @override
   State<RankPage> createState() => _RankPageState();
@@ -38,9 +43,13 @@ class RankPage extends StatefulWidget {
 
 class _RankPageState extends State<RankPage>
     with AutomaticKeepAliveClientMixin {
+  static List<RankCategory>? _cachedRanks;
+  static List<Song>? _cachedNewSongs;
+
   Future<List<RankCategory>>? _future;
   Future<List<Song>>? _newSongsFuture;
   StreamSubscription<void>? _networkRestoredSub;
+  bool _silentRefreshing = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -48,11 +57,22 @@ class _RankPageState extends State<RankPage>
   @override
   void initState() {
     super.initState();
-    _future = widget.api.rankList(withSong: 3);
-    _newSongsFuture = widget.api.newSongs();
-    // 断网进入排行榜会停留在错误页上，恢复网络后自动刷新。
+    final cachedRanks = _cachedRanks;
+    final cachedSongs = _cachedNewSongs;
+    if (cachedRanks != null) {
+      _future = Future.value(cachedRanks);
+      _newSongsFuture = Future.value(cachedSongs ?? const <Song>[]);
+      // 有内存缓存：立即显示并后台静默刷新（与推荐页一致）。
+      _silentRefresh();
+    } else {
+      // 无内存缓存：先读磁盘再决定是否走网络，避免冷启动时网络与静默刷新重复请求。
+      _future = null;
+      _newSongsFuture = null;
+      _initFromDiskOrNetwork();
+    }
+    // 断网进入排行榜会停留在错误/缓存页上，恢复网络后自动刷新。
     _networkRestoredSub = NetworkMonitor.instance.onConnectivityRestored.listen(
-      (_) => _refresh(),
+      (_) => _silentRefresh(),
     );
   }
 
@@ -62,9 +82,151 @@ class _RankPageState extends State<RankPage>
     super.dispose();
   }
 
+  Future<List<RankCategory>> _loadRanks() async {
+    final ranks = await widget.api.rankList(withSong: 3);
+    _cachedRanks = ranks;
+    _persistRanks(ranks);
+    return ranks;
+  }
+
+  void _persistRanks(List<RankCategory> ranks) {
+    unawaited(() async {
+      try {
+        await widget.cache.write('cache_rank', {
+          'ranks': ranks.map((r) => r.toCache()).toList(),
+        });
+      } catch (_) {
+        // 缓存写入失败不影响已拿到的网络数据上屏。
+      }
+    }());
+  }
+
+  void _persistNewSongs(List<Song> songs) {
+    unawaited(() async {
+      try {
+        await widget.cache.write('cache_rank_new', {
+          'songs': songs.map((s) => s.toCache()).toList(),
+        });
+      } catch (_) {
+        // 缓存写入失败不影响已拿到的网络数据上屏。
+      }
+    }());
+  }
+
+  /// 新歌推荐失败不阻塞榜单：无缓存时返回空（隐藏该区域），有缓存时降级到缓存。
+  Future<List<Song>> _loadNewSongs() async {
+    try {
+      final songs = await widget.api.newSongs();
+      _cachedNewSongs = songs;
+      _persistNewSongs(songs);
+      return songs;
+    } catch (_) {
+      return _cachedNewSongs ?? const <Song>[];
+    }
+  }
+
+  /// 冷启动单 flight：先读磁盘，命中则显示缓存+静默刷新，未命中才走网络。
+  Future<void> _initFromDiskOrNetwork() async {
+    try {
+      final results = await Future.wait([
+        widget.cache.read<Map<String, dynamic>>(
+          'cache_rank',
+          decode: (json) => json,
+          ttl: AppConfig.rankCacheTtl,
+        ),
+        widget.cache.read<Map<String, dynamic>>(
+          'cache_rank_new',
+          decode: (json) => json,
+          ttl: AppConfig.rankCacheTtl,
+        ),
+      ]);
+      if (!mounted) return;
+      final rankCache = results[0];
+      final songsCache = results[1];
+      if (rankCache != null) {
+        try {
+          final ranks = (rankCache.data['ranks'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(RankCategory.fromCache)
+              .toList();
+          if (ranks.isNotEmpty) {
+            _cachedRanks = ranks;
+            if (songsCache != null) {
+              try {
+                _cachedNewSongs =
+                    (songsCache.data['songs'] as List? ?? const [])
+                        .whereType<Map<String, dynamic>>()
+                        .map(Song.fromCache)
+                        .where((s) => s.hash.isNotEmpty)
+                        .toList();
+              } catch (_) {
+                // 新歌缓存损坏则忽略，静默刷新会重建。
+              }
+            }
+            setState(() {
+              _future = Future.value(ranks);
+              _newSongsFuture =
+                  Future.value(_cachedNewSongs ?? const <Song>[]);
+            });
+            _silentRefresh();
+            return;
+          }
+        } catch (_) {
+          // 榜单缓存损坏则继续走网络。
+        }
+      } else if (songsCache != null) {
+        // 榜单无缓存但新歌有缓存：先恢复新歌，避免网络回来后新歌区闪烁。
+        try {
+          _cachedNewSongs = (songsCache.data['songs'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(Song.fromCache)
+              .where((s) => s.hash.isNotEmpty)
+              .toList();
+        } catch (_) {
+          // 忽略损坏的新歌缓存。
+        }
+      }
+    } catch (_) {
+      // 磁盘读取失败则继续走网络。
+    }
+    if (!mounted) return;
+    final rankFuture = _loadRanks();
+    final songsFuture = _loadNewSongs();
+    setState(() {
+      _future = rankFuture;
+      _newSongsFuture = songsFuture;
+    });
+  }
+
+  /// 后台静默刷新：成功更新 UI 与缓存，失败保持缓存不变（与推荐页一致）。
+  Future<void> _silentRefresh() async {
+    if (_silentRefreshing) return;
+    _silentRefreshing = true;
+    try {
+      final results = await Future.wait([
+        widget.api.rankList(withSong: 3),
+        _loadNewSongs(),
+      ]);
+      if (!mounted) return;
+      final ranks = results[0] as List<RankCategory>;
+      final songs = results[1] as List<Song>;
+      _cachedRanks = ranks;
+      _persistRanks(ranks);
+      if (!mounted) return;
+      setState(() {
+        _future = Future.value(ranks);
+        _newSongsFuture = Future.value(songs);
+      });
+    } catch (_) {
+      // 静默刷新失败，保持缓存数据不变
+    } finally {
+      _silentRefreshing = false;
+    }
+  }
+
   Future<void> _refresh() async {
-    final rankFuture = widget.api.rankList(withSong: 3);
-    final songsFuture = widget.api.newSongs();
+    final rankFuture = _loadRanks();
+    final songsFuture = _loadNewSongs();
     setState(() {
       _future = rankFuture;
       _newSongsFuture = songsFuture;
@@ -95,20 +257,27 @@ class _RankPageState extends State<RankPage>
     final isCarLandscape =
         size.width > size.height && ThemeController.instance.carModeEnabled;
 
+    // 磁盘恢复中（_future 尚未确定）：显示骨架，避免闪现空态。
+    final initialFuture = _future;
+    if (initialFuture == null) {
+      return _RankSkeleton(isCarLandscape: isCarLandscape);
+    }
     return FutureBuilder<List<RankCategory>>(
-      future: _future,
+      future: initialFuture,
       builder: (context, snapshot) {
+        // 与推荐页一致：优先显示内存/磁盘缓存，无缓存才走骨架/错误态；
+        // 刷新失败时保持缓存显示，不闪回错误页。
+        final ranks = snapshot.data ?? _cachedRanks ?? const <RankCategory>[];
         if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
+            ranks.isEmpty) {
           return _RankSkeleton(isCarLandscape: isCarLandscape);
         }
-        if (snapshot.hasError && !snapshot.hasData) {
+        if (snapshot.hasError && ranks.isEmpty) {
           return _RankError(
             message: snapshot.error.toString(),
             onRetry: _refresh,
           );
         }
-        final ranks = snapshot.data ?? [];
         if (ranks.isEmpty) {
           return const _RankEmpty();
         }
@@ -120,6 +289,7 @@ class _RankPageState extends State<RankPage>
               future: _newSongsFuture,
               player: widget.player,
               auth: widget.auth,
+              fallback: _cachedNewSongs ?? const <Song>[],
             ),
             // 榜单标题 + 刷新按钮：与电台 _RadioSectionTitle 视觉与间距完全对齐
             Padding(
@@ -241,11 +411,13 @@ class _NewSongsSection extends StatelessWidget {
     required this.future,
     required this.player,
     required this.auth,
+    this.fallback = const <Song>[],
   });
 
   final Future<List<Song>>? future;
   final PlayerController player;
   final AuthController auth;
+  final List<Song> fallback;
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +425,7 @@ class _NewSongsSection extends StatelessWidget {
     return FutureBuilder<List<Song>>(
       future: future,
       builder: (context, snapshot) {
-        final songs = snapshot.data ?? [];
+        final songs = snapshot.data ?? fallback;
         if (songs.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 120,
@@ -1277,22 +1449,44 @@ class _RankDetailPageState extends State<RankDetailPage> {
   }
 
   Widget _buildErrorState(ColorScheme colorScheme) {
+    final friendly = friendlyServiceErrorMessage(_error ?? '加载失败');
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '加载失败',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.tonal(
-              onPressed: _loadInitial,
-              child: const Text('重试'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.wifi_off_rounded,
+                size: 44,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '暂时连接不上音乐服务',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                friendly,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: _loadInitial,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1938,25 +2132,43 @@ class _RankError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 与电台 _ErrorView 统一视觉：不再忽略 message，而是转成友好文案，
+    // 避免无网络时只显示干巴巴的“加载失败”或透出原始异常。
+    final friendly = friendlyServiceErrorMessage(message);
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 80),
+      padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 24),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.cloud_off_rounded,
-              size: 48,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
+              Icons.wifi_off_rounded,
+              size: 44,
+              color: colorScheme.primary,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
-              '加载失败',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
+              '暂时连接不上音乐服务',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 16),
-            FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
+            const SizedBox(height: 8),
+            Text(
+              friendly,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('重试'),
+            ),
           ],
         ),
       ),

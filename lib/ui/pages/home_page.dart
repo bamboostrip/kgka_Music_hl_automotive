@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
+import '../widgets/app_feedback.dart' show friendlyServiceErrorMessage;
 import '../widgets/app_section.dart';
 
 import '../../config/app_config.dart';
@@ -547,6 +548,7 @@ class _HomePageState extends State<HomePage> {
                         api: widget.api,
                         auth: widget.auth,
                         player: widget.player,
+                        cache: widget.cache,
                       ),
                     ),
                     _PersistentTabPane(
@@ -554,6 +556,7 @@ class _HomePageState extends State<HomePage> {
                       child: _RadioSection(
                         api: widget.api,
                         player: widget.player,
+                        cache: widget.cache,
                       ),
                     ),
                   ],
@@ -1865,40 +1868,44 @@ class _PlaylistCardState extends State<_PlaylistCard> {
 }
 
 class _RadioSection extends StatefulWidget {
-  const _RadioSection({required this.api, required this.player});
+  const _RadioSection({
+    required this.api,
+    required this.player,
+    required this.cache,
+  });
 
   final MusicApi api;
   final PlayerController player;
+  final CacheService cache;
 
   @override
   State<_RadioSection> createState() => _RadioSectionState();
 }
 
 class _RadioSectionState extends State<_RadioSection> {
-  static Future<_RadioData>? _cachedFuture;
+  static _RadioData? _cachedData;
 
-  late Future<_RadioData> _future;
+  Future<_RadioData>? _future;
   String? _loadingStationId;
   StreamSubscription<void>? _networkRestoredSub;
+  bool _silentRefreshing = false;
 
   @override
   void initState() {
     super.initState();
-    final future = _cachedFuture ??= _load();
-    _future = future;
-    // 静态缓存只保留成功结果：断网时产生的 error future 若滞留缓存，
-    // 之后每次进入电台 tab 都会复用同一个错误，只能手动刷新恢复。
-    unawaited(
-      future.then(
-        (_) {},
-        onError: (_) {
-          if (identical(_cachedFuture, future)) _cachedFuture = null;
-        },
-      ),
-    );
-    // 断网进入电台 tab 会停留在错误/空数据上，恢复网络后自动重载。
+    final cached = _cachedData;
+    if (cached != null) {
+      _future = Future.value(cached);
+      // 有内存缓存：立即显示并后台静默刷新（与推荐页一致）。
+      _silentRefresh();
+    } else {
+      // 无内存缓存：先读磁盘再决定是否走网络，避免冷启动双请求浪费车机流量。
+      _future = null;
+      _initFromDiskOrNetwork();
+    }
+    // 断网进入电台 tab 会停留在错误/缓存页上，恢复网络后静默刷新。
     _networkRestoredSub = NetworkMonitor.instance.onConnectivityRestored.listen(
-      (_) => _refresh(),
+      (_) => _silentRefresh(),
     );
   }
 
@@ -1906,6 +1913,16 @@ class _RadioSectionState extends State<_RadioSection> {
   void dispose() {
     _networkRestoredSub?.cancel();
     super.dispose();
+  }
+
+  void _persistRadio(_RadioData data) {
+    unawaited(() async {
+      try {
+        await widget.cache.write('cache_radio', data.toCache());
+      } catch (_) {
+        // 缓存写入失败不影响已拿到的网络数据上屏。
+      }
+    }());
   }
 
   Future<_RadioData> _load() async {
@@ -1927,7 +1944,7 @@ class _RadioSectionState extends State<_RadioSection> {
       return image == null ? station : station.mergeImage(image);
     }
 
-    return _RadioData(
+    final data = _RadioData(
       recommended: recommended.map(applyImage).toList(),
       groups: groups
           .map(
@@ -1939,24 +1956,67 @@ class _RadioSectionState extends State<_RadioSection> {
           )
           .toList(),
     );
+    _cachedData = data;
+    _persistRadio(data);
+    return data;
+  }
+
+  /// 冷启动单 flight：先读磁盘，命中则显示缓存+静默刷新，未命中才走网络。
+  Future<void> _initFromDiskOrNetwork() async {
+    try {
+      final cached = await widget.cache.read<Map<String, dynamic>>(
+        'cache_radio',
+        decode: (json) => json,
+        ttl: AppConfig.radioCacheTtl,
+      );
+      if (!mounted) return;
+      if (cached != null) {
+        try {
+          final data = _RadioData.fromCache(cached.data);
+          if (data.recommended.isNotEmpty || data.groups.isNotEmpty) {
+            _cachedData = data;
+            setState(() {
+              _future = Future.value(data);
+            });
+            _silentRefresh();
+            return;
+          }
+        } catch (_) {
+          // 缓存损坏则继续走网络。
+        }
+      }
+    } catch (_) {
+      // 磁盘读取失败则继续走网络。
+    }
+    if (!mounted) return;
+    final future = _load();
+    setState(() {
+      _future = future;
+    });
+  }
+
+  /// 后台静默刷新：成功更新 UI 与缓存，失败保持缓存不变（与推荐页一致）。
+  Future<void> _silentRefresh() async {
+    if (_silentRefreshing) return;
+    _silentRefreshing = true;
+    try {
+      final data = await _load();
+      if (!mounted) return;
+      setState(() {
+        _future = Future.value(data);
+      });
+    } catch (_) {
+      // 静默刷新失败，保持缓存数据不变
+    } finally {
+      _silentRefreshing = false;
+    }
   }
 
   Future<void> _refresh() async {
     final future = _load();
-    _cachedFuture = future;
     setState(() {
       _future = future;
     });
-    // 与 initState 相同：静态缓存只保留成功结果，失败时清掉缓存，
-    // 避免下一个页面实例复用同一个错误 future。
-    unawaited(
-      future.then(
-        (_) {},
-        onError: (_) {
-          if (identical(_cachedFuture, future)) _cachedFuture = null;
-        },
-      ),
-    );
     // FutureBuilder 已处理错误，这里吞掉异常避免 fire-and-forget 调用方产生未处理异常。
     try {
       await future;
@@ -1984,7 +2044,7 @@ class _RadioSectionState extends State<_RadioSection> {
       if (!mounted) {
         return;
       }
-      Toast.error('电台加载失败：$error');
+      Toast.error('电台加载失败：${friendlyServiceErrorMessage(error)}');
     } finally {
       if (mounted) {
         setState(() => _loadingStationId = null);
@@ -1999,10 +2059,16 @@ class _RadioSectionState extends State<_RadioSection> {
     // 电台双卡+网格布局是车机专属，普通横屏用原布局。
     final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
 
+    // 磁盘恢复中（_future 尚未确定）：显示骨架，避免闪现空态。
+    final future = _future;
+    if (future == null) {
+      return const _RadioSkeleton();
+    }
     return FutureBuilder<_RadioData>(
-      future: _future,
+      future: future,
       builder: (context, snapshot) {
-        final data = snapshot.data;
+        // 与推荐页/排行榜一致：优先显示内存/磁盘缓存，无缓存才走骨架/错误态。
+        final data = snapshot.data ?? _cachedData;
         if (snapshot.connectionState == ConnectionState.waiting &&
             data == null) {
           return const _RadioSkeleton();
@@ -2857,6 +2923,9 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 绝不把 ApiException / URL 等原始异常透出到页面：统一转成可行动的友好文案。
+    final friendly = friendlyServiceErrorMessage(message);
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -2871,10 +2940,13 @@ class _ErrorView extends StatelessWidget {
           Text('暂时连接不上音乐服务', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
-            message,
+            friendly,
             textAlign: TextAlign.center,
-            maxLines: 3,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 18),
           FilledButton.icon(
@@ -2907,6 +2979,27 @@ class _RadioData {
 
   final List<FmStation> recommended;
   final List<FmClassGroup> groups;
+
+  Map<String, dynamic> toCache() {
+    return {
+      'recommended': recommended.map((s) => s.toCache()).toList(),
+      'groups': groups.map((g) => g.toCache()).toList(),
+    };
+  }
+
+  factory _RadioData.fromCache(Map<String, dynamic> json) {
+    return _RadioData(
+      recommended: (json['recommended'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(FmStation.fromCache)
+          .where((s) => s.id.isNotEmpty)
+          .toList(),
+      groups: (json['groups'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(FmClassGroup.fromCache)
+          .toList(),
+    );
+  }
 }
 
 String _playCount(int? value) {

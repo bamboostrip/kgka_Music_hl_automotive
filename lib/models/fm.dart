@@ -72,6 +72,38 @@ class FmStation {
       previewSongs: previewSongs,
     );
   }
+
+  Map<String, dynamic> toCache() {
+    return {
+      'id': id,
+      'name': name,
+      'type': type,
+      'classId': classId,
+      'className': className,
+      'description': description,
+      'bannerUrl': bannerUrl,
+      'imageUrl': imageUrl,
+      'previewSongs': previewSongs.map((s) => s.toCache()).toList(),
+    };
+  }
+
+  factory FmStation.fromCache(Map<String, dynamic> json) {
+    return FmStation(
+      id: asString(json['id']) ?? '',
+      name: asString(json['name']) ?? '未命名电台',
+      type: asInt(json['type']) ?? 2,
+      classId: asString(json['classId']),
+      className: asString(json['className']),
+      description: asString(json['description']),
+      bannerUrl: asString(json['bannerUrl']),
+      imageUrl: asString(json['imageUrl']),
+      previewSongs: (json['previewSongs'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(Song.fromCache)
+          .where((s) => s.hash.isNotEmpty)
+          .toList(),
+    );
+  }
 }
 
 class FmClassGroup {
@@ -102,6 +134,26 @@ class FmClassGroup {
       id: id,
       name: asString(json['classname']) ?? firstClassName ?? '分类 $id',
       stations: stations,
+    );
+  }
+
+  Map<String, dynamic> toCache() {
+    return {
+      'id': id,
+      'name': name,
+      'stations': stations.map((s) => s.toCache()).toList(),
+    };
+  }
+
+  factory FmClassGroup.fromCache(Map<String, dynamic> json) {
+    return FmClassGroup(
+      id: asString(json['id']) ?? '',
+      name: asString(json['name']) ?? '电台分类',
+      stations: (json['stations'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(FmStation.fromCache)
+          .where((s) => s.id.isNotEmpty)
+          .toList(),
     );
   }
 }

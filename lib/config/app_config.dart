@@ -38,6 +38,8 @@ class AppConfig {
 
   /// 数据缓存 TTL（分级）
   static const homeCacheTtl = Duration(minutes: 30); // 首页推荐
+  static const rankCacheTtl = Duration(minutes: 30); // 排行榜（与推荐页对齐）
+  static const radioCacheTtl = Duration(minutes: 30); // 电台（与推荐页对齐）
   static const playlistDetailTtl = Duration(hours: 24); // 歌单/专辑详情
   static const userProfileTtl = Duration(hours: 24); // 用户信息+歌单列表
 

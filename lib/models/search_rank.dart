@@ -157,6 +157,37 @@ class RankCategory {
           '',
     );
   }
+
+  Map<String, dynamic> toCache() {
+    return {
+      'rankId': rankId,
+      'rankName': rankName,
+      'rankType': rankType,
+      'imageUrl': imageUrl,
+      'updateFrequency': updateFrequency,
+      'songs': songs.map((s) => s.toCache()).toList(),
+      'children': children.map((c) => c.toCache()).toList(),
+    };
+  }
+
+  factory RankCategory.fromCache(Map<String, dynamic> json) {
+    return RankCategory(
+      rankId: asInt(json['rankId']) ?? 0,
+      rankName: asString(json['rankName']) ?? '未知榜单',
+      rankType: asInt(json['rankType']) ?? 0,
+      imageUrl: asString(json['imageUrl']),
+      updateFrequency: asString(json['updateFrequency']) ?? '',
+      songs: (json['songs'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(Song.fromCache)
+          .where((s) => s.hash.isNotEmpty)
+          .toList(),
+      children: (json['children'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(RankCategory.fromCache)
+          .toList(),
+    );
+  }
 }
 
 class RankSongPage {
