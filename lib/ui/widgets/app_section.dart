@@ -5,28 +5,52 @@ import 'horizontal_wheel_scroll.dart';
 
 /// 统一的分区标题（标题 + 可选尾部操作）。
 class AppSectionHeader extends StatelessWidget {
-  const AppSectionHeader({super.key, required this.title, this.action});
+  const AppSectionHeader({
+    super.key,
+    required this.title,
+    this.action,
+    this.onTap,
+  });
 
   final String title;
   final Widget? action;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    Widget titleWidget = Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w900,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+    );
+
+    Widget? effectiveAction = action;
+    if (onTap != null && effectiveAction == null) {
+      effectiveAction = Icon(
+        Icons.chevron_right_rounded,
+        size: 22,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+      );
+    }
+
+    final content = Row(
       children: [
-        Expanded(
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ),
-        ?action,
+        Expanded(child: titleWidget),
+        ?effectiveAction,
       ],
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: content,
+      );
+    }
+    return content;
   }
 }
 
@@ -42,6 +66,7 @@ class AppHorizontalRail<T> extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(horizontal: 18),
     this.separatorWidth = 12,
     this.action,
+    this.onTapTitle,
     this.topPadding = 20,
     this.headerPadding,
   });
@@ -54,6 +79,7 @@ class AppHorizontalRail<T> extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final double separatorWidth;
   final Widget? action;
+  final VoidCallback? onTapTitle;
   final double topPadding;
   final EdgeInsetsGeometry? headerPadding;
 
@@ -71,7 +97,11 @@ class AppHorizontalRail<T> extends StatelessWidget {
             children: [
               Padding(
                 padding: headerPadding ?? padding,
-                child: AppSectionHeader(title: title, action: action),
+                child: AppSectionHeader(
+                  title: title,
+                  action: action,
+                  onTap: onTapTitle,
+                ),
               ),
               const SizedBox(height: 12),
               if (wideDesktop)

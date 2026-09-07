@@ -32,7 +32,9 @@ import '../../controllers/download_controller.dart';
 import '../../controllers/local_music_controller.dart';
 import 'playback_history_page.dart';
 import 'rank_page.dart';
+import 'recommended_playlists_page.dart';
 import 'settings_page.dart';
+import 'top_songs_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -444,6 +446,32 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  void _openRecommendedPlaylists(List<PlaylistSummary> playlists) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RecommendedPlaylistsPage(
+          api: widget.api,
+          auth: widget.auth,
+          player: widget.player,
+          initialPlaylists: playlists,
+        ),
+      ),
+    );
+  }
+
+  void _openTopSongs(List<Song> songs) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TopSongsPage(
+          api: widget.api,
+          auth: widget.auth,
+          player: widget.player,
+          initialSongs: songs,
+        ),
+      ),
+    );
+  }
+
   void _playSong(Song song, List<Song> queue) {
     // 点到当前歌：打开播放页，绝不重头播放（主流移动端一致行为）。
     if (openPlayerIfSameSong(
@@ -635,6 +663,8 @@ class HomePageState extends State<HomePage> {
                           playlists: data.playlists,
                           onTap: _openPlaylist,
                           onPlay: _playPlaylist,
+                          onTapTitle: () =>
+                              _openRecommendedPlaylists(data.playlists),
                         ),
                       ),
                       if (data.topSongs.isNotEmpty)
@@ -643,6 +673,8 @@ class HomePageState extends State<HomePage> {
                             songs: data.topSongs,
                             onPlay: (song) =>
                                 _playSong(song, data.topSongs),
+                            onTapTitle: () =>
+                                _openTopSongs(data.topSongs),
                           ),
                         ),
                       SliverToBoxAdapter(
@@ -757,12 +789,16 @@ class HomePageState extends State<HomePage> {
                             playlists: data.playlists,
                             onTap: _openPlaylist,
                             onPlay: _playPlaylist,
+                            onTapTitle: () =>
+                                _openRecommendedPlaylists(data.playlists),
                           ),
                           if (data.topSongs.isNotEmpty)
                             _TopSongRail(
                               songs: data.topSongs,
                               onPlay: (song) =>
                                   _playSong(song, data.topSongs),
+                              onTapTitle: () =>
+                                  _openTopSongs(data.topSongs),
                             ),
                         ],
                       ),
@@ -1388,10 +1424,15 @@ class _SongSectionState extends State<_SongSection> {
 
 /// 新歌速递横向区块。
 class _TopSongRail extends StatelessWidget {
-  const _TopSongRail({required this.songs, required this.onPlay});
+  const _TopSongRail({
+    required this.songs,
+    required this.onPlay,
+    this.onTapTitle,
+  });
 
   final List<Song> songs;
   final ValueChanged<Song> onPlay;
+  final VoidCallback? onTapTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -1405,11 +1446,12 @@ class _TopSongRail extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                   child: _SectionHeader(
                     title: '新歌速递',
-                    action: SizedBox.shrink(),
+                    action: const SizedBox.shrink(),
+                    onTap: onTapTitle,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1444,6 +1486,7 @@ class _TopSongRail extends StatelessWidget {
           height: 162,
           itemWidth: 110,
           topPadding: 20,
+          onTapTitle: onTapTitle,
           itemBuilder: (context, song) =>
               _TopSongCard(song: song, onTap: () => onPlay(song)),
         );
@@ -1543,11 +1586,13 @@ class _PlaylistRail extends StatelessWidget {
     required this.playlists,
     required this.onTap,
     this.onPlay,
+    this.onTapTitle,
   });
 
   final List<PlaylistSummary> playlists;
   final ValueChanged<PlaylistSummary> onTap;
   final ValueChanged<PlaylistSummary>? onPlay;
+  final VoidCallback? onTapTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -1571,6 +1616,7 @@ class _PlaylistRail extends StatelessWidget {
               child: _SectionHeader(
                 title: '推荐歌单',
                 action: const SizedBox.shrink(),
+                onTap: onTapTitle,
               ),
             ),
             const SizedBox(height: 12),
@@ -1608,6 +1654,7 @@ class _PlaylistRail extends StatelessWidget {
             child: _SectionHeader(
               title: '推荐歌单',
               action: const SizedBox.shrink(),
+              onTap: onTapTitle,
             ),
           ),
           const SizedBox(height: 12),
@@ -1667,28 +1714,54 @@ class _PlaylistRail extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.action});
+  const _SectionHeader({
+    required this.title,
+    this.action = const SizedBox.shrink(),
+    this.onTap,
+  });
 
   final String title;
   final Widget action;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    Widget titleWidget = Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w900,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+    );
+
+    Widget effectiveAction = action;
+    if (onTap != null &&
+        (action is SizedBox &&
+            ((action as SizedBox).width == null ||
+                (action as SizedBox).width == 0))) {
+      effectiveAction = Icon(
+        Icons.chevron_right_rounded,
+        size: 22,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+      );
+    }
+
+    final content = Row(
       children: [
-        Expanded(
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ),
-        action,
+        Expanded(child: titleWidget),
+        effectiveAction,
       ],
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: content,
+      );
+    }
+    return content;
   }
 }
 
