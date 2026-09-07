@@ -50,11 +50,17 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
+@visibleForTesting
+DateTime Function() appShellNow = DateTime.now;
+
 class _AppShellState extends State<AppShell> {
+  final GlobalKey<HomePageState> _homeKey = GlobalKey<HomePageState>();
   var _index = 1; // Default to '推荐' tab (index 1) in landscape
   var _lastHomeTab =
       1; // Tracks the last active Home sub-tab (1=推荐, 2=排行榜, 3=电台)
   final _navigatorKey = GlobalKey<NavigatorState>();
+  DateTime? _lastRailHomeTapTime;
+  DateTime? _lastDoubleTapExecutedTime;
 
   int _getPortraitIndex() {
     return _index == 0 ? 1 : 0;
@@ -64,6 +70,26 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _index = index == 0 ? _lastHomeTab : 0;
     });
+  }
+
+  void _handleHomeDoubleTap() {
+    final now = appShellNow();
+    if (_lastDoubleTapExecutedTime != null &&
+        now.difference(_lastDoubleTapExecutedTime!) <
+            const Duration(milliseconds: 350)) {
+      return;
+    }
+    _lastDoubleTapExecutedTime = now;
+
+    final needSwitch = _getPortraitIndex() != 0;
+    if (needSwitch) {
+      _setPortraitIndex(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_homeKey.currentState?.scrollToTopAndRefresh());
+      });
+    } else {
+      unawaited(_homeKey.currentState?.scrollToTopAndRefresh());
+    }
   }
 
   @override
@@ -140,6 +166,7 @@ class _AppShellState extends State<AppShell> {
                       return MaterialPageRoute(
                         builder: (navContext) {
                           final homePage = HomePage(
+                            key: _homeKey,
                             api: widget.api,
                             auth: widget.auth,
                             player: widget.player,
@@ -201,6 +228,7 @@ class _AppShellState extends State<AppShell> {
     final portraitIndex = _getPortraitIndex();
 
     final homePage = HomePage(
+      key: _homeKey,
       api: widget.api,
       auth: widget.auth,
       player: widget.player,
@@ -250,7 +278,22 @@ class _AppShellState extends State<AppShell> {
         children: [
           NavigationRail(
             selectedIndex: portraitIndex,
-            onDestinationSelected: _setPortraitIndex,
+            onDestinationSelected: (index) {
+              if (index == 0) {
+                final now = appShellNow();
+                if (_lastRailHomeTapTime != null &&
+                    now.difference(_lastRailHomeTapTime!) <
+                        const Duration(milliseconds: 350)) {
+                  _lastRailHomeTapTime = null;
+                  _handleHomeDoubleTap();
+                  return;
+                }
+                _lastRailHomeTapTime = now;
+              } else {
+                _lastRailHomeTapTime = null;
+              }
+              _setPortraitIndex(index);
+            },
             backgroundColor: colorScheme.surfaceContainerLow,
             labelType: NavigationRailLabelType.all,
             selectedIconTheme: IconThemeData(color: colorScheme.primary),
@@ -292,6 +335,7 @@ class _AppShellState extends State<AppShell> {
           : _FloatingBottomBar(
               currentIndex: portraitIndex,
               onTap: _setPortraitIndex,
+              onHomeDoubleTap: _handleHomeDoubleTap,
               player: widget.player,
               auth: widget.auth,
             ),
@@ -453,18 +497,49 @@ class _AppShellState extends State<AppShell> {
 
 /// 悬浮胶囊底栏（实色，无 BackdropFilter）— 参考上游 ` _LiquidGlassBottomBar` 的居中唱片交互，
 /// 但以实色 + 轻阴影实现，避免 `ImageFilter.blur` 在车机/低端机上的离屏缓冲与掉帧。
-class _FloatingBottomBar extends StatelessWidget {
+class _FloatingBottomBar extends StatefulWidget {
   const _FloatingBottomBar({
     required this.currentIndex,
     required this.onTap,
+    this.onHomeDoubleTap,
     required this.player,
     required this.auth,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final VoidCallback? onHomeDoubleTap;
   final PlayerController player;
   final AuthController auth;
+
+  @override
+  State<_FloatingBottomBar> createState() => _FloatingBottomBarState();
+}
+
+class _FloatingBottomBarState extends State<_FloatingBottomBar> {
+  DateTime? _lastHomeTapTime;
+
+  void _handleHomeTap() {
+    final now = appShellNow();
+    if (_lastHomeTapTime != null &&
+        now.difference(_lastHomeTapTime!) < const Duration(milliseconds: 350)) {
+      _lastHomeTapTime = null;
+      widget.onHomeDoubleTap?.call();
+      return;
+    }
+    _lastHomeTapTime = now;
+    widget.onTap(0);
+  }
+
+  void _handleHomeDoubleTap() {
+    _lastHomeTapTime = null;
+    widget.onHomeDoubleTap?.call();
+  }
+
+  void _handleLibraryTap() {
+    _lastHomeTapTime = null;
+    widget.onTap(1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -502,16 +577,17 @@ class _FloatingBottomBar extends StatelessWidget {
                 icon: Icons.home_outlined,
                 activeIcon: Icons.home_rounded,
                 label: '首页',
-                selected: currentIndex == 0,
-                onTap: () => onTap(0),
+                selected: widget.currentIndex == 0,
+                onTap: _handleHomeTap,
+                onDoubleTap: _handleHomeDoubleTap,
               ),
-              _CenterDisc(player: player, auth: auth),
+              _CenterDisc(player: widget.player, auth: widget.auth),
               _BottomNavItem(
                 icon: Icons.person_outline_rounded,
                 activeIcon: Icons.person_rounded,
                 label: '我的',
-                selected: currentIndex == 1,
-                onTap: () => onTap(1),
+                selected: widget.currentIndex == 1,
+                onTap: _handleLibraryTap,
               ),
             ],
           ),
@@ -528,6 +604,7 @@ class _BottomNavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.onDoubleTap,
   });
 
   final IconData icon;
@@ -535,6 +612,7 @@ class _BottomNavItem extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -542,6 +620,7 @@ class _BottomNavItem extends StatelessWidget {
     return Expanded(
       child: InkWell(
         onTap: onTap,
+        onDoubleTap: onDoubleTap,
         borderRadius: BorderRadius.circular(24),
         splashColor: colorScheme.primary.withValues(alpha: .10),
         highlightColor: Colors.transparent,
