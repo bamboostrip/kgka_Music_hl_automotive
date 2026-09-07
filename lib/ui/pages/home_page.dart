@@ -1441,6 +1441,48 @@ class _TopSongRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 车机首页只是二级页面的入口，只预览一行（6 首），与推荐歌单保持一致。
+    final size = MediaQuery.sizeOf(context);
+    final isCarMode =
+        size.width > size.height && ThemeController.instance.carModeEnabled;
+    if (isCarMode) {
+      final preview = songs.length > 6 ? songs.sublist(0, 6) : songs;
+      return Padding(
+        padding: const EdgeInsets.only(top: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: _SectionHeader(
+                title: '新歌速递',
+                action: const SizedBox.shrink(),
+                onTap: onTapTitle,
+              ),
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              itemCount: preview.length,
+              gridDelegate:
+                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 180,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 14,
+                // 正方形封面 + 两行文字 ≈ 宽:高 = 0.72。
+                childAspectRatio: 0.72,
+              ),
+              itemBuilder: (context, index) => _TopSongCard(
+                song: preview[index],
+                onTap: () => onPlay(preview[index]),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     // 桌面宽窗：转网格并让封面撑满格宽（此前复用横轨的固定 110 封面，
     // 格子比图大一圈，hover 时大片空白，见新歌速递截图箭头处）。
     return LayoutBuilder(
@@ -1611,6 +1653,8 @@ class _PlaylistRail extends StatelessWidget {
     final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
 
     if (isCarMode) {
+      // 车机首页只是二级页面的入口，只预览一行（6 张），避免一次铺满全量。
+      final preview = playlists.length > 6 ? playlists.sublist(0, 6) : playlists;
       return Padding(
         padding: const EdgeInsets.only(top: 12),
         child: Column(
@@ -1629,15 +1673,15 @@ class _PlaylistRail extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              itemCount: playlists.length,
+              itemCount: preview.length,
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 160,
+                maxCrossAxisExtent: 180,
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 14,
                 childAspectRatio: 0.60,
               ),
               itemBuilder: (context, index) {
-                final playlist = playlists[index];
+                final playlist = preview[index];
                 return _PlaylistCard(
                   playlist: playlist,
                   onTap: () => onTap(playlist),

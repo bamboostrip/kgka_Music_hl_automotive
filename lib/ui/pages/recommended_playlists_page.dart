@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../form_factor.dart';
@@ -145,9 +146,14 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final screenSize = MediaQuery.sizeOf(context);
+    // 车机横屏才走车机专属列数/字号，普通横屏与竖屏保持原样。
+    final isCarMode = screenSize.width > screenSize.height &&
+        ThemeController.instance.carModeEnabled;
+    final bodyBg = isDark ? colorScheme.surface : const Color(0xFFF7F8FA);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF14171A),
+      backgroundColor: bodyBg,
       body: Stack(
         children: [
           RefreshIndicator(
@@ -156,19 +162,22 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                // 沉浸式深色大标题头（固定置顶返回键与标题，下滑不遮挡返回）
+                // 清新浅色头：顶部淡蓝渐变底部直接收进 bodyBg，
+                // 与下方内容同底色、无圆角纸片接缝，滚动收起后仍是同一底色。
                 SliverAppBar(
                   pinned: true,
-                  expandedHeight: 120,
+                  expandedHeight: isCarMode ? 148 : 120,
                   elevation: 0,
                   scrolledUnderElevation: 0,
-                  backgroundColor: const Color(0xFF14171A),
+                  shadowColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  backgroundColor: bodyBg,
                   leading: IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.arrow_back_rounded,
-                      color: Colors.white,
-                      size: 24,
+                      color: colorScheme.onSurface,
+                      size: isCarMode ? 28 : 24,
                     ),
                     tooltip: '返回',
                     visualDensity: VisualDensity.compact,
@@ -176,46 +185,62 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                   flexibleSpace: FlexibleSpaceBar(
                     centerTitle: true,
                     titlePadding: const EdgeInsets.only(bottom: 14),
-                    title: const Text(
+                    title: Text(
                       '推荐歌单',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
+                        color: colorScheme.onSurface,
+                        fontSize: isCarMode ? 20 : 18,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.2,
                       ),
                     ),
                     background: Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xFF222930),
-                            Color(0xFF14171A),
-                          ],
+                          colors: isDark
+                              ? [
+                                  const Color(0xFF1B2E49),
+                                  const Color(0xFF0D121E),
+                                  bodyBg,
+                                ]
+                              : [
+                                  const Color(0xFFD3E8FF),
+                                  const Color(0xFFEDF4FF),
+                                  bodyBg,
+                                ],
+                          stops: const [0, 0.55, 1],
                         ),
                       ),
                     ),
                   ),
                 ),
 
-                // 主体双列网格卡片容器
+                // 主体网格：与头图同底色直接相连，去掉圆角纸片，避免横向分割线。
+
+                // 主体网格：与头图同底色直接相连，去掉圆角纸片，避免横向分割线。
                 SliverToBoxAdapter(
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? colorScheme.surface : const Color(0xFFF7F8FA),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                    ),
+                    decoration: BoxDecoration(color: bodyBg),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                      padding: EdgeInsets.fromLTRB(
+                          16, isCarMode ? 16 : 20, 16, 12),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final width = constraints.maxWidth;
                           final int crossAxisCount;
-                          if (width >= 900) {
+                          if (isCarMode) {
+                            if (width >= 1100) {
+                              crossAxisCount = 6;
+                            } else if (width >= 850) {
+                              crossAxisCount = 5;
+                            } else if (width >= 600) {
+                              crossAxisCount = 4;
+                            } else {
+                              crossAxisCount = 3;
+                            }
+                          } else if (width >= 900) {
                             crossAxisCount = 4;
                           } else if (width >= 600) {
                             crossAxisCount = 3;
@@ -242,15 +267,19 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                             gridDelegate:
                                 SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
-                              mainAxisSpacing: 18,
-                              crossAxisSpacing: 14,
-                              childAspectRatio: 0.68,
+                              mainAxisSpacing: isCarMode ? 14 : 18,
+                              crossAxisSpacing: isCarMode ? 12 : 14,
+                              childAspectRatio: isCarMode ? 0.72 : 0.68,
                             ),
                             itemBuilder: (context, index) {
                               final playlist = _playlists[index];
                               final playCountText =
                                   _formatPlayCount(playlist.playCount);
                               final cardRadius = isDesktopFormFactor ? 8.0 : 12.0;
+                              // 车机字号整体放大一级，保证驾驶距离可读。
+                              final titleFontSize = isCarMode ? 15.5 : 13.5;
+                              final subtitleFontSize = isCarMode ? 13.0 : 11.5;
+                              final badgeFontSize = isCarMode ? 12.0 : 10.5;
 
                               return InkWell(
                                 onTap: () => _openPlaylist(playlist),
@@ -321,9 +350,9 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                                                 ),
                                                 child: Text(
                                                   playCountText,
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     color: Colors.white,
-                                                    fontSize: 10.5,
+                                                    fontSize: badgeFontSize,
                                                     fontWeight:
                                                         FontWeight.w500,
                                                   ),
@@ -339,7 +368,7 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 13.5,
+                                        fontSize: titleFontSize,
                                         fontWeight: FontWeight.w600,
                                         color: colorScheme.onSurface,
                                       ),
@@ -352,7 +381,7 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 11.5,
+                                        fontSize: subtitleFontSize,
                                         color: colorScheme.onSurfaceVariant,
                                       ),
                                     ),
@@ -371,7 +400,7 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                 // 加载更多进度条或已到底提示
                 SliverToBoxAdapter(
                   child: Container(
-                    color: isDark ? colorScheme.surface : const Color(0xFFF7F8FA),
+                    color: bodyBg,
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Center(
                       child: _isLoadingMore
@@ -386,7 +415,7 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                               ? Text(
                                   '没有更多歌单了',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: isCarMode ? 13.5 : 12,
                                     color: colorScheme.onSurfaceVariant
                                         .withValues(alpha: 0.6),
                                   ),
@@ -399,7 +428,7 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                 // 底部防 MiniPlayer 遮挡留白
                 SliverToBoxAdapter(
                   child: Container(
-                    color: isDark ? colorScheme.surface : const Color(0xFFF7F8FA),
+                    color: bodyBg,
                     height: 88,
                   ),
                 ),

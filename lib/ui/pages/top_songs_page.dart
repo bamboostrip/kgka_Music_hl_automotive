@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../form_factor.dart';
@@ -122,9 +123,13 @@ class _TopSongsPageState extends State<TopSongsPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final screenSize = MediaQuery.sizeOf(context);
+    final isCarMode = screenSize.width > screenSize.height &&
+        ThemeController.instance.carModeEnabled;
+    final bodyBg = isDark ? colorScheme.surface : const Color(0xFFF7F8FA);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF14171A),
+      backgroundColor: bodyBg,
       body: Stack(
         children: [
           RefreshIndicator(
@@ -133,19 +138,22 @@ class _TopSongsPageState extends State<TopSongsPage> {
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                // 沉浸式深色大标题头（固定置顶返回键与标题，下滑不遮挡返回）
+                // 清新浅色头：顶部淡蓝渐变底部直接收进 bodyBg，
+                // 与下方内容同底色、无圆角纸片接缝，滚动收起后仍是同一底色。
                 SliverAppBar(
                   pinned: true,
-                  expandedHeight: 120,
+                  expandedHeight: isCarMode ? 148 : 120,
                   elevation: 0,
                   scrolledUnderElevation: 0,
-                  backgroundColor: const Color(0xFF14171A),
+                  shadowColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  backgroundColor: bodyBg,
                   leading: IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.arrow_back_rounded,
-                      color: Colors.white,
-                      size: 24,
+                      color: colorScheme.onSurface,
+                      size: isCarMode ? 28 : 24,
                     ),
                     tooltip: '返回',
                     visualDensity: VisualDensity.compact,
@@ -153,46 +161,60 @@ class _TopSongsPageState extends State<TopSongsPage> {
                   flexibleSpace: FlexibleSpaceBar(
                     centerTitle: true,
                     titlePadding: const EdgeInsets.only(bottom: 14),
-                    title: const Text(
+                    title: Text(
                       '新歌速递',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
+                        color: colorScheme.onSurface,
+                        fontSize: isCarMode ? 20 : 18,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.2,
                       ),
                     ),
                     background: Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xFF222930),
-                            Color(0xFF14171A),
-                          ],
+                          colors: isDark
+                              ? [
+                                  const Color(0xFF1B2E49),
+                                  const Color(0xFF0D121E),
+                                  bodyBg,
+                                ]
+                              : [
+                                  const Color(0xFFD3E8FF),
+                                  const Color(0xFFEDF4FF),
+                                  bodyBg,
+                                ],
+                          stops: const [0, 0.55, 1],
                         ),
                       ),
                     ),
                   ),
                 ),
 
-                // 主体双列网格卡片容器
+                // 主体网格：与头图同底色直接相连，去掉圆角纸片，避免横向分割线。
                 SliverToBoxAdapter(
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? colorScheme.surface : const Color(0xFFF7F8FA),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                    ),
+                    decoration: BoxDecoration(color: bodyBg),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                      padding: EdgeInsets.fromLTRB(
+                          16, isCarMode ? 16 : 20, 16, 12),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final width = constraints.maxWidth;
                           final int crossAxisCount;
-                          if (width >= 900) {
+                          if (isCarMode) {
+                            if (width >= 1100) {
+                              crossAxisCount = 6;
+                            } else if (width >= 850) {
+                              crossAxisCount = 5;
+                            } else if (width >= 600) {
+                              crossAxisCount = 4;
+                            } else {
+                              crossAxisCount = 3;
+                            }
+                          } else if (width >= 900) {
                             crossAxisCount = 4;
                           } else if (width >= 600) {
                             crossAxisCount = 3;
@@ -222,9 +244,9 @@ class _TopSongsPageState extends State<TopSongsPage> {
                                 gridDelegate:
                                     SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: crossAxisCount,
-                                  mainAxisSpacing: 18,
-                                  crossAxisSpacing: 14,
-                                  childAspectRatio: 0.72,
+                                  mainAxisSpacing: isCarMode ? 14 : 18,
+                                  crossAxisSpacing: isCarMode ? 12 : 14,
+                                  childAspectRatio: isCarMode ? 0.74 : 0.72,
                                 ),
                                 itemBuilder: (context, index) {
                                   final song = _songs[index];
@@ -233,6 +255,10 @@ class _TopSongsPageState extends State<TopSongsPage> {
                                           song.hash;
                                   final isDesktop = isDesktopFormFactor;
                                   final cardRadius = isDesktop ? 8.0 : 12.0;
+                                  final titleFontSize =
+                                      isCarMode ? 15.5 : 13.5;
+                                  final artistFontSize =
+                                      isCarMode ? 13.0 : 11.5;
 
                                   return InkWell(
                                     onTap: () => _playSong(song),
@@ -337,7 +363,7 @@ class _TopSongsPageState extends State<TopSongsPage> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            fontSize: 13.5,
+                                            fontSize: titleFontSize,
                                             fontWeight: FontWeight.w600,
                                             color: active
                                                 ? colorScheme.primary
@@ -350,7 +376,7 @@ class _TopSongsPageState extends State<TopSongsPage> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            fontSize: 11.5,
+                                            fontSize: artistFontSize,
                                             color: colorScheme.onSurfaceVariant,
                                           ),
                                         ),
@@ -371,7 +397,7 @@ class _TopSongsPageState extends State<TopSongsPage> {
                 // 加载更多进度条
                 SliverToBoxAdapter(
                   child: Container(
-                    color: isDark ? colorScheme.surface : const Color(0xFFF7F8FA),
+                    color: bodyBg,
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Center(
                       child: _isLoadingMore
@@ -386,7 +412,7 @@ class _TopSongsPageState extends State<TopSongsPage> {
                               ? Text(
                                   '没有更多新歌了',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: isCarMode ? 13.5 : 12,
                                     color: colorScheme.onSurfaceVariant
                                         .withValues(alpha: 0.6),
                                   ),
@@ -399,7 +425,7 @@ class _TopSongsPageState extends State<TopSongsPage> {
                 // 底部留白防 MiniPlayer 遮挡
                 SliverToBoxAdapter(
                   child: Container(
-                    color: isDark ? colorScheme.surface : const Color(0xFFF7F8FA),
+                    color: bodyBg,
                     height: 88,
                   ),
                 ),
