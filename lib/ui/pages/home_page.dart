@@ -20,13 +20,13 @@ import '../form_factor.dart';
 import '../widgets/app_update_widgets.dart';
 import '../widgets/artwork.dart';
 import '../widgets/cover_play_overlay.dart';
+import '../widgets/home_collapsible_header.dart';
 import '../widgets/home_song_row.dart';
 import '../widgets/horizontal_wheel_scroll.dart';
 import '../widgets/toast.dart';
 import '../player/song_tap_handler.dart';
 import 'artist_detail_page.dart';
 import 'playlist_detail_page.dart';
-import 'search_page.dart';
 import '../../controllers/theme_controller.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/local_music_controller.dart';
@@ -59,12 +59,14 @@ class HomePage extends StatefulWidget {
   final ValueChanged<int>? onTabSwitch;
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePage> createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> {
   static _HomeData? _cachedData;
   static bool _hasAutoPlayed = false;
+
+  final ScrollController _scrollController = ScrollController();
 
   Future<_HomeData>? _future;
   late final AppUpdateService _updateService;
@@ -112,9 +114,21 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _networkRestoredSub?.cancel();
     widget.auth.removeListener(_handleAuthChanged);
     super.dispose();
+  }
+
+  Future<void> scrollToTopAndRefresh() async {
+    if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    await _refresh();
   }
 
   void _handleAuthChanged() {
@@ -460,7 +474,13 @@ class _HomePageState extends State<HomePage> {
         // 数据重载入口改为页头刷新按钮（复用 _refresh 同一逻辑）。
         // 移动端 / 车机端：RefreshIndicator + AlwaysScrollable 原样。
         final isDesktop = isDesktopFormFactor;
+        final size = MediaQuery.sizeOf(context);
+        final topPadding = MediaQuery.paddingOf(context).top;
+        final isLandscape = size.width > size.height;
+        final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+
         final content = CustomScrollView(
+          controller: _scrollController,
           physics: isDesktop
               ? const ClampingScrollPhysics()
               : const AlwaysScrollableScrollPhysics(),
@@ -478,39 +498,71 @@ class _HomePageState extends State<HomePage> {
                 ),
               )
             else ...[
-              SliverToBoxAdapter(
-                child: _RecommendHeader(
-                  auth: widget.auth,
-                  daily: data!.daily,
-                  sectionIndex: _sectionIndex,
-                  onSectionChanged: (value) {
-                    if (value == -1) {
-                      widget.onTabSwitch?.call(0); // Switch to My tab
-                    } else {
-                      setState(() => _sectionIndex = value);
-                      widget.onTabSwitch?.call(value + 1);
-                    }
-                  },
-                  onDailyPlay: () {
-                    final songs = data.daily.songs;
-                    if (songs.isNotEmpty) {
-                      widget.player.playSong(songs.first, queue: songs);
-                    }
-                  },
-                  onDailyTap: () => _openDailyRecommend(data.daily),
-                  api: widget.api,
-                  player: widget.player,
-                  updateVersion:
-                      _updateBannerDismissed ? null : _availableUpdate,
-                  onUpdateTap: () {
-                    _showUpdateDetails();
-                  },
-                  onUpdateClose: () {
-                    setState(() => _updateBannerDismissed = true);
-                  },
-                  onRefresh: isDesktop ? _refresh : null,
+              if (!isCarMode) ...[
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: HomeCollapsibleHeaderDelegate(
+                    api: widget.api,
+                    auth: widget.auth,
+                    player: widget.player,
+                    sectionIndex: _sectionIndex,
+                    onSectionChanged: (value) {
+                      if (value == -1) {
+                        widget.onTabSwitch?.call(0);
+                      } else {
+                        setState(() => _sectionIndex = value);
+                        widget.onTabSwitch?.call(value + 1);
+                      }
+                    },
+                    onRefresh: isDesktop ? _refresh : null,
+                    topPadding: topPadding,
+                  ),
                 ),
-              ),
+                if (_availableUpdate != null && !_updateBannerDismissed)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: AppUpdateBanner(
+                        version: _availableUpdate!,
+                        onTap: _showUpdateDetails,
+                        onClose: () =>
+                            setState(() => _updateBannerDismissed = true),
+                      ),
+                    ),
+                  ),
+              ] else ...[
+                SliverToBoxAdapter(
+                  child: _RecommendHeader(
+                    auth: widget.auth,
+                    daily: data!.daily,
+                    sectionIndex: _sectionIndex,
+                    onSectionChanged: (value) {
+                      if (value == -1) {
+                        widget.onTabSwitch?.call(0); // Switch to My tab
+                      } else {
+                        setState(() => _sectionIndex = value);
+                        widget.onTabSwitch?.call(value + 1);
+                      }
+                    },
+                    onDailyPlay: () {
+                      final songs = data.daily.songs;
+                      if (songs.isNotEmpty) {
+                        widget.player.playSong(songs.first, queue: songs);
+                      }
+                    },
+                    onDailyTap: () => _openDailyRecommend(data.daily),
+                    api: widget.api,
+                    player: widget.player,
+                    updateVersion:
+                        _updateBannerDismissed ? null : _availableUpdate,
+                    onUpdateTap: _showUpdateDetails,
+                    onUpdateClose: () {
+                      setState(() => _updateBannerDismissed = true);
+                    },
+                    onRefresh: isDesktop ? _refresh : null,
+                  ),
+                ),
+              ],
               SliverToBoxAdapter(
                 child: Column(
                   children: [
@@ -518,9 +570,27 @@ class _HomePageState extends State<HomePage> {
                       visible: _sectionIndex == 0,
                       child: Column(
                         children: [
+                          if (!isCarMode)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                              child: _FeatureShelf(
+                                daily: data!.daily,
+                                onDailyPlay: () {
+                                  final songs = data.daily.songs;
+                                  if (songs.isNotEmpty) {
+                                    widget.player.playSong(
+                                      songs.first,
+                                      queue: songs,
+                                    );
+                                  }
+                                },
+                                onDailyTap: () =>
+                                    _openDailyRecommend(data.daily),
+                              ),
+                            ),
                           _SongSection(
                             title: '母带音质·精选',
-                            songs: data.daily.songs,
+                            songs: data!.daily.songs,
                             onPlay: _playSong,
                             isLiked: (song) => widget.auth.isLiked(song),
                             onLikeTap: (song) => widget.auth.toggleLike(song),
@@ -631,39 +701,6 @@ class _RecommendHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!isCarMode) ...[
-                // 桌面端在页签右侧提供刷新按钮（替代下拉刷新手势）；
-                // 移动端 / 车机端不传 onRefresh，渲染与原来完全一致。
-                if (onRefresh != null)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _TopTabs(
-                          auth: auth,
-                          index: sectionIndex,
-                          onChanged: onSectionChanged,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        tooltip: '刷新',
-                        onPressed: onRefresh,
-                        icon: const Icon(Icons.refresh_rounded),
-                        iconSize: 20,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
-                  )
-                else
-                  _TopTabs(
-                    auth: auth,
-                    index: sectionIndex,
-                    onChanged: onSectionChanged,
-                  ),
-                const SizedBox(height: 12),
-                _SmartSearch(api: api, auth: auth, player: player),
-              ],
               if (updateVersion != null) ...[
                 const SizedBox(height: 10),
                 AppUpdateBanner(
@@ -739,202 +776,6 @@ class _PersistentTabPane extends StatelessWidget {
   }
 }
 
-class _TopTabs extends StatelessWidget {
-  const _TopTabs({
-    required this.auth,
-    required this.index,
-    required this.onChanged,
-  });
-
-  final AuthController auth;
-  final int index;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const tabs = [
-      (Icons.auto_awesome_rounded, '推荐'),
-      (Icons.bar_chart_rounded, '排行榜'),
-      (Icons.radio_rounded, '电台'),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: .06)
-            : Colors.white.withValues(alpha: .88),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: .10)
-              : Colors.white.withValues(alpha: .92),
-          width: 1.1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: .20)
-                : const Color(0x0F000000),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < tabs.length; i++)
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  decoration: BoxDecoration(
-                    color: i == index
-                        ? (isDark
-                            ? colorScheme.primary.withValues(alpha: .20)
-                            : Colors.white)
-                        : (isDark
-                            ? colorScheme.primary.withValues(alpha: 0)
-                            : Colors.white.withValues(alpha: 0)),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: i == index && !isDark
-                          ? colorScheme.primary.withValues(alpha: .18)
-                          : colorScheme.primary.withValues(alpha: 0),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: i == index && !isDark
-                            ? Colors.black.withValues(alpha: .06)
-                            : Colors.black.withValues(alpha: 0),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        tabs[i].$1,
-                        size: 16,
-                        color: i == index
-                            ? colorScheme.primary
-                            : colorScheme.onSurfaceVariant
-                                .withValues(alpha: .85),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        tabs[i].$2,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: i == index
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                          letterSpacing: -0.2,
-                          color: i == index
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SmartSearch extends StatelessWidget {
-  const _SmartSearch({
-    required this.api,
-    required this.auth,
-    required this.player,
-  });
-
-  final MusicApi api;
-  final AuthController auth;
-  final PlayerController player;
-
-  void _openSearch(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SearchPage(api: api, auth: auth, player: player),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: () => _openSearch(context),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: .07)
-              : Colors.white.withValues(alpha: .92),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: .10)
-                : Colors.white.withValues(alpha: .88),
-            width: 1.1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withValues(alpha: .18)
-                  : const Color(0x0F000000),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              Icons.search_rounded,
-              size: 20,
-              color: colorScheme.onSurfaceVariant.withValues(
-                alpha: isDark ? .8 : .55,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '搜索歌曲、歌手、专辑',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 14,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: .45),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// 推荐区特性卡：新碟上架下线后只剩「猜你喜欢」一张，全宽独占一行。
 /// 手机/车机/宽窄屏统一为单卡，不再需要双卡并排与窄屏竖排逻辑。
