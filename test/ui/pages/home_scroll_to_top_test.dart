@@ -374,4 +374,29 @@ void main() {
 
     expect(api.dailyRecommendCalls, greaterThan(initialDailyCalls));
   });
+
+  testWidgets('从排行榜切到「我的」不被弹回首页，回来仍停留在排行榜', (tester) async {
+    await pumpAppShell(tester);
+
+    // 切到首页的「排行榜」子 tab（PageView 第 2 页）。
+    await tester.tap(find.text('排行榜'));
+    await tester.pumpAndSettle();
+    expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
+
+    // 切到「我的」：修复前 HomePage.sectionIndex 会从 1 塌缩为 0，
+    // didUpdateWidget 触发 animateToPage(0)，动画途中 onPageChanged(0)
+    // 回调 onTabSwitch(1) 把用户弹回首页推荐 tab。
+    await tester.tap(find.text('我的'));
+    await tester.pumpAndSettle();
+
+    // 首页应保持退场（折叠头搜索框不可见），停留在我页面。
+    expect(find.text('搜索歌曲、歌手、专辑'), findsNothing);
+
+    // 单击「首页」返回：应恢复到排行榜子 tab，而非重置为推荐。
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
+    final rankTabText = tester.widget<Text>(find.text('排行榜'));
+    expect(rankTabText.style?.fontWeight, FontWeight.w800);
+  });
 }

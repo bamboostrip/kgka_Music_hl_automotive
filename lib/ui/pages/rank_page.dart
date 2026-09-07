@@ -38,10 +38,10 @@ class RankPage extends StatefulWidget {
   final CacheService cache;
 
   @override
-  State<RankPage> createState() => _RankPageState();
+  State<RankPage> createState() => RankPageState();
 }
 
-class _RankPageState extends State<RankPage>
+class RankPageState extends State<RankPage>
     with AutomaticKeepAliveClientMixin {
   static List<RankCategory>? _cachedRanks;
   static List<Song>? _cachedNewSongs;
@@ -50,6 +50,11 @@ class _RankPageState extends State<RankPage>
   Future<List<Song>>? _newSongsFuture;
   StreamSubscription<void>? _networkRestoredSub;
   bool _silentRefreshing = false;
+
+  /// 加载代数：refresh / _silentRefresh / _initFromDiskOrNetwork 任一入口
+  /// 开启新一轮加载时自增。旧代数的响应晚到时（如静默刷新与双击刷新并发）
+  /// 不再写内存/磁盘缓存、不再覆盖 UI，避免旧数据倒灌覆盖新数据。
+  int _loadEpoch = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -82,10 +87,14 @@ class _RankPageState extends State<RankPage>
     super.dispose();
   }
 
-  Future<List<RankCategory>> _loadRanks() async {
+  /// [epoch] 为发起本请求时的代数；响应返回时若已被更新一轮加载取代，
+  /// 则跳过缓存写入（返回值仍交给调用方按代数决定是否上屏）。
+  Future<List<RankCategory>> _loadRanks({int? epoch}) async {
     final ranks = await widget.api.rankList(withSong: 3);
-    _cachedRanks = ranks;
-    _persistRanks(ranks);
+    if (epoch == null || epoch == _loadEpoch) {
+      _cachedRanks = ranks;
+      _persistRanks(ranks);
+    }
     return ranks;
   }
 
@@ -114,11 +123,13 @@ class _RankPageState extends State<RankPage>
   }
 
   /// 新歌推荐失败不阻塞榜单：无缓存时返回空（隐藏该区域），有缓存时降级到缓存。
-  Future<List<Song>> _loadNewSongs() async {
+  Future<List<Song>> _loadNewSongs({int? epoch}) async {
     try {
       final songs = await widget.api.newSongs();
-      _cachedNewSongs = songs;
-      _persistNewSongs(songs);
+      if (epoch == null || epoch == _loadEpoch) {
+        _cachedNewSongs = songs;
+        _persistNewSongs(songs);
+      }
       return songs;
     } catch (_) {
       return _cachedNewSongs ?? const <Song>[];
@@ -127,6 +138,7 @@ class _RankPageState extends State<RankPage>
 
   /// 冷启动单 flight：先读磁盘，命中则显示缓存+静默刷新，未命中才走网络。
   Future<void> _initFromDiskOrNetwork() async {
+    final epoch = ++_loadEpoch;
     try {
       final results = await Future.wait([
         widget.cache.read<Map<String, dynamic>>(
@@ -140,7 +152,8 @@ class _RankPageState extends State<RankPage>
           ttl: AppConfig.rankCacheTtl,
         ),
       ]);
-      if (!mounted) return;
+      // 磁盘读取期间用户已手动刷新（epoch 变化）：让位，不再回写缓存态。
+      if (!mounted || epoch != _loadEpoch) return;
       final rankCache = results[0];
       final songsCache = results[1];
       if (rankCache != null) {
@@ -189,9 +202,9 @@ class _RankPageState extends State<RankPage>
     } catch (_) {
       // 磁盘读取失败则继续走网络。
     }
-    if (!mounted) return;
-    final rankFuture = _loadRanks();
-    final songsFuture = _loadNewSongs();
+    if (!mounted || epoch != _loadEpoch) return;
+    final rankFuture = _loadRanks(epoch: epoch);
+    final songsFuture = _loadNewSongs(epoch: epoch);
     setState(() {
       _future = rankFuture;
       _newSongsFuture = songsFuture;
@@ -201,13 +214,15 @@ class _RankPageState extends State<RankPage>
   /// 后台静默刷新：成功更新 UI 与缓存，失败保持缓存不变（与推荐页一致）。
   Future<void> _silentRefresh() async {
     if (_silentRefreshing) return;
+    final epoch = ++_loadEpoch;
     _silentRefreshing = true;
     try {
       final results = await Future.wait([
         widget.api.rankList(withSong: 3),
-        _loadNewSongs(),
+        _loadNewSongs(epoch: epoch),
       ]);
-      if (!mounted) return;
+      // 等待期间用户已手动刷新（epoch 变化）：丢弃本响应，避免旧数据倒灌。
+      if (!mounted || epoch != _loadEpoch) return;
       final ranks = results[0] as List<RankCategory>;
       final songs = results[1] as List<Song>;
       _cachedRanks = ranks;
@@ -224,9 +239,12 @@ class _RankPageState extends State<RankPage>
     }
   }
 
-  Future<void> _refresh() async {
-    final rankFuture = _loadRanks();
-    final songsFuture = _loadNewSongs();
+  /// 对外入口：双击首页按钮时回到排行榜顶部并刷新（标题栏刷新按钮已移除）。
+  Future<void> refresh() async {
+    // 双击刷新优先级最高：使在途的静默刷新/冷启动恢复响应作废。
+    final epoch = ++_loadEpoch;
+    final rankFuture = _loadRanks(epoch: epoch);
+    final songsFuture = _loadNewSongs(epoch: epoch);
     setState(() {
       _future = rankFuture;
       _newSongsFuture = songsFuture;
@@ -275,7 +293,7 @@ class _RankPageState extends State<RankPage>
         if (snapshot.hasError && ranks.isEmpty) {
           return _RankError(
             message: snapshot.error.toString(),
-            onRetry: _refresh,
+            onRetry: refresh,
           );
         }
         if (ranks.isEmpty) {
@@ -318,14 +336,6 @@ class _RankPageState extends State<RankPage>
                             letterSpacing: -0.3,
                           ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: '刷新',
-                    onPressed: _refresh,
-                    icon: const Icon(Icons.refresh_rounded),
-                    iconSize: 20,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
@@ -494,21 +504,25 @@ class _NewSongsSection extends StatelessWidget {
                       ),
                       itemBuilder: (context, index) {
                         final song = songs[index];
-                        return _NewSongCard(
-                          song: song,
-                          onTap: () {
-                            if (openPlayerIfSameSong(
-                              context,
-                              player: player,
-                              auth: auth,
-                              song: song,
-                            )) {
-                              return;
-                            }
-                            player.playSong(song, queue: songs);
-                          },
-                          isPlaying: player.currentSong?.hash == song.hash &&
-                              song.hash.isNotEmpty,
+                        // 正在播放徽标随播放状态实时变化：只重建单张卡片。
+                        return AnimatedBuilder(
+                          animation: player,
+                          builder: (context, _) => _NewSongCard(
+                            song: song,
+                            onTap: () {
+                              if (openPlayerIfSameSong(
+                                context,
+                                player: player,
+                                auth: auth,
+                                song: song,
+                              )) {
+                                return;
+                              }
+                              player.playSong(song, queue: songs);
+                            },
+                            isPlaying: player.currentSong?.hash == song.hash &&
+                                song.hash.isNotEmpty,
+                          ),
                         );
                       },
                     );
@@ -524,21 +538,25 @@ class _NewSongsSection extends StatelessWidget {
                         separatorBuilder: (_, _) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final song = songs[index];
-                          return _NewSongCard(
-                            song: song,
-                            onTap: () {
-                              if (openPlayerIfSameSong(
-                                context,
-                                player: player,
-                                auth: auth,
-                                song: song,
-                              )) {
-                                return;
-                              }
-                              player.playSong(song, queue: songs);
-                            },
-                            isPlaying: player.currentSong?.hash == song.hash &&
-                                song.hash.isNotEmpty,
+                          return AnimatedBuilder(
+                            animation: player,
+                            builder: (context, _) => _NewSongCard(
+                              song: song,
+                              onTap: () {
+                                if (openPlayerIfSameSong(
+                                  context,
+                                  player: player,
+                                  auth: auth,
+                                  song: song,
+                                )) {
+                                  return;
+                                }
+                                player.playSong(song, queue: songs);
+                              },
+                              isPlaying:
+                                  player.currentSong?.hash == song.hash &&
+                                      song.hash.isNotEmpty,
+                            ),
                           );
                         },
                       ),

@@ -69,6 +69,13 @@ class HomePageState extends State<HomePage> {
   static bool _hasAutoPlayed = false;
 
   final ScrollController _scrollController = ScrollController();
+  // 非车机三 tab 顶部描点：双击首页按钮时用 Scrollable.ensureVisible 回到对应 tab
+  // 顶部（内层滚动由 NestedScrollView 协调，不能自配 ScrollController）。
+  final GlobalKey _recommendTopKey = GlobalKey();
+  // 排行榜 / 电台的刷新入口：双击首页按钮时调用（标题栏刷新按钮已移除）。
+  final GlobalKey<RankPageState> _rankKey = GlobalKey<RankPageState>();
+  final GlobalKey<_RadioSectionState> _radioKey =
+      GlobalKey<_RadioSectionState>();
 
   Future<_HomeData>? _future;
   late final AppUpdateService _updateService;
@@ -79,15 +86,12 @@ class HomePageState extends State<HomePage> {
   StreamSubscription<void>? _networkRestoredSub;
   bool _silentRefreshing = false;
   late final PageController _pageController;
-  double _pageOffset = 0.0;
 
   @override
   void initState() {
     super.initState();
     _sectionIndex = widget.sectionIndex;
-    _pageOffset = widget.sectionIndex.toDouble();
-    _pageController = PageController(initialPage: _sectionIndex)
-      ..addListener(_handlePageScroll);
+    _pageController = PageController(initialPage: _sectionIndex);
     _updateService = AppUpdateService();
     final cached = _cachedData;
     if (cached != null) {
@@ -111,23 +115,11 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  void _handlePageScroll() {
-    if (_pageController.hasClients && _pageController.position.haveDimensions) {
-      final page = _pageController.page ?? _sectionIndex.toDouble();
-      if ((page - _pageOffset).abs() > 0.001) {
-        setState(() {
-          _pageOffset = page;
-        });
-      }
-    }
-  }
-
   @override
   void didUpdateWidget(HomePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionIndex != widget.sectionIndex) {
       _sectionIndex = widget.sectionIndex;
-      _pageOffset = widget.sectionIndex.toDouble();
       if (_pageController.hasClients &&
           _pageController.page?.round() != widget.sectionIndex) {
         _pageController.animateToPage(
@@ -141,7 +133,6 @@ class HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    _pageController.removeListener(_handlePageScroll);
     _pageController.dispose();
     _scrollController.dispose();
     _networkRestoredSub?.cancel();
@@ -149,16 +140,53 @@ class HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  /// 当前子 tab 对应的刷新入口：双击首页与桌面头部刷新按钮共用同一语义。
+  Future<void> _refreshCurrentSection() => switch (_sectionIndex) {
+        1 => _rankKey.currentState?.refresh() ?? Future<void>.value(),
+        2 => _radioKey.currentState?.refresh() ?? Future<void>.value(),
+        _ => _refresh(),
+      };
+
+  /// 双击底部首页按钮：回到当前 tab 顶部并且刷新对应内容。
+  /// 推荐 tab 刷新推荐流，排行榜 / 电台 tab 刷新各自内容（标题栏刷新按钮已移除，
+  /// 统一收敛到这里）。
   Future<void> scrollToTopAndRefresh() async {
-    if (_scrollController.hasClients) {
-      await _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
-      );
+    final size = MediaQuery.sizeOf(context);
+    final isCarMode =
+        size.width > size.height && ThemeController.instance.carModeEnabled;
+    if (isCarMode) {
+      // 车机单滚动容器：直接回顶。
+      if (_scrollController.hasClients) {
+        await _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    } else {
+      // 移动端 NestedScrollView：内层滚动由协调器接管，用描点回到对应 tab 顶部，
+      // 会连带把外层折叠头一并展开。
+      final anchor = switch (_sectionIndex) {
+        1 => _rankKey,
+        2 => _radioKey,
+        _ => _recommendTopKey,
+      };
+      final anchorContext = anchor.currentContext;
+      if (anchorContext != null) {
+        try {
+          await Scrollable.ensureVisible(
+            anchorContext,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutCubic,
+            alignment: 0.0,
+          );
+        } catch (_) {
+          // 描点不可见时退化为仅刷新，不抛错。
+        }
+      }
     }
     if (!mounted) return;
-    await _refresh();
+    await _refreshCurrentSection();
   }
 
   void _handleAuthChanged() {
@@ -234,11 +262,7 @@ class HomePageState extends State<HomePage> {
         topSongs: results[2] as List<Song>,
       );
       _cachedData = data;
-      await widget.cache.write('cache_home', {
-        'daily': data.daily.toCache(),
-        'playlists': data.playlists.map((p) => p.toCache()).toList(),
-        'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
-      });
+      await _persistHomeCache(data);
       if (!mounted) return;
       _checkAndAutoPlay(data);
       setState(() {
@@ -248,6 +272,19 @@ class HomePageState extends State<HomePage> {
       // 静默刷新失败，保持缓存数据不变
     } finally {
       _silentRefreshing = false;
+    }
+  }
+
+  /// 缓存写入失败只记日志，不影响已拿到的网络数据上屏（对齐 RankPage._persistRanks）。
+  Future<void> _persistHomeCache(_HomeData data) async {
+    try {
+      await widget.cache.write('cache_home', {
+        'daily': data.daily.toCache(),
+        'playlists': data.playlists.map((p) => p.toCache()).toList(),
+        'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
+      });
+    } catch (_) {
+      // 磁盘缓存写失败不丢弃网络数据。
     }
   }
 
@@ -263,11 +300,7 @@ class HomePageState extends State<HomePage> {
       topSongs: results[2] as List<Song>,
     );
     _cachedData = data;
-    await widget.cache.write('cache_home', {
-      'daily': data.daily.toCache(),
-      'playlists': data.playlists.map((p) => p.toCache()).toList(),
-      'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
-    });
+    await _persistHomeCache(data);
     _checkAndAutoPlay(data);
     return data;
   }
@@ -571,14 +604,15 @@ class HomePageState extends State<HomePage> {
                     auth: widget.auth,
                     player: widget.player,
                     sectionIndex: _sectionIndex,
-                    pageOffset: _pageOffset,
+                    // 胶囊指示器直接监听 PageController：滑动过程中只重建
+                    // 头部内的小胶囊条，不再每像素 setState 整棵首页子树。
+                    pageTracker: _pageController,
                     onSectionChanged: (value) {
                       if (value == -1) {
                         widget.onTabSwitch?.call(0);
                       } else {
                         setState(() {
                           _sectionIndex = value;
-                          _pageOffset = value.toDouble();
                         });
                         widget.onTabSwitch?.call(value + 1);
                         if (_pageController.hasClients) {
@@ -590,7 +624,7 @@ class HomePageState extends State<HomePage> {
                         }
                       }
                     },
-                    onRefresh: isDesktop ? _refresh : null,
+                    onRefresh: isDesktop ? _refreshCurrentSection : null,
                     topPadding: topPadding,
                   ),
                 ),
@@ -614,7 +648,6 @@ class HomePageState extends State<HomePage> {
               onPageChanged: (index) {
                 setState(() {
                   _sectionIndex = index;
-                  _pageOffset = index.toDouble();
                 });
                 widget.onTabSwitch?.call(index + 1);
               },
@@ -629,6 +662,7 @@ class HomePageState extends State<HomePage> {
                     slivers: [
                       SliverToBoxAdapter(
                         child: Padding(
+                          key: _recommendTopKey,
                           padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
                           child: _FeatureShelf(
                             daily: data.daily,
@@ -693,6 +727,7 @@ class HomePageState extends State<HomePage> {
                     slivers: [
                       SliverToBoxAdapter(
                         child: RankPage(
+                          key: _rankKey,
                           api: widget.api,
                           auth: widget.auth,
                           player: widget.player,
@@ -715,6 +750,7 @@ class HomePageState extends State<HomePage> {
                     slivers: [
                       SliverToBoxAdapter(
                         child: _RadioSection(
+                          key: _radioKey,
                           api: widget.api,
                           player: widget.player,
                           cache: widget.cache,
@@ -806,6 +842,7 @@ class HomePageState extends State<HomePage> {
                     _PersistentTabPane(
                       visible: _sectionIndex == 1,
                       child: RankPage(
+                        key: _rankKey,
                         api: widget.api,
                         auth: widget.auth,
                         player: widget.player,
@@ -815,6 +852,7 @@ class HomePageState extends State<HomePage> {
                     _PersistentTabPane(
                       visible: _sectionIndex == 2,
                       child: _RadioSection(
+                        key: _radioKey,
                         api: widget.api,
                         player: widget.player,
                         cache: widget.cache,
@@ -1329,6 +1367,18 @@ class _SongSectionState extends State<_SongSection> {
                   final rowCount = (itemsPerPage / crossAxisCount).ceil();
                   final pageCount = (widget.songs.length / itemsPerPage).ceil();
 
+                  // 刷新后歌曲变少（或换页容量变化）时当前页可能越界：
+                  // 圆点先按钳制后的页码显示，布局完成后把 PageView 跳回最后一页。
+                  final effectivePage = _page.clamp(0, pageCount - 1);
+                  if (_pageController.hasClients &&
+                      _pageController.position.haveDimensions &&
+                      (_pageController.page ?? 0) > pageCount - 1) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted || !_pageController.hasClients) return;
+                      _pageController.jumpToPage(pageCount - 1);
+                    });
+                  }
+
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1398,7 +1448,7 @@ class _SongSectionState extends State<_SongSection> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(pageCount, (i) {
-                            final active = i == _page;
+                            final active = i == effectivePage;
                             return AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               width: active ? 16 : 6,
@@ -2011,6 +2061,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
 
 class _RadioSection extends StatefulWidget {
   const _RadioSection({
+    super.key,
     required this.api,
     required this.player,
     required this.cache,
@@ -2031,6 +2082,10 @@ class _RadioSectionState extends State<_RadioSection> {
   String? _loadingStationId;
   StreamSubscription<void>? _networkRestoredSub;
   bool _silentRefreshing = false;
+
+  /// 加载代数：新一轮加载启动时自增，旧代数晚到的响应不再写缓存、
+  /// 不再覆盖 UI（与 RankPageState._loadEpoch 同一防倒灌机制）。
+  int _loadEpoch = 0;
 
   @override
   void initState() {
@@ -2067,7 +2122,9 @@ class _RadioSectionState extends State<_RadioSection> {
     }());
   }
 
-  Future<_RadioData> _load() async {
+  /// [epoch] 为发起本请求时的代数；响应返回时若已被更新一轮加载取代，
+  /// 则跳过缓存写入（返回值仍交给调用方按代数决定是否上屏）。
+  Future<_RadioData> _load({int? epoch}) async {
     final results = await Future.wait([
       widget.api.fmRecommendedStations(),
       widget.api.fmClassGroups(),
@@ -2098,20 +2155,24 @@ class _RadioSectionState extends State<_RadioSection> {
           )
           .toList(),
     );
-    _cachedData = data;
-    _persistRadio(data);
+    if (epoch == null || epoch == _loadEpoch) {
+      _cachedData = data;
+      _persistRadio(data);
+    }
     return data;
   }
 
   /// 冷启动单 flight：先读磁盘，命中则显示缓存+静默刷新，未命中才走网络。
   Future<void> _initFromDiskOrNetwork() async {
+    final epoch = ++_loadEpoch;
     try {
       final cached = await widget.cache.read<Map<String, dynamic>>(
         'cache_radio',
         decode: (json) => json,
         ttl: AppConfig.radioCacheTtl,
       );
-      if (!mounted) return;
+      // 磁盘读取期间用户已手动刷新（epoch 变化）：让位，不再回写缓存态。
+      if (!mounted || epoch != _loadEpoch) return;
       if (cached != null) {
         try {
           final data = _RadioData.fromCache(cached.data);
@@ -2130,8 +2191,8 @@ class _RadioSectionState extends State<_RadioSection> {
     } catch (_) {
       // 磁盘读取失败则继续走网络。
     }
-    if (!mounted) return;
-    final future = _load();
+    if (!mounted || epoch != _loadEpoch) return;
+    final future = _load(epoch: epoch);
     setState(() {
       _future = future;
     });
@@ -2140,10 +2201,12 @@ class _RadioSectionState extends State<_RadioSection> {
   /// 后台静默刷新：成功更新 UI 与缓存，失败保持缓存不变（与推荐页一致）。
   Future<void> _silentRefresh() async {
     if (_silentRefreshing) return;
+    final epoch = ++_loadEpoch;
     _silentRefreshing = true;
     try {
-      final data = await _load();
-      if (!mounted) return;
+      final data = await _load(epoch: epoch);
+      // 等待期间用户已手动刷新（epoch 变化）：丢弃本响应，避免旧数据倒灌。
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _future = Future.value(data);
       });
@@ -2154,8 +2217,11 @@ class _RadioSectionState extends State<_RadioSection> {
     }
   }
 
-  Future<void> _refresh() async {
-    final future = _load();
+  /// 对外入口：双击首页按钮时回到电台顶部并刷新（标题栏刷新按钮已移除）。
+  Future<void> refresh() async {
+    // 双击刷新优先级最高：使在途的静默刷新/冷启动恢复响应作废。
+    final epoch = ++_loadEpoch;
+    final future = _load(epoch: epoch);
     setState(() {
       _future = future;
     });
@@ -2218,7 +2284,7 @@ class _RadioSectionState extends State<_RadioSection> {
         if (data == null && snapshot.hasError) {
           return _ErrorView(
             message: snapshot.error.toString(),
-            onRetry: _refresh,
+            onRetry: refresh,
           );
         }
         final radio = data ?? _RadioData.empty;
@@ -2234,14 +2300,6 @@ class _RadioSectionState extends State<_RadioSection> {
                   child: _RadioSectionTitle(
                     title: '推荐电台',
                     icon: Icons.radio_rounded,
-                    action: IconButton(
-                      tooltip: '刷新',
-                      onPressed: _refresh,
-                      icon: const Icon(Icons.refresh_rounded),
-                      iconSize: 20,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      visualDensity: VisualDensity.compact,
-                    ),
                   ),
                 ),
                 if (radio.recommended.isNotEmpty)
@@ -2324,14 +2382,6 @@ class _RadioSectionState extends State<_RadioSection> {
               _RadioSectionTitle(
                 title: '推荐电台',
                 icon: Icons.radio_rounded,
-                action: IconButton(
-                  tooltip: '刷新',
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                  iconSize: 20,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  visualDensity: VisualDensity.compact,
-                ),
               ),
               const SizedBox(height: 12),
               if (radio.recommended.isNotEmpty)
@@ -2377,13 +2427,11 @@ class _RadioSectionTitle extends StatelessWidget {
   const _RadioSectionTitle({
     required this.title,
     required this.icon,
-    this.action,
     this.trailingText,
   });
 
   final String title;
   final IconData icon;
-  final Widget? action;
   final String? trailingText;
 
   @override
@@ -2423,10 +2471,6 @@ class _RadioSectionTitle extends StatelessWidget {
                   fontSize: 12,
                 ),
           ),
-        if (action != null) ...[
-          const SizedBox(width: 8),
-          action!,
-        ],
       ],
     );
   }

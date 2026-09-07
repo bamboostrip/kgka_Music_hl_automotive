@@ -16,7 +16,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.player,
     required this.sectionIndex,
     required this.onSectionChanged,
-    this.pageOffset,
+    this.pageTracker,
     this.onRefresh,
     this.topPadding = 0.0,
     this.topMargin = 8.0,
@@ -32,7 +32,10 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   final PlayerController player;
   final int sectionIndex;
   final ValueChanged<int> onSectionChanged;
-  final double? pageOffset;
+
+  /// 首页 PageView 的控制器：胶囊指示器直接监听它逐帧联动，
+  /// 避免外部为每个像素触发整页 setState。
+  final PageController? pageTracker;
   final Future<void> Function()? onRefresh;
   final double topPadding;
   final double topMargin;
@@ -53,7 +56,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant HomeCollapsibleHeaderDelegate oldDelegate) {
     return oldDelegate.sectionIndex != sectionIndex ||
-        oldDelegate.pageOffset != pageOffset ||
+        oldDelegate.pageTracker != pageTracker ||
         oldDelegate.topPadding != topPadding ||
         oldDelegate.topMargin != topMargin ||
         oldDelegate.pinnedTopOffset != pinnedTopOffset ||
@@ -151,7 +154,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
               height: tabBarHeight,
               child: HomeCapsuleTabBar(
                 selectedIndex: sectionIndex,
-                pageOffset: pageOffset,
+                pageTracker: pageTracker,
                 onTabSelected: onSectionChanged,
                 onRefresh: onRefresh,
                 height: tabBarHeight,
@@ -332,54 +335,157 @@ class HomeSearchBar extends StatelessWidget {
 class HomeCapsuleTabBar extends StatelessWidget {
   const HomeCapsuleTabBar({
     super.key,
-    int? selectedIndex,
-    int? sectionIndex,
-    this.pageOffset,
-    ValueChanged<int>? onTabSelected,
-    ValueChanged<int>? onSectionChanged,
+    required this.selectedIndex,
+    this.pageTracker,
+    required this.onTabSelected,
     this.tabs = const ['推荐', '排行榜', '电台'],
     this.onRefresh,
     this.height = 36.0,
-  })  : selectedIndex = selectedIndex ?? sectionIndex ?? 0,
-        onTabSelected = onTabSelected ?? onSectionChanged ?? _dummyOnTabSelected;
-
-  static void _dummyOnTabSelected(int _) {}
+  });
 
   final int selectedIndex;
-  final double? pageOffset;
+
+  /// 首页 PageView 的控制器：胶囊/文字随滑动逐帧联动，且重建范围
+  /// 局限在本组件内（外部无需为滑动逐像素 setState 整页）。为 null 时
+  /// 仅按 [selectedIndex] 静态定位。
+  final PageController? pageTracker;
   final ValueChanged<int> onTabSelected;
   final List<String> tabs;
   final Future<void> Function()? onRefresh;
   final double height;
 
-  int get sectionIndex => selectedIndex;
-  ValueChanged<int> get onSectionChanged => onTabSelected;
+  static const _labelFontSize = 14.5;
+  // 单侧内边距：文字宽度 + 2×13.5 ≈ 旧版 56/70px 的视觉宽度（scale 1.0）。
+  static const _labelHPadding = 13.5;
+  static const _tabGap = 6.0;
+
+  double _resolvePage() {
+    final controller = pageTracker;
+    if (controller != null &&
+        controller.hasClients &&
+        controller.position.haveDimensions) {
+      return (controller.page ?? selectedIndex.toDouble())
+          .clamp(0.0, (tabs.length - 1).toDouble());
+    }
+    return selectedIndex.toDouble();
+  }
+
+  /// 按真实文字（含系统字体缩放）测量标签宽度：任意 tab 数量都安全，
+  /// 旧实现按 3 个固定宽度硬编码，多 tab 会 RangeError、大字号会溢出。
+  double _measureLabel(String label, TextScaler textScaler) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          fontSize: _labelFontSize,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      textScaler: textScaler,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final p = (pageOffset ?? selectedIndex.toDouble())
-        .clamp(0.0, (tabs.length - 1).toDouble());
-
-    // 三个 Tab 的精确像素宽度与偏移（['推荐', '排行榜', '电台']）
-    const tabWidths = [56.0, 70.0, 56.0];
-    const tabOffsets = [0.0, 62.0, 138.0];
-
-    double currentLeft;
-    double currentWidth;
-    if (p <= 1.0) {
-      currentLeft = tabOffsets[0] + (tabOffsets[1] - tabOffsets[0]) * p;
-      currentWidth = tabWidths[0] + (tabWidths[1] - tabWidths[0]) * p;
-    } else {
-      final t = p - 1.0;
-      currentLeft = tabOffsets[1] + (tabOffsets[2] - tabOffsets[1]) * t;
-      currentWidth = tabWidths[1] + (tabWidths[2] - tabWidths[1]) * t;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final tabWidths = <double>[
+      for (final label in tabs)
+        _measureLabel(label, textScaler) + _labelHPadding * 2,
+    ];
+    final tabOffsets = <double>[0.0];
+    for (var i = 0; i < tabWidths.length - 1; i++) {
+      tabOffsets.add(tabOffsets[i] + tabWidths[i] + _tabGap);
     }
+    final totalWidth = tabOffsets.last + tabWidths.last;
 
     const capsuleHeight = 30.0;
     final topOffset = (height - capsuleHeight) / 2;
+
+    Widget buildBar(double p) {
+      // 任意相邻两 tab 之间线性插值（p 已被 clamp 在 [0, tabs.length-1]）。
+      final i = p.floor().clamp(0, tabs.length - 1);
+      final next = (i + 1).clamp(0, tabs.length - 1);
+      final t = (p - i).clamp(0.0, 1.0);
+      final currentLeft = tabOffsets[i] + (tabOffsets[next] - tabOffsets[i]) * t;
+      final currentWidth = tabWidths[i] + (tabWidths[next] - tabWidths[i]) * t;
+
+      return SizedBox(
+        width: totalWidth,
+        height: height,
+        child: Stack(
+          children: [
+            // 滑动背景胶囊（与手势实时联动）
+            Positioned(
+              left: currentLeft,
+              top: topOffset,
+              width: currentWidth,
+              height: capsuleHeight,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(
+                    alpha: isDark ? 0.22 : 0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(capsuleHeight / 2),
+                  border: Border.all(
+                    color: colorScheme.primary.withValues(alpha: 0.22),
+                    width: 1.0,
+                  ),
+                ),
+              ),
+            ),
+            // 标签文字
+            Row(
+              children: [
+                for (var i = 0; i < tabs.length; i++) ...[
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onTabSelected(i),
+                    child: SizedBox(
+                      width: tabWidths[i],
+                      height: height,
+                      child: Center(
+                        child: Text(
+                          tabs[i],
+                          style: TextStyle(
+                            fontSize: _labelFontSize,
+                            fontWeight: (p - i).abs() < 0.5
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: Color.lerp(
+                              colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.85),
+                              colorScheme.primary,
+                              (1.0 - (p - i).abs()).clamp(0.0, 1.0),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (i < tabs.length - 1) const SizedBox(width: _tabGap),
+                ],
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    final tracker = pageTracker;
+    final Widget tabBar = tracker != null
+        ? ListenableBuilder(
+            listenable: tracker,
+            builder: (context, _) => buildBar(_resolvePage()),
+          )
+        : buildBar(selectedIndex.toDouble());
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -390,68 +496,7 @@ class HomeCapsuleTabBar extends StatelessWidget {
             Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  width: 194.0, // 138 + 56
-                  height: height,
-                  child: Stack(
-                    children: [
-                      // 滑动背景胶囊（与手势实时联动）
-                      Positioned(
-                        left: currentLeft,
-                        top: topOffset,
-                        width: currentWidth,
-                        height: capsuleHeight,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary.withValues(
-                              alpha: isDark ? 0.22 : 0.12,
-                            ),
-                            borderRadius:
-                                BorderRadius.circular(capsuleHeight / 2),
-                            border: Border.all(
-                              color:
-                                  colorScheme.primary.withValues(alpha: 0.22),
-                              width: 1.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                      // 标签文字
-                      Row(
-                        children: [
-                          for (var i = 0; i < tabs.length; i++) ...[
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => onTabSelected(i),
-                              child: SizedBox(
-                                width: tabWidths[i],
-                                height: height,
-                                child: Center(
-                                  child: Text(
-                                    tabs[i],
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: (p - i).abs() < 0.5
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
-                                      color: Color.lerp(
-                                        colorScheme.onSurfaceVariant
-                                            .withValues(alpha: 0.85),
-                                        colorScheme.primary,
-                                        (1.0 - (p - i).abs()).clamp(0.0, 1.0),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (i < tabs.length - 1) const SizedBox(width: 6),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                child: tabBar,
               ),
             ),
             if (onRefresh != null)

@@ -272,6 +272,85 @@ void main() {
 
       expect(find.byTooltip('刷新'), findsNothing);
     });
+
+    testWidgets('支持任意数量标签：4 个 tab 渲染与点击不越界', (tester) async {
+      // 旧实现按 3 个固定宽度硬编码，tabs.length > 3 会 RangeError。
+      int? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeCapsuleTabBar(
+              selectedIndex: 0,
+              onTabSelected: (i) => selected = i,
+              tabs: const ['推荐', '排行榜', '电台', '歌单'],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('歌单'), findsOneWidget);
+      await tester.tap(find.text('歌单'));
+      expect(selected, 3);
+    });
+
+    testWidgets('pageTracker 使胶囊随 PageView 滑动联动', (tester) async {
+      final controller = PageController();
+      addTearDown(controller.dispose);
+      var selected = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  height: 36,
+                  child: HomeCapsuleTabBar(
+                    selectedIndex: selected,
+                    pageTracker: controller,
+                    onTabSelected: (i) => selected = i,
+                  ),
+                ),
+                Expanded(
+                  child: PageView(
+                    controller: controller,
+                    children: const [
+                      ColoredBox(color: Colors.red, child: SizedBox.expand()),
+                      ColoredBox(color: Colors.green, child: SizedBox.expand()),
+                      ColoredBox(color: Colors.blue, child: SizedBox.expand()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // 初始：第 1 个 tab 高亮。
+      expect(
+        tester.widget<Text>(find.text('推荐')).style?.fontWeight,
+        FontWeight.w800,
+      );
+
+      // 编程式滑动到第 2 页：外部没有任何 setState，
+      // 胶囊/文字只凭 pageTracker（PageController）联动更新。
+      // ignore: unawaited_futures
+      controller.animateToPage(
+        1,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.text('排行榜')).style?.fontWeight,
+        FontWeight.w800,
+      );
+      expect(
+        tester.widget<Text>(find.text('推荐')).style?.fontWeight,
+        FontWeight.w600,
+      );
+    });
   });
 
   group('HomeCollapsibleHeader in CustomScrollView', () {

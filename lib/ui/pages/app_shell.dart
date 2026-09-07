@@ -174,7 +174,10 @@ class _AppShellState extends State<AppShell> {
                             theme: widget.theme,
                             downloads: widget.downloads,
                             localMusic: widget.localMusic,
-                            sectionIndex: _index > 0 ? _index - 1 : 0,
+                            // 切到「我的」时保持最后一个首页子 tab，而非塌缩为 0：
+                            // 否则 HomePage.didUpdateWidget 会 animateToPage(0)，
+                            // 动画途中 onPageChanged 回调 onTabSwitch(1) 把用户弹回首页。
+                            sectionIndex: _index > 0 ? _index - 1 : _lastHomeTab - 1,
                             onTabSwitch: (index) {
                               setState(() {
                                 _index = index;
@@ -236,7 +239,9 @@ class _AppShellState extends State<AppShell> {
       theme: widget.theme,
       downloads: widget.downloads,
       localMusic: widget.localMusic,
-      sectionIndex: _index > 0 ? _index - 1 : 0,
+      // 同车机分支：在「我的」页保持最后的首页子 tab，防止 HomePage 收到
+      // sectionIndex 变化后动画回首页、经 onPageChanged 把用户弹回。
+      sectionIndex: _index > 0 ? _index - 1 : _lastHomeTab - 1,
       onTabSwitch: (index) {
         setState(() {
           _index = index;
@@ -520,6 +525,8 @@ class _FloatingBottomBarState extends State<_FloatingBottomBar> {
   DateTime? _lastHomeTapTime;
 
   void _handleHomeTap() {
+    // 双击检测只用这里的计时窗口：不注册 InkWell.onDoubleTap，
+    // 否则 Flutter 会为消歧而把每次单击推迟 ~300ms 才派发。
     final now = appShellNow();
     if (_lastHomeTapTime != null &&
         now.difference(_lastHomeTapTime!) < const Duration(milliseconds: 350)) {
@@ -529,11 +536,6 @@ class _FloatingBottomBarState extends State<_FloatingBottomBar> {
     }
     _lastHomeTapTime = now;
     widget.onTap(0);
-  }
-
-  void _handleHomeDoubleTap() {
-    _lastHomeTapTime = null;
-    widget.onHomeDoubleTap?.call();
   }
 
   void _handleLibraryTap() {
@@ -579,7 +581,6 @@ class _FloatingBottomBarState extends State<_FloatingBottomBar> {
                 label: '首页',
                 selected: widget.currentIndex == 0,
                 onTap: _handleHomeTap,
-                onDoubleTap: _handleHomeDoubleTap,
               ),
               _CenterDisc(player: widget.player, auth: widget.auth),
               _BottomNavItem(
@@ -604,7 +605,6 @@ class _BottomNavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.onDoubleTap,
   });
 
   final IconData icon;
@@ -612,7 +612,6 @@ class _BottomNavItem extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -620,7 +619,6 @@ class _BottomNavItem extends StatelessWidget {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        onDoubleTap: onDoubleTap,
         borderRadius: BorderRadius.circular(24),
         splashColor: colorScheme.primary.withValues(alpha: .10),
         highlightColor: Colors.transparent,
