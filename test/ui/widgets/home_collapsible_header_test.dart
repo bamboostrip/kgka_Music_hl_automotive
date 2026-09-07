@@ -57,11 +57,11 @@ void main() {
         onSectionChanged: (_) {},
       );
 
-      // minExtent = topPadding(0) + tabBarHeight(42) + bottomPadding(8) = 50.0
-      expect(delegate.minExtent, 50.0);
-      // maxExtent = topPadding(0) + searchBarHeight(44) + spacing(10) + tabBarHeight(42) + bottomPadding(8) = 104.0
-      expect(delegate.maxExtent, 104.0);
-      expect(delegate.maxExtent - delegate.minExtent, 54.0);
+      // minExtent = topPadding(0) + tabBarHeight(36) + bottomPadding(6) = 42.0
+      expect(delegate.minExtent, 42.0);
+      // maxExtent = topPadding(0) + searchBarHeight(36) + spacing(8) + tabBarHeight(36) + bottomPadding(6) = 86.0
+      expect(delegate.maxExtent, 86.0);
+      expect(delegate.maxExtent - delegate.minExtent, 44.0);
     });
 
     test('computes minExtent and maxExtent with custom topPadding and heights', () {

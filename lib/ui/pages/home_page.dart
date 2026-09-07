@@ -76,11 +76,16 @@ class HomePageState extends State<HomePage> {
   var _autoUpdateDialogShown = false;
   StreamSubscription<void>? _networkRestoredSub;
   bool _silentRefreshing = false;
+  late final PageController _pageController;
+  double _pageOffset = 0.0;
 
   @override
   void initState() {
     super.initState();
     _sectionIndex = widget.sectionIndex;
+    _pageOffset = widget.sectionIndex.toDouble();
+    _pageController = PageController(initialPage: _sectionIndex)
+      ..addListener(_handlePageScroll);
     _updateService = AppUpdateService();
     final cached = _cachedData;
     if (cached != null) {
@@ -104,16 +109,38 @@ class HomePageState extends State<HomePage> {
     }
   }
 
+  void _handlePageScroll() {
+    if (_pageController.hasClients && _pageController.position.haveDimensions) {
+      final page = _pageController.page ?? _sectionIndex.toDouble();
+      if ((page - _pageOffset).abs() > 0.001) {
+        setState(() {
+          _pageOffset = page;
+        });
+      }
+    }
+  }
+
   @override
   void didUpdateWidget(HomePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionIndex != widget.sectionIndex) {
       _sectionIndex = widget.sectionIndex;
+      _pageOffset = widget.sectionIndex.toDouble();
+      if (_pageController.hasClients &&
+          _pageController.page?.round() != widget.sectionIndex) {
+        _pageController.animateToPage(
+          widget.sectionIndex,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
     }
   }
 
   @override
   void dispose() {
+    _pageController.removeListener(_handlePageScroll);
+    _pageController.dispose();
     _scrollController.dispose();
     _networkRestoredSub?.cancel();
     widget.auth.removeListener(_handleAuthChanged);
@@ -480,26 +507,35 @@ class HomePageState extends State<HomePage> {
         final isLandscape = size.width > size.height;
         final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
 
-        final content = CustomScrollView(
-          controller: _scrollController,
-          physics: isDesktop
-              ? const ClampingScrollPhysics()
-              : const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            if (data == null &&
-                (_future == null ||
-                    snapshot.connectionState == ConnectionState.waiting))
-              const SliverToBoxAdapter(child: _HomeSkeleton())
-            else if (data == null && snapshot.hasError)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _ErrorView(
-                  message: snapshot.error.toString(),
-                  onRetry: _refresh,
+        Widget content;
+        if (data == null) {
+          if (snapshot.hasError) {
+            content = CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _ErrorView(
+                    message: snapshot.error.toString(),
+                    onRetry: _refresh,
+                  ),
                 ),
-              )
-            else ...[
-              if (!isCarMode) ...[
+              ],
+            );
+          } else {
+            content = CustomScrollView(
+              controller: _scrollController,
+              slivers: const [SliverToBoxAdapter(child: _HomeSkeleton())],
+            );
+          }
+        } else if (!isCarMode) {
+          content = NestedScrollView(
+            controller: _scrollController,
+            physics: isDesktop
+                ? const ClampingScrollPhysics()
+                : const AlwaysScrollableScrollPhysics(),
+            headerSliverBuilder: (context, innerBoxIsScrolled) {
+              return [
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: HomeCollapsibleHeaderDelegate(
@@ -507,12 +543,23 @@ class HomePageState extends State<HomePage> {
                     auth: widget.auth,
                     player: widget.player,
                     sectionIndex: _sectionIndex,
+                    pageOffset: _pageOffset,
                     onSectionChanged: (value) {
                       if (value == -1) {
                         widget.onTabSwitch?.call(0);
                       } else {
-                        setState(() => _sectionIndex = value);
+                        setState(() {
+                          _sectionIndex = value;
+                          _pageOffset = value.toDouble();
+                        });
                         widget.onTabSwitch?.call(value + 1);
+                        if (_pageController.hasClients) {
+                          _pageController.animateToPage(
+                            value,
+                            duration: const Duration(milliseconds: 260),
+                            curve: Curves.easeOutCubic,
+                          );
+                        }
                       }
                     },
                     onRefresh: isDesktop ? _refresh : null,
@@ -531,39 +578,164 @@ class HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-              ] else ...[
-                SliverToBoxAdapter(
-                  child: _RecommendHeader(
-                    auth: widget.auth,
-                    daily: data!.daily,
-                    sectionIndex: _sectionIndex,
-                    onSectionChanged: (value) {
-                      if (value == -1) {
-                        widget.onTabSwitch?.call(0); // Switch to My tab
-                      } else {
-                        setState(() => _sectionIndex = value);
-                        widget.onTabSwitch?.call(value + 1);
-                      }
-                    },
-                    onDailyPlay: () {
-                      final songs = data.daily.songs;
-                      if (songs.isNotEmpty) {
-                        widget.player.playSong(songs.first, queue: songs);
-                      }
-                    },
-                    onDailyTap: () => _openDailyRecommend(data.daily),
-                    api: widget.api,
-                    player: widget.player,
-                    updateVersion:
-                        _updateBannerDismissed ? null : _availableUpdate,
-                    onUpdateTap: _showUpdateDetails,
-                    onUpdateClose: () {
-                      setState(() => _updateBannerDismissed = true);
-                    },
-                    onRefresh: isDesktop ? _refresh : null,
+              ];
+            },
+            body: PageView(
+              key: const Key('home_tabs_page_view'),
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _sectionIndex = index;
+                  _pageOffset = index.toDouble();
+                });
+                widget.onTabSwitch?.call(index + 1);
+              },
+              children: [
+                // Tab 0: 推荐
+                _HomeTabKeepAlive(
+                  child: CustomScrollView(
+                    key: const PageStorageKey<String>('home_tab_recommend'),
+                    physics: isDesktop
+                        ? const ClampingScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                          child: _FeatureShelf(
+                            daily: data.daily,
+                            onDailyPlay: () {
+                              final songs = data.daily.songs;
+                              if (songs.isNotEmpty) {
+                                widget.player.playSong(
+                                  songs.first,
+                                  queue: songs,
+                                );
+                              }
+                            },
+                            onDailyTap: () =>
+                                _openDailyRecommend(data.daily),
+                          ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _SongSection(
+                          title: '母带音质·精选',
+                          songs: data.daily.songs,
+                          onPlay: _playSong,
+                          isLiked: (song) => widget.auth.isLiked(song),
+                          onLikeTap: (song) => widget.auth.toggleLike(song),
+                          auth: widget.auth,
+                          player: widget.player,
+                          onViewArtist: _openArtist,
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _PlaylistRail(
+                          playlists: data.playlists,
+                          onTap: _openPlaylist,
+                          onPlay: _playPlaylist,
+                        ),
+                      ),
+                      if (data.topSongs.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _TopSongRail(
+                            songs: data.topSongs,
+                            onPlay: (song) =>
+                                _playSong(song, data.topSongs),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(height: isDesktop ? 24 : 166),
+                      ),
+                    ],
+                  ),
+                ),
+                // Tab 1: 排行榜
+                _HomeTabKeepAlive(
+                  child: CustomScrollView(
+                    key: const PageStorageKey<String>('home_tab_rank'),
+                    physics: isDesktop
+                        ? const ClampingScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: RankPage(
+                          api: widget.api,
+                          auth: widget.auth,
+                          player: widget.player,
+                          cache: widget.cache,
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(height: isDesktop ? 24 : 166),
+                      ),
+                    ],
+                  ),
+                ),
+                // Tab 2: 电台
+                _HomeTabKeepAlive(
+                  child: CustomScrollView(
+                    key: const PageStorageKey<String>('home_tab_radio'),
+                    physics: isDesktop
+                        ? const ClampingScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: _RadioSection(
+                          api: widget.api,
+                          player: widget.player,
+                          cache: widget.cache,
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(height: isDesktop ? 24 : 166),
+                      ),
+                    ],
                   ),
                 ),
               ],
+            ),
+          );
+        } else {
+          // 车机模式：保留原有车机定制滚动与卡片布局
+          content = CustomScrollView(
+            controller: _scrollController,
+            physics: isDesktop
+                ? const ClampingScrollPhysics()
+                : const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _RecommendHeader(
+                  auth: widget.auth,
+                  daily: data.daily,
+                  sectionIndex: _sectionIndex,
+                  onSectionChanged: (value) {
+                    if (value == -1) {
+                      widget.onTabSwitch?.call(0); // Switch to My tab
+                    } else {
+                      setState(() => _sectionIndex = value);
+                      widget.onTabSwitch?.call(value + 1);
+                    }
+                  },
+                  onDailyPlay: () {
+                    final songs = data.daily.songs;
+                    if (songs.isNotEmpty) {
+                      widget.player.playSong(songs.first, queue: songs);
+                    }
+                  },
+                  onDailyTap: () => _openDailyRecommend(data.daily),
+                  api: widget.api,
+                  player: widget.player,
+                  updateVersion:
+                      _updateBannerDismissed ? null : _availableUpdate,
+                  onUpdateTap: _showUpdateDetails,
+                  onUpdateClose: () {
+                    setState(() => _updateBannerDismissed = true);
+                  },
+                  onRefresh: isDesktop ? _refresh : null,
+                ),
+              ),
               SliverToBoxAdapter(
                 child: Column(
                   children: [
@@ -571,27 +743,9 @@ class HomePageState extends State<HomePage> {
                       visible: _sectionIndex == 0,
                       child: Column(
                         children: [
-                          if (!isCarMode)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                              child: _FeatureShelf(
-                                daily: data!.daily,
-                                onDailyPlay: () {
-                                  final songs = data.daily.songs;
-                                  if (songs.isNotEmpty) {
-                                    widget.player.playSong(
-                                      songs.first,
-                                      queue: songs,
-                                    );
-                                  }
-                                },
-                                onDailyTap: () =>
-                                    _openDailyRecommend(data.daily),
-                              ),
-                            ),
                           _SongSection(
                             title: '母带音质·精选',
-                            songs: data!.daily.songs,
+                            songs: data.daily.songs,
                             onPlay: _playSong,
                             isLiked: (song) => widget.auth.isLiked(song),
                             onLikeTap: (song) => widget.auth.toggleLike(song),
@@ -633,18 +787,38 @@ class HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
-              // 悬浮播放条留白仅手机/平板/车机需要；桌面播放栏占位于骨架底部。
               SliverToBoxAdapter(
                 child: SizedBox(height: isDesktopFormFactor ? 24 : 166),
               ),
             ],
-          ],
-        );
+          );
+        }
+
         return isDesktop
             ? content
             : RefreshIndicator(onRefresh: _refresh, child: content);
       },
     );
+  }
+}
+
+class _HomeTabKeepAlive extends StatefulWidget {
+  const _HomeTabKeepAlive({required this.child});
+  final Widget child;
+
+  @override
+  State<_HomeTabKeepAlive> createState() => _HomeTabKeepAliveState();
+}
+
+class _HomeTabKeepAliveState extends State<_HomeTabKeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 

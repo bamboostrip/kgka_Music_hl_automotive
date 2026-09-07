@@ -16,12 +16,13 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.player,
     required this.sectionIndex,
     required this.onSectionChanged,
+    this.pageOffset,
     this.onRefresh,
     this.topPadding = 0.0,
-    this.searchBarHeight = 44.0,
-    this.tabBarHeight = 42.0,
-    this.bottomPadding = 8.0,
-    this.spacing = 10.0,
+    this.searchBarHeight = 36.0,
+    this.tabBarHeight = 36.0,
+    this.bottomPadding = 6.0,
+    this.spacing = 8.0,
   });
 
   final MusicApi api;
@@ -29,6 +30,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   final PlayerController player;
   final int sectionIndex;
   final ValueChanged<int> onSectionChanged;
+  final double? pageOffset;
   final Future<void> Function()? onRefresh;
   final double topPadding;
   final double searchBarHeight;
@@ -46,6 +48,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant HomeCollapsibleHeaderDelegate oldDelegate) {
     return oldDelegate.sectionIndex != sectionIndex ||
+        oldDelegate.pageOffset != pageOffset ||
         oldDelegate.topPadding != topPadding ||
         oldDelegate.onRefresh != onRefresh ||
         oldDelegate.searchBarHeight != searchBarHeight ||
@@ -133,6 +136,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
               height: tabBarHeight,
               child: HomeCapsuleTabBar(
                 selectedIndex: sectionIndex,
+                pageOffset: pageOffset,
                 onTabSelected: onSectionChanged,
                 onRefresh: onRefresh,
                 height: tabBarHeight,
@@ -153,7 +157,7 @@ class HomeSearchBar extends StatelessWidget {
     this.auth,
     this.player,
     this.onTap,
-    this.height = 44.0,
+    this.height = 36.0,
     this.hintText = '搜索歌曲、歌手、专辑',
   });
 
@@ -188,20 +192,20 @@ class HomeSearchBar extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(height / 2),
           onTap: () => _handleTap(context),
           child: Container(
             height: height,
             decoration: BoxDecoration(
               color: isDark
-                  ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.6)
-                  : colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(22),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : const Color(0xFFF1F3F6),
+              borderRadius: BorderRadius.circular(height / 2),
               border: Border.all(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : colorScheme.outlineVariant.withValues(alpha: 0.5),
-                width: 1.0,
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04),
+                width: 0.8,
               ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -209,9 +213,9 @@ class HomeSearchBar extends StatelessWidget {
               children: [
                 Icon(
                   Icons.search_rounded,
-                  size: 20,
+                  size: 17,
                   color: colorScheme.onSurfaceVariant.withValues(
-                    alpha: isDark ? 0.8 : 0.6,
+                    alpha: isDark ? 0.7 : 0.55,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -222,11 +226,18 @@ class HomeSearchBar extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant.withValues(
-                            alpha: isDark ? 0.7 : 0.7,
+                            alpha: isDark ? 0.75 : 0.65,
                           ),
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13.5,
                         ),
+                  ),
+                ),
+                Icon(
+                  Icons.graphic_eq_rounded,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant.withValues(
+                    alpha: isDark ? 0.5 : 0.4,
                   ),
                 ),
               ],
@@ -244,17 +255,19 @@ class HomeCapsuleTabBar extends StatelessWidget {
     super.key,
     int? selectedIndex,
     int? sectionIndex,
+    this.pageOffset,
     ValueChanged<int>? onTabSelected,
     ValueChanged<int>? onSectionChanged,
     this.tabs = const ['推荐', '排行榜', '电台'],
     this.onRefresh,
-    this.height = 42.0,
+    this.height = 36.0,
   })  : selectedIndex = selectedIndex ?? sectionIndex ?? 0,
         onTabSelected = onTabSelected ?? onSectionChanged ?? _dummyOnTabSelected;
 
   static void _dummyOnTabSelected(int _) {}
 
   final int selectedIndex;
+  final double? pageOffset;
   final ValueChanged<int> onTabSelected;
   final List<String> tabs;
   final Future<void> Function()? onRefresh;
@@ -268,6 +281,27 @@ class HomeCapsuleTabBar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final p = (pageOffset ?? selectedIndex.toDouble())
+        .clamp(0.0, (tabs.length - 1).toDouble());
+
+    // 三个 Tab 的精确像素宽度与偏移（['推荐', '排行榜', '电台']）
+    const tabWidths = [56.0, 70.0, 56.0];
+    const tabOffsets = [0.0, 62.0, 138.0];
+
+    double currentLeft;
+    double currentWidth;
+    if (p <= 1.0) {
+      currentLeft = tabOffsets[0] + (tabOffsets[1] - tabOffsets[0]) * p;
+      currentWidth = tabWidths[0] + (tabWidths[1] - tabWidths[0]) * p;
+    } else {
+      final t = p - 1.0;
+      currentLeft = tabOffsets[1] + (tabOffsets[2] - tabOffsets[1]) * t;
+      currentWidth = tabWidths[1] + (tabWidths[2] - tabWidths[1]) * t;
+    }
+
+    const capsuleHeight = 30.0;
+    final topOffset = (height - capsuleHeight) / 2;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: SizedBox(
@@ -275,50 +309,70 @@ class HomeCapsuleTabBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Row(
-                children: [
-                  for (var i = 0; i < tabs.length; i++) ...[
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onTabSelected(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: i == selectedIndex
-                              ? colorScheme.primary.withValues(
-                                  alpha: isDark ? 0.22 : 0.12,
-                                )
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: i == selectedIndex
-                                ? colorScheme.primary.withValues(alpha: 0.2)
-                                : Colors.transparent,
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          tabs[i],
-                          style: TextStyle(
-                            fontSize: i == selectedIndex ? 15 : 14,
-                            fontWeight: i == selectedIndex
-                                ? FontWeight.w800
-                                : FontWeight.w600,
-                            color: i == selectedIndex
-                                ? colorScheme.primary
-                                : colorScheme.onSurfaceVariant,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 194.0, // 138 + 56
+                  height: height,
+                  child: Stack(
+                    children: [
+                      // 滑动背景胶囊（与手势实时联动）
+                      Positioned(
+                        left: currentLeft,
+                        top: topOffset,
+                        width: currentWidth,
+                        height: capsuleHeight,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withValues(
+                              alpha: isDark ? 0.22 : 0.12,
+                            ),
+                            borderRadius:
+                                BorderRadius.circular(capsuleHeight / 2),
+                            border: Border.all(
+                              color:
+                                  colorScheme.primary.withValues(alpha: 0.22),
+                              width: 1.0,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (i < tabs.length - 1) const SizedBox(width: 8),
-                  ],
-                ],
+                      // 标签文字
+                      Row(
+                        children: [
+                          for (var i = 0; i < tabs.length; i++) ...[
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => onTabSelected(i),
+                              child: SizedBox(
+                                width: tabWidths[i],
+                                height: height,
+                                child: Center(
+                                  child: Text(
+                                    tabs[i],
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: (p - i).abs() < 0.5
+                                          ? FontWeight.w800
+                                          : FontWeight.w600,
+                                      color: Color.lerp(
+                                        colorScheme.onSurfaceVariant
+                                            .withValues(alpha: 0.85),
+                                        colorScheme.primary,
+                                        (1.0 - (p - i).abs()).clamp(0.0, 1.0),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (i < tabs.length - 1) const SizedBox(width: 6),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             if (onRefresh != null)

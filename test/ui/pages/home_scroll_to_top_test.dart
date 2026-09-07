@@ -265,7 +265,7 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -250));
     await tester.pumpAndSettle();
 
-    expect(scrollable.position.pixels, greaterThan(150.0));
+    expect(scrollable.position.pixels, greaterThan(40.0));
     final collapsedOpacity = tester.widget<Opacity>(
       find.ancestor(
         of: searchBarTextFinder,
