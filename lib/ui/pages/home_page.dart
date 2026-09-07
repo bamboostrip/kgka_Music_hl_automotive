@@ -620,7 +620,7 @@ class HomePageState extends State<HomePage> {
                       ),
                       SliverToBoxAdapter(
                         child: _SongSection(
-                          title: '母带音质·精选',
+                          title: '大家都在听',
                           songs: data.daily.songs,
                           onPlay: _playSong,
                           isLiked: (song) => widget.auth.isLiked(song),
@@ -744,7 +744,7 @@ class HomePageState extends State<HomePage> {
                       child: Column(
                         children: [
                           _SongSection(
-                            title: '母带音质·精选',
+                            title: '大家都在听',
                             songs: data.daily.songs,
                             onPlay: _playSong,
                             isLiked: (song) => widget.auth.isLiked(song),
@@ -1193,7 +1193,7 @@ class _SongSectionState extends State<_SongSection> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController = PageController(viewportFraction: 0.92);
   }
 
   @override
@@ -1219,8 +1219,8 @@ class _SongSectionState extends State<_SongSection> {
                 title: widget.title,
                 action: _CirclePlayButton(
                   tooltip: '播放',
-                  size: 42,
-                  iconSize: 24,
+                  size: 38,
+                  iconSize: 22,
                   onTap: () =>
                       widget.onPlay(widget.songs.first, widget.songs),
                 ),
@@ -1276,13 +1276,13 @@ class _SongSectionState extends State<_SongSection> {
                   final int itemsPerPage;
                   if (maxWidth >= 1050) {
                     crossAxisCount = 3;
-                    itemsPerPage = 6;
+                    itemsPerPage = 9;
                   } else if (maxWidth >= 650) {
                     crossAxisCount = 2;
                     itemsPerPage = 6;
                   } else {
                     crossAxisCount = 1;
-                    itemsPerPage = 5;
+                    itemsPerPage = 3;
                   }
 
                   final rowCount = (itemsPerPage / crossAxisCount).ceil();
@@ -1292,59 +1292,63 @@ class _SongSectionState extends State<_SongSection> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        height: rowCount * 76.0,
+                        height: rowCount * 60.0,
                         child: HorizontalWheelPageScroll(
                           controller: _pageController,
                           child: PageView.builder(
-                          controller: _pageController,
-                          itemCount: pageCount,
-                          onPageChanged: (i) => setState(() => _page = i),
-                          itemBuilder: (context, pageIndex) {
-                            final start = pageIndex * itemsPerPage;
-                            final end = (start + itemsPerPage).clamp(
-                              0,
-                              widget.songs.length,
-                            );
-                            final pageSongs = widget.songs.sublist(start, end);
+                            controller: _pageController,
+                            padEnds: false,
+                            itemCount: pageCount,
+                            onPageChanged: (i) => setState(() => _page = i),
+                            itemBuilder: (context, pageIndex) {
+                              final start = pageIndex * itemsPerPage;
+                              final end = (start + itemsPerPage).clamp(
+                                0,
+                                widget.songs.length,
+                              );
+                              final pageSongs = widget.songs.sublist(start, end);
 
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (
-                                  int col = 0;
-                                  col < crossAxisCount;
-                                  col++
-                                ) ...[
-                                  if (col > 0) const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      children: [
-                                        for (
-                                          int i = col;
-                                          i < pageSongs.length;
-                                          i += crossAxisCount
-                                        )
-                                          HomeSongRow(
-                                            song: pageSongs[i],
-                                            queue: widget.songs,
-                                            onPlay: widget.onPlay,
-                                            isLiked: widget.isLiked(
-                                              pageSongs[i],
-                                            ),
-                                            onLikeTap: () =>
-                                                widget.onLikeTap(pageSongs[i]),
-                                            auth: widget.auth,
-                                            player: widget.player,
-                                            onViewArtist: () => widget
-                                                .onViewArtist(pageSongs[i]),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            );
-                          },
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    for (
+                                      int col = 0;
+                                      col < crossAxisCount;
+                                      col++
+                                    ) ...[
+                                      if (col > 0) const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            for (
+                                              int i = col;
+                                              i < pageSongs.length;
+                                              i += crossAxisCount
+                                            )
+                                              HomeSongRow(
+                                                song: pageSongs[i],
+                                                queue: widget.songs,
+                                                onPlay: widget.onPlay,
+                                                isLiked: widget.isLiked(
+                                                  pageSongs[i],
+                                                ),
+                                                onLikeTap: () =>
+                                                    widget.onLikeTap(pageSongs[i]),
+                                                auth: widget.auth,
+                                                player: widget.player,
+                                                onViewArtist: () => widget
+                                                    .onViewArtist(pageSongs[i]),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),

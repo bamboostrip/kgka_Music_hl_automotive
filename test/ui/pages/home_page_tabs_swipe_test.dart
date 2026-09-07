@@ -193,7 +193,7 @@ void main() {
     await pumpHomePage(tester);
 
     // Initial state: 推荐 is displayed
-    expect(find.text('母带音质·精选'), findsOneWidget);
+    expect(find.text('大家都在听'), findsOneWidget);
 
     // Find PageView
     final pageViewFinder = find.byKey(const Key('home_tabs_page_view'));
@@ -201,8 +201,8 @@ void main() {
     final pageView = tester.widget<PageView>(pageViewFinder);
     expect(pageView.controller?.page, 0.0);
 
-    // Swipe left on non-horizontal area (e.g. the section title '母带音质·精选')
-    await tester.drag(find.text('母带音质·精选'), const Offset(-300, 0));
+    // Swipe left on non-horizontal area (e.g. the section title '大家都在听')
+    await tester.drag(find.text('大家都在听'), const Offset(-300, 0));
     await tester.pumpAndSettle();
 
     // Now PageView has transitioned to page 1: 排行榜
@@ -260,6 +260,6 @@ void main() {
 
     // PageView must still remain on page 0: 推荐
     expect(pageView.controller?.page, 0.0);
-    expect(find.text('母带音质·精选'), findsOneWidget);
+    expect(find.text('大家都在听'), findsOneWidget);
   });
 }

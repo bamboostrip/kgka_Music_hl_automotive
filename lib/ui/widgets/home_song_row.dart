@@ -98,10 +98,10 @@ class _HomeSongRowState extends State<HomeSongRow> {
     final isDesktop = isDesktopFormFactor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 桌面端使用更克制紧凑的 8px 圆角与 52px 封面，移动端保留 14px 与 58px
-    final rowRadius = BorderRadius.circular(isDesktop ? 8 : 14);
+    // 桌面端使用更克制紧凑的 8px 圆角与 44px 封面，移动端使用 12px 与 48px
+    final rowRadius = BorderRadius.circular(isDesktop ? 8 : 12);
     final coverRadius = isDesktop ? 6.0 : 8.0;
-    final coverSize = isDesktop ? 52.0 : 58.0;
+    final coverSize = isDesktop ? 44.0 : 48.0;
 
     // 主页歌曲行响应 player 重建（播放进度/状态），高频更新会触发
     // Windows AXTree 竞态崩溃，仅桌面平台排除语义树；移动端保留无障碍
@@ -139,7 +139,7 @@ class _HomeSongRowState extends State<HomeSongRow> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 140),
                 padding: EdgeInsets.symmetric(
-                  vertical: isDesktop ? 7 : 9,
+                  vertical: isDesktop ? 5 : 6,
                   horizontal: 8,
                 ),
                 decoration: BoxDecoration(
@@ -154,8 +154,8 @@ class _HomeSongRowState extends State<HomeSongRow> {
                           enabled: isDesktop,
                           isHovered: _hovered,
                           borderRadius: coverRadius,
-                          buttonSize: 32,
-                          iconSize: 22,
+                          buttonSize: isDesktop ? 28 : 32,
+                          iconSize: isDesktop ? 18 : 22,
                           buttonColor: Colors.black54,
                           iconColor: Colors.white,
                           onPlay: () =>
@@ -168,30 +168,30 @@ class _HomeSongRowState extends State<HomeSongRow> {
                         ),
                         if (active)
                           Positioned(
-                            right: 4,
-                            bottom: 4,
+                            right: 3,
+                            bottom: 3,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: Theme.of(context)
                                     .colorScheme
                                     .surface
                                     .withValues(alpha: .88),
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(3),
+                                padding: const EdgeInsets.all(2),
                                 child: NowPlayingBadge(
                                   active: active,
                                   playing: widget.player.isPlaying,
                                   color: activeColor,
-                                  size: 13,
+                                  size: 11,
                                 ),
                               ),
                             ),
                           ),
                       ],
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,11 +205,11 @@ class _HomeSongRowState extends State<HomeSongRow> {
                                 .titleSmall
                                 ?.copyWith(
                                   color: active ? activeColor : null,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: isDesktop ? 14.5 : 16,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: isDesktop ? 14 : 15,
                                 ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           Text(
                             widget.song.artist,
                             maxLines: 1,
@@ -221,14 +221,14 @@ class _HomeSongRowState extends State<HomeSongRow> {
                                   color: active
                                       ? activeColor.withValues(alpha: .72)
                                       : colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: isDesktop ? 12.5 : 14,
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: isDesktop ? 12 : 12.5,
                                 ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 6),
                     IconButton(
                       onPressed: widget.onLikeTap,
                       icon: Icon(
@@ -238,7 +238,7 @@ class _HomeSongRowState extends State<HomeSongRow> {
                         color: widget.isLiked
                             ? Colors.redAccent
                             : colorScheme.outline,
-                        size: isDesktop ? 22 : 27,
+                        size: isDesktop ? 20 : 22,
                       ),
                       visualDensity: VisualDensity.compact,
                     ),
@@ -251,7 +251,7 @@ class _HomeSongRowState extends State<HomeSongRow> {
                             anchor: anchorBelow(moreButtonContext),
                           ),
                           icon: const Icon(Icons.more_horiz_rounded),
-                          iconSize: isDesktop ? 20 : 24,
+                          iconSize: isDesktop ? 18 : 20,
                           visualDensity: VisualDensity.compact,
                         );
                       },
