@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -223,5 +225,36 @@ class _FadePageTransitionsBuilder extends PageTransitionsBuilder {
       opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
       child: child,
     );
+  }
+}
+
+/// 全局滚动行为定制：
+/// 1. 支持鼠标、触摸板、触控等多输入设备平滑拖拽。
+/// 2. 安全构建滚动条：仅在 ScrollController 存在且唯一绑定单个 ScrollPosition 时才挂载，
+///    规避嵌套 NeverScrollableScrollPhysics 或 NestedScrollView 多 Tab 场景下触发
+///    RawScrollbarState._debugCheckHasValidScrollPosition 断言异常导致 IDE 意外暂停。
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    final controller =
+        details.controller ?? PrimaryScrollController.maybeOf(context);
+    if (controller == null || controller.positions.length != 1) {
+      return child;
+    }
+    return super.buildScrollbar(context, child, details);
   }
 }

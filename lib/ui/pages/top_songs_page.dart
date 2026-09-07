@@ -212,10 +212,13 @@ class _TopSongsPageState extends State<TopSongsPage> {
                           return AnimatedBuilder(
                             animation: widget.player,
                             builder: (context, _) {
-                              return GridView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _songs.length,
+                              return ScrollConfiguration(
+                                behavior: ScrollConfiguration.of(context)
+                                    .copyWith(scrollbars: false),
+                                child: GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: _songs.length,
                                 gridDelegate:
                                     SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: crossAxisCount,
@@ -355,8 +358,9 @@ class _TopSongsPageState extends State<TopSongsPage> {
                                     ),
                                   );
                                 },
-                              );
-                            },
+                              ),
+                            );
+                          },
                           );
                         },
                       ),

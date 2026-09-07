@@ -39,7 +39,7 @@ import 'ui/widgets/toast.dart';
 Future<void> main(List<String> args) async {
   // 【Windows/桌面宿主移动端界面调试】：
   // 若想在 Windows 调试时查看手机移动端界面，取消下面这行注释（或命令行传入 --dart-define=FORCE_MOBILE=true）：
-  // debugDesktopFormFactorOverride = false;
+  debugDesktopFormFactorOverride = false;
 
   // desktop_multi_window 子窗口（桌面歌词悬浮窗）入口分流：
   // 子窗口引擎会以 args=['multi_window', id, arguments] 重新执行 main()，
@@ -318,6 +318,7 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
       animation: _theme,
       builder: (context, _) {
         return MaterialApp(
+          scrollBehavior: const AppScrollBehavior(),
           title: AppConfig.appName,
           debugShowCheckedModeBanner: false,
           navigatorKey: Toast.navigatorKey,

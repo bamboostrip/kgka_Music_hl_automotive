@@ -232,10 +232,13 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                             );
                           }
 
-                          return GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _playlists.length,
+                          return ScrollConfiguration(
+                            behavior: ScrollConfiguration.of(context)
+                                .copyWith(scrollbars: false),
+                            child: GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _playlists.length,
                             gridDelegate:
                                 SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
@@ -357,8 +360,9 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
                                 ),
                               );
                             },
-                          );
-                        },
+                          ),
+                        );
+                      },
                       ),
                     ),
                   ),

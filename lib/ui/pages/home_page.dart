@@ -830,9 +830,14 @@ class HomePageState extends State<HomePage> {
           );
         }
 
+        final safeContent = ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: content,
+        );
+
         return isDesktop
-            ? content
-            : RefreshIndicator(onRefresh: _refresh, child: content);
+            ? safeContent
+            : RefreshIndicator(onRefresh: _refresh, child: safeContent);
       },
     );
   }
