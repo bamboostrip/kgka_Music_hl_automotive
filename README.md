@@ -28,17 +28,18 @@
 
 ## 🔀 分支说明（先看这里）
 
-本仓库包含**两个架构完全不同**的变体，请按需选择分支：
+> **当前主线：无后端版本（`main`，默认分支）** — 本仓库现在只维护无后端 / Rust 引擎版本。
+> 有后端版本已**停止更新、逐步放弃**，`backend` 分支仅作历史存档保留，不再修复、不再合入新功能，后续会归档或删除。
 
-| 分支 | 架构 | 是否需要后端服务器 | 说明 |
-|---|---|:---:|---|
-| **`main`**（默认） | 本地 **Rust 引擎**（经 `flutter_rust_bridge` 调用） | ❌ 否 | 直接由内嵌的 Rust 引擎请求酷狗接口，**完全自包含，开箱即用** |
-| `backend` | HTTP **后端代理服务器** | ✅ 是 | 通过远程后端服务器中转酷狗接口，需自行部署/指定 `KA_MUSIC_API_BASE_URL` |
+| 分支 | 状态 | 架构 | 是否需要后端服务器 | 说明 |
+|---|---|---|---|---|
+| **`main`**（默认，唯一维护） | ✅ 持续维护 | 本地 **Rust 引擎**（经 `flutter_rust_bridge` 调用） | ❌ 否 | 内嵌 Rust 引擎直调酷狗接口，**完全自包含，开箱即用** |
+| `backend` | ⚠️ 已冻结 / 停止维护 | HTTP **后端代理服务器** | ✅ 是 | 历史存档：需自建后端并指定 `KA_MUSIC_API_BASE_URL`，**不再更新** |
 
-> 👉 **新用户请用默认分支 `main`**：无需搭建任何服务器。
-> 曾使用后端版本的老用户，请切到 `backend`（仍持续维护，但已不是主分支）。
+> 👉 **所有用户请用 `main`**：无需搭建任何服务器。
+> 如果你坚持要用有后端架构，请见下方「关于有后端版本」一节，直接前往上游原项目或 Rust / .NET 后端实现，不要再用本仓库的 `backend` 分支。
 >
-> 本文档以下的内容**均以默认分支（无后端 / Rust 引擎）为准**；标注「仅 backend」的小节除外。
+> 本文档以下的内容**均以 `main`（无后端 / Rust 引擎）为准**。
 
 ---
 
@@ -60,15 +61,25 @@
 
 ## 📸 预览
 
-| 首页推荐 | 播放器 | 歌词 |
-|:-------:|:------:|:----:|
-| ![首页](screenshots/home.jpg) | ![播放器](screenshots/player.jpg) | ![歌词](screenshots/lrc.jpg) |
+### 🖥️ PC / 桌面
 
-| 个人库 | 搜索页 | 歌单详情 |
-|:------:|:------:|:--------:|
-| ![我的](screenshots/library.jpg) | ![搜索](screenshots/search.jpg) | ![歌单](screenshots/playlist.jpg) |
+| 推荐页 | 歌单详情 | 播放页 |
+|:------:|:--------:|:------:|
+| ![PC推荐](screenshots/pc-home.png) | ![PC歌单](screenshots/pc-playlist.png) | ![PC播放](screenshots/pc-player.png) |
 
-> 截图以实际运行版本为准，不同分支 / 版本的界面与品牌字样可能略有差异。
+### 🚗 车机横屏
+
+| 推荐 | 歌单 | 播放 |
+|:----:|:----:|:----:|
+| ![车机推荐](screenshots/car-home.png) | ![车机歌单](screenshots/car-playlist.png) | ![车机播放](screenshots/car-player.png) |
+
+### 📱 移动端
+
+| 推荐 | 歌单 | 我的 | 播放 |
+|:----:|:----:|:----:|:----:|
+| <img src="screenshots/phone-home.png" width="200" alt="手机推荐" /> | <img src="screenshots/phone-playlist.png" width="200" alt="手机歌单" /> | <img src="screenshots/phone-library.png" width="200" alt="手机我的" /> | <img src="screenshots/phone-player.png" width="200" alt="手机播放" /> |
+
+> 截图以实际运行版本为准，界面与品牌字样可能随版本略有差异。
 
 ---
 
@@ -224,15 +235,15 @@ flutter run -d linux
 
 ### 编译环境变量
 
-默认分支（无后端）**不需要**配置任何 API 地址——接口由 Rust 引擎直接处理。下表变量仅用于调试或后端变体：
+无后端版本（`main`）**不需要**配置任何 API 地址 —— 接口由 Rust 引擎直接处理。下表变量仅作历史记录：
 
-| 变量 | 说明 | 适用分支 |
+| 变量 | 说明 | 状态 |
 |---|---|---|
 | `KA_MUSIC_DEBUG_LYRICS` | 启用歌词调试日志 | 通用 |
-| `KA_MUSIC_API_BASE_URL` | 自定义后端 API 地址 | **仅 backend** |
+| `KA_MUSIC_API_BASE_URL` | 自定义后端 API 地址 | **仅历史 `backend` 存档分支用过，现已废弃** |
 
 ```bash
-# 仅 backend（后端变体）需要：编译时指定后端地址
+# 历史存档：仅旧 backend 分支需要过，main 分支忽略此变量
 flutter run --dart-define=KA_MUSIC_API_BASE_URL=https://your-api.com
 ```
 
@@ -309,20 +320,28 @@ flutter run --dart-define=KA_MUSIC_API_BASE_URL=https://your-api.com
 
 ---
 
-## 🧩 仅 backend 分支（后端变体）说明
+## 🧩 关于有后端版本（已放弃，不再维护）
 
-以下内容**只适用于 `backend` 分支**，默认分支（无后端）不涉及：
+本仓库的 `backend` 分支是历史存档，**已冻结、不再维护**，仅供追溯 diff 用：
 
-- **需要后端服务器**：`backend` 通过远程服务器中转酷狗接口，需部署后端并指定 `KA_MUSIC_API_BASE_URL`。
-- **自定义 API 地址**：`backend` 支持在设置中配置自定义 API 地址；默认分支接口内嵌于 Rust 引擎，不支持重定向。
-- **接口实现位置**：`backend` 的接口走 `lib/core/api_client.dart`（HTTP 客户端）；默认分支则走 `rust/` + `lib/core/rust_api_client.dart`。
-- 仓库根目录的 `api.json` 描述的是后端变体的 HTTP 接口，默认分支不使用。
+- 不再修复 bug、不再合入功能、不再保证能编译 / 能跑通；
+- 仓库根目录的 `api.json` 描述的是旧后端变体的 HTTP 接口，`main` 分支不使用，保留仅为存档对照。
+
+如需有后端架构，请直接前往以下项目（按需选择，本仓库后续不再从 `backend` 分流）：
+
+| 项目 | 说明 |
+|---|---|
+| [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) | 上游原项目（KA Music），有后端版本的源头 |
+| [bamboostrip/KugouMusic.rs](https://github.com/bamboostrip/KugouMusic.rs) | 作者重构的 Rust Web 后端服务 |
+| [Linsxyx/KugouMusic.NET](https://github.com/Linsxyx/KugouMusic.NET) | .NET 实现的后端项目 |
 
 ---
 
-## 🙏 致谢
+## 🙏 致谢与上游关系
 
-本项目基于 [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) 二次开发，感谢原作者的卓越工作。默认分支的「无后端 Rust 引擎」架构在此基础上新增实现。
+本项目早期基于 [umr-xiaomai/kgka_Music_hl](https://github.com/umr-xiaomai/kgka_Music_hl) 二次开发，感谢原作者的卓越工作。
+
+但随着「无后端 Rust 引擎 + 多端 / 车机适配」等大规模重构，本仓库架构已与上游显著分化，**不再能直接合回上游，也不再从上游同步**。有后端需求请见「关于有后端版本」一节前往对应项目，本仓库只演进无后端主线。
 
 ---
 
