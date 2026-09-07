@@ -84,12 +84,14 @@ class AuthController extends ChangeNotifier {
     final playlist = likedPlaylist;
     if (playlist == null) return;
 
-    final liked = _likedHashes.contains(song.hash);
     final targetListId = playlist.listId?.isNotEmpty == true
         ? playlist.listId!
         : playlist.id;
     // 服务端增删 + 本地集合变更整体入互斥链，避免被并发的全量同步覆盖。
+    // 方向判定（liked）必须在链内执行：锁外快照时快速连点两次会读到同一旧值，
+    // 串行执行后第二次方向算错、终态反转。
     final task = _likedMutationLock.then((_) async {
+      final liked = _likedHashes.contains(song.hash);
       try {
         Map<String, dynamic>? resp;
         if (liked) {

@@ -179,8 +179,9 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       if (_disposed) return;
       _pendingInitialPosition = null;
       // VIP 过期：自动领取后重试一次（转发定位/队列上下文，避免冷启动
-      // 定位与高潮试听从 0 秒重播）
-      if (error is VipRequiredException && vipClaim != null) {
+      // 定位与高潮试听从 0 秒重播）。isRetry 内不再领取：重试后仍报 VIP
+      // 说明领取无效/服务端持续拒绝，不设限会形成"领取→重试→再领取"无限循环。
+      if (!isRetry && error is VipRequiredException && vipClaim != null) {
         final claimed = await _tryClaimVipAndRetry(
           song,
           queue: queue,
@@ -456,7 +457,13 @@ mixin _PlayerPlayback on _PlayerControllerBase {
         return;
       }
       if (!audioPlayer.playing) {
-        await togglePlay();
+        // 调用方（歌词点击等）常丢弃本 Future，togglePlay 失败必须就地接住，
+        // 否则成为未取消认领的异步异常（与上方 seek 的处理同理）。
+        try {
+          await togglePlay();
+        } catch (error) {
+          debugPrint('[时音][player] seekToAndPlay 起播失败: $error');
+        }
       }
     }
   }

@@ -272,7 +272,9 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
     _windowTitleBinder?.detach();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(NetworkMonitor.instance.stop());
-    NetworkMonitor.instance.dispose();
+    // 注意：NetworkMonitor 是进程单例，其广播流不得在这里 dispose，
+    // 否则流永久关闭（事件失聪、二次 dispose 抛错、widget 测试 flake）。
+    // stop() 已取消订阅，足以释放资源。
     _auth.dispose();
     _player.dispose();
     _downloads.dispose();

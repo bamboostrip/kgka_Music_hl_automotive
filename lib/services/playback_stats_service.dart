@@ -151,10 +151,13 @@ class PlaybackStatsService {
     });
   }
 
-  /// 清空统计。
-  Future<void> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+  /// 清空统计（同样进互斥链：与在途 recordPlay/addListenTime 并发时，
+  /// 锁外直接删会丢更新或让已清空的数据被旧读改写复活）。
+  Future<void> clear() {
+    return _enqueueMutation(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_key);
+    });
   }
 
   Future<void> _save(PlaybackStats stats) async {

@@ -204,10 +204,14 @@ int compareSemver(String a, String b) {
   return 0;
 }
 
-/// 由语义化版本生成一个单调的整数 code（major*10000 + minor*100 + patch）。
+/// 由语义化版本生成一个单调的整数 code（major*100 + minor*10 + patch）。
+/// 口径必须与 docs/release-process.md 及 pubspec `+<code>` 后缀一致
+/// （如 2.5.1 → 251）：fromGitHubRelease 用它与 AppConfig.appVersionCode
+///（经 normalizedVersionCode 归一）比较新旧，口径分叉会导致同版本恒判"有更新"。
+/// 约束：minor/patch 须 < 10（与发布流程约定相同），否则高位进位破坏单调性。
 int semverToCode(String version) {
   final p = _semverParts(version);
-  return p[0] * 10000 + p[1] * 100 + p[2];
+  return p[0] * 100 + p[1] * 10 + p[2];
 }
 
 int normalizedVersionCode(Object? value) {

@@ -419,6 +419,9 @@ class MusicAudioHandler extends BaseAudioHandler
   Future<void> close() async {
     await _proxy?.close(force: true);
     _proxy = null;
+    // 在途绑定标记必须同步清理，否则 close 后重建（热重启/重载）时
+    // _ensureProxy 会命中旧 _binding 直接返回，_proxy 仍为 null 而空崩。
+    _binding = null;
     await audioPlayer.dispose();
   }
 
