@@ -128,6 +128,7 @@ class HomePageState extends State<HomePage> {
         curve: Curves.easeOutCubic,
       );
     }
+    if (!mounted) return;
     await _refresh();
   }
 
