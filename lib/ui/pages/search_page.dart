@@ -398,19 +398,22 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ),
         const SizedBox(width: 12),
-        ElevatedButton(
-          onPressed: _onSubmit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(23),
+        // 与左侧胶囊等高（46）的 tonal 药丸按钮：无阴影、与搜索框对齐；
+        // 深色字落在浅色容器上，换任何种子色（尤其浅色金）对比度都不翻车。
+        SizedBox(
+          height: 46,
+          child: FilledButton.tonal(
+            onPressed: _onSubmit,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(23),
+              ),
             ),
-          ),
-          child: const Text(
-            '搜索',
-            style: TextStyle(fontWeight: FontWeight.bold),
+            child: const Text(
+              '搜索',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ),
       ],
