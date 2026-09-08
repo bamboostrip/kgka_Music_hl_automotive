@@ -6,3 +6,8 @@
 # Windows 批处理必须 CRLF + BOM 才能被 cmd.exe 正确解析，
 # 仓库统一存 LF，检出时转 CRLF（工具重写文件后若变回 LF，重新检出即恢复）。
 *.bat text eol=crlf
+
+# Dart 源码统一存 LF：本地 core.autocrlf=false 时，编辑器/工具写入的
+# CRLF 会被原样提交进索引（曾把 main.dart 等文件整库污染成 CRLF）。
+# 显式声明后 add 自动归一化回 LF，不再依赖各人本地 autocrlf 配置。
+*.dart text eol=lf
