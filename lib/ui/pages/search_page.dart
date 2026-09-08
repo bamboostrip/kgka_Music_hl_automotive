@@ -451,44 +451,50 @@ class _SearchPageState extends State<SearchPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        toolbarHeight: 64,
+        toolbarHeight: 56,
         titleSpacing: 4,
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        // 与首页 HomeSearchBar 同款胶囊：同高 36、同圆角、同底色、
+        // 同搜索图标与同提示样式，点击首页搜索进入时视觉无断层。
+        // 常态无边框无阴影（首页即如此），聚焦时染一圈主色细边框。
         title: Container(
-          height: 42,
+          height: 36,
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: .07) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _searchFocused
-                  ? colorScheme.primary.withValues(alpha: .65)
-                  : isDark
-                      ? Colors.white.withValues(alpha: .10)
-                      : Colors.white.withValues(alpha: .92),
-              width: _searchFocused ? 1.3 : 1.1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? .18 : .06),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            color: isDark
+                ? Colors.white.withValues(alpha: .07)
+                : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(18),
+            border: _searchFocused
+                ? Border.all(
+                    color: colorScheme.primary.withValues(alpha: .65),
+                    width: 1.3,
+                  )
+                : Border.all(color: Colors.transparent, width: 1),
           ),
           child: Row(
             children: [
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.search_rounded,
+                size: 16.5,
+                color: colorScheme.onSurfaceVariant.withValues(
+                  alpha: isDark ? 0.65 : 0.5,
+                ),
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: TextField(
                   controller: _controller,
                   focusNode: _focusNode,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _onSubmitFromKeyboard(),
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: isDark ? colorScheme.onSurface.withValues(alpha: .92) : null,
-                        fontWeight: FontWeight.w600,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isDark
+                            ? colorScheme.onSurface.withValues(alpha: .92)
+                            : colorScheme.onSurface,
+                        fontWeight: FontWeight.w400,
                         fontSize: 14,
                       ),
                   decoration: InputDecoration(
@@ -496,8 +502,13 @@ class _SearchPageState extends State<SearchPage> {
                     filled: false,
                     suffixIcon: _controller.text.isNotEmpty
                         ? IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 28,
+                              height: 28,
+                            ),
                             icon: Icon(Icons.close_rounded,
-                                size: 18,
+                                size: 16,
                                 color: isDark
                                     ? colorScheme.onSurface.withValues(alpha: .86)
                                     : colorScheme.onSurfaceVariant),
@@ -508,13 +519,18 @@ class _SearchPageState extends State<SearchPage> {
                             },
                           )
                         : null,
+                    // 收紧后缀图标约束：默认 48 高度会撑破 36 高的胶囊。
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                     hintText: '搜索歌曲、歌手、专辑',
                     hintStyle: TextStyle(
-                      color: isDark
-                          ? colorScheme.onSurface.withValues(alpha: .62)
-                          : colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: isDark ? 0.7 : 0.6,
+                      ),
+                      fontWeight: FontWeight.w400,
+                      fontSize: 13.5,
                     ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -522,13 +538,13 @@ class _SearchPageState extends State<SearchPage> {
                     disabledBorder: InputBorder.none,
                     errorBorder: InputBorder.none,
                     focusedErrorBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                 ),
               ),
               // 无文字时补右内边距：有清除按钮时按钮自带边距，无按钮时
               // TextField 会贴到容器右边缘、压住外圈边框。
-              if (_controller.text.isEmpty) const SizedBox(width: 14),
+              if (_controller.text.isEmpty) const SizedBox(width: 12),
             ],
           ),
         ),
