@@ -83,6 +83,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   // 顶栏收折进度（0 = 完全展开，_headerCollapseRange = 完全收折）：
   // 只驱动顶栏自身的重绘，切页/滚动都不触发整页 setState。
   final ValueNotifier<double> _headerShrink = ValueNotifier<double>(0.0);
+  // 头部区间同步中的重入保护：把某个 tab 的头部进度镜像到其它 tab 时
+  // 会触发它们的 listener 回调，用此标志避免递归同步。
+  bool _syncingHeaderOffsets = false;
 
   /// 顶栏完全收折所需的滚动距离：等于 delegate 默认参数下
   /// maxExtent - minExtent（topMargin 8 + searchBarHeight 36 + spacing 8）。
@@ -124,7 +127,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   void didUpdateWidget(HomePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionIndex != widget.sectionIndex) {
-      // 外部切换 tab（如侧栏/底部导航）。
+      // 外部切换 tab（如侧栏/底部导航）：同样先对齐目标页头部，保持
+      // 顶栏三 tab 统一行动主体。
+      _alignTabToShrink(
+        widget.sectionIndex,
+        _headerShrink.value.clamp(0.0, _headerCollapseRange),
+      );
       _sectionIndex = widget.sectionIndex;
       if (_pageController.hasClients &&
           _pageController.page?.round() != widget.sectionIndex) {
@@ -189,13 +197,23 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
 
   /// 由三 tab 内容滚动位置推导顶栏收折进度。
   ///
-  /// 顶栏是页面层固定组件，不再随 PageView 横向平移；切页动画过程中按
-  /// PageView 的页面位置在相邻两 tab 的内容 offset 之间线性插值，使顶栏
-  /// 高度在「当前页收折态 → 目标页收折态」之间平滑过渡。任一 tab 滚动或
-  /// PageView 翻页都会触发本函数（listener），只更新 ValueNotifier，
-  /// 不 setState。
+  /// 顶栏是页面层固定组件，不再随 PageView 横向平移，是三个 tab 共用的
+  /// 同一个行动主体：收折态全局统一，切页不重置——推荐页下滑收起搜索框
+  /// 后切到排行榜/电台时搜索框保持收起，反之任一页上滑展开后其它页也
+  /// 同步展开，不再出现“一个有搜索框、一个没有”的跳变。
+  ///
+  /// 规则：
+  /// - 静止时任一 tab 在头部区间（0.._headerCollapseRange）内滚动，
+  ///   把其它同样处于头部区间的 tab 镜像到同一进度；深滚（超出头部
+  ///   区间）的 tab 保留各自内容进度不动。
+  /// - 切页动画中只把目标页的头部对齐到源页，不动源页（源页可见，
+  ///   动它会纵跳；目标页在屏外，对齐不可见、无抖动），使过渡期间
+  ///   顶栏高度保持稳定。
+  /// 任一 tab 滚动或 PageView 翻页都会触发本函数（listener），只更新
+  /// ValueNotifier，不 setState（镜像 jumpTo 期间用 [_syncingHeaderOffsets]
+  /// 防重入）。
   void _updateHeaderShrink() {
-    if (!mounted) return;
+    if (!mounted || _syncingHeaderOffsets) return;
     var page = _sectionIndex.toDouble();
     if (_pageController.hasClients &&
         _pageController.position.haveDimensions) {
@@ -213,6 +231,64 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     final shrink = offset.clamp(0.0, _headerCollapseRange);
     if ((_headerShrink.value - shrink).abs() > 0.1) {
       _headerShrink.value = shrink;
+    }
+
+    final settled = (page - page.round()).abs() < 0.02;
+    if (!settled) {
+      // 切页动画中：目标页头部向源页对齐（源页不动）。
+      final src = _sectionIndex.clamp(0, 2);
+      final dst = (i == src) ? j : i;
+      if (dst != src) {
+        _alignTabToShrink(dst, offsetOf(src).clamp(0.0, _headerCollapseRange));
+      }
+      return;
+    }
+    // 静止时：头部区间内的列表互相镜像，深滚列表不动。
+    _syncingHeaderOffsets = true;
+    try {
+      for (final controller in _tabControllers) {
+        if (!controller.hasClients) continue;
+        if (controller.offset <= _headerCollapseRange + 0.5) {
+          final target = shrink.clamp(
+            controller.position.minScrollExtent,
+            controller.position.maxScrollExtent,
+          );
+          if ((controller.offset - target).abs() > 0.5) {
+            try {
+              controller.jumpTo(target);
+            } catch (_) {
+              // 滚动中或布局未就绪时忽略，下次滚动/切页会再次对齐。
+            }
+          }
+        }
+      }
+    } finally {
+      _syncingHeaderOffsets = false;
+    }
+  }
+
+  /// 把目标 tab 的头部进度至少推高到 [shrink]（深滚不动）。
+  ///
+  /// 用于切页前/切页后对齐：目标还在头部区间顶部（如 offset 0）而顶栏
+  /// 已收起时，把它推到与顶栏一致的位置，避免切页后搜索框突然冒出来。
+  void _alignTabToShrink(int index, double shrink) {
+    if (index < 0 || index >= _tabControllers.length) return;
+    final controller = _tabControllers[index];
+    if (!controller.hasClients) return;
+    if (controller.offset > _headerCollapseRange + 0.5) return;
+    if (controller.offset >= shrink - 0.5) return;
+    final target = shrink.clamp(
+      controller.position.minScrollExtent,
+      controller.position.maxScrollExtent,
+    );
+    if ((controller.offset - target).abs() <= 0.5) return;
+    _syncingHeaderOffsets = true;
+    try {
+      controller.jumpTo(target);
+    } catch (_) {
+      // 滚动中或布局未就绪时忽略，动画中的后续帧会继续对齐。
+    } finally {
+      _syncingHeaderOffsets = false;
     }
   }
 
@@ -233,6 +309,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       unawaited(scrollToTopAndRefresh());
       return;
     }
+    // 切页前先把目标页头部对齐到当前顶栏收折态：顶栏是三 tab 共用的
+    // 同一个行动主体，收起/展开切页不重置。深滚的目标页不动。
+    _alignTabToShrink(
+      value,
+      _headerShrink.value.clamp(0.0, _headerCollapseRange),
+    );
     setState(() => _sectionIndex = value);
     widget.onTabSwitch?.call(value + 1);
     if (animatePage && _pageController.hasClients) {
@@ -722,6 +804,16 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                     _sectionIndex = index;
                   });
                   widget.onTabSwitch?.call(index + 1);
+                  // 手势滑动切页：动画首帧已在 _updateHeaderShrink 里把目标页
+                  // 向源页对齐，这里再补一次 post-frame 对齐，兜底懒加载
+                  // 刚挂载（首帧 hasClients 为 false）的目标页。
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    _alignTabToShrink(
+                      index,
+                      _headerShrink.value.clamp(0.0, _headerCollapseRange),
+                    );
+                  });
                 },
                 children: [
               // Tab 0: 推荐

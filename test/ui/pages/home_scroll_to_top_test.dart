@@ -498,10 +498,10 @@ void main() {
         (w) => w is Text && w.data == label && w.style?.fontSize == 17,
       );
 
-  testWidgets('切换 tab 不联动滚动位置', (tester) async {
+  testWidgets('切换 tab 顶栏收折态统一、深滚位置互不影响', (tester) async {
     await pumpAppShell(tester);
 
-    // 推荐页下滑
+    // 推荐页下滑：顶栏收起（搜索框折叠）。
     await tester.drag(find.text('大家都在听'), const Offset(0, -500));
     await tester.pumpAndSettle();
     expect(
@@ -509,12 +509,34 @@ void main() {
       greaterThan(100),
     );
 
-    // 切到排行榜：应保持自己的位置（顶部），不受推荐页影响
+    // 切到排行榜：顶栏是三 tab 共用的同一个行动主体，头部跟随收起
+    //（52.0 = 顶栏完全收折距离，见 HomePageState._headerCollapseRange），
+    // 而不是重新展开冒出搜索框。
     await tester.tap(capsuleTab('排行榜'));
     await tester.pumpAndSettle();
     expect(
       nearestScrollableOf(tester, sectionTitle('排行榜')).position.pixels,
-      0.0,
+      52.0,
+    );
+
+    // 深滚位置互不影响：排行榜继续深滚后切回推荐再切回，
+    // 双方各自的内容进度都保留。
+    await tester.drag(sectionTitle('排行榜'), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    final rankDeep =
+        nearestScrollableOf(tester, sectionTitle('排行榜')).position.pixels;
+    expect(rankDeep, greaterThan(100));
+    await tester.tap(capsuleTab('推荐'));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, find.text('大家都在听')).position.pixels,
+      greaterThan(100),
+    );
+    await tester.tap(capsuleTab('排行榜'));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, sectionTitle('排行榜')).position.pixels,
+      rankDeep,
     );
   });
 
