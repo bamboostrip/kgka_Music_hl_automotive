@@ -61,10 +61,13 @@ class _FakeMusicApi implements MusicApi {
       const [];
 
   @override
-  Future<List<FmStation>> fmRecommendedStations() async => const [];
+  Future<List<FmStation>> fmRecommendedStations() async => fmRecommended;
 
   @override
-  Future<List<FmClassGroup>> fmClassGroups() async => const [];
+  Future<List<FmClassGroup>> fmClassGroups() async => fmGroups;
+
+  List<FmStation> fmRecommended = const [];
+  List<FmClassGroup> fmGroups = const [];
 
   @override
   Future<Map<String, FmImage>> fmImages(List<String> fmids) async => const {};
@@ -195,6 +198,8 @@ void main() {
   Future<_FakeMusicApi> pumpAppShell(
     WidgetTester tester, {
     Size size = const Size(400, 800),
+    List<FmStation>? radioRecommended,
+    List<FmClassGroup>? radioGroups,
   }) async {
     debugDesktopFormFactorOverride = false;
     addTearDown(() => debugDesktopFormFactorOverride = null);
@@ -217,7 +222,9 @@ void main() {
       ..ranks = List.generate(
         10,
         (i) => RankCategory(rankId: 100 + i, rankName: '榜单$i'),
-      );
+      )
+      ..fmRecommended = radioRecommended ?? const []
+      ..fmGroups = radioGroups ?? const [];
 
     await tester.pumpWidget(
       MaterialApp(
@@ -638,5 +645,49 @@ void main() {
     expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
     final rankTabText = tester.widget<Text>(capsuleTab('排行榜'));
     expect(rankTabText.style?.fontWeight, FontWeight.w800);
+  });
+
+  testWidgets('推荐页收起后首次切到电台顶栏保持收起（跨页懒加载不对齐会闪出）', (
+    tester,
+  ) async {
+    FmStation station(int i) => FmStation(id: 'fm_$i', name: '电台$i', type: 0);
+    // 非车机分支分组渲染为 188 高的横滑轨道，需多组数据把内容撑到
+    // 超出一屏，否则列表滚不到 52（完全收折距离）。
+    await pumpAppShell(
+      tester,
+      radioRecommended: [station(1), station(2)],
+      radioGroups: List.generate(
+        4,
+        (g) => FmClassGroup(
+          id: 'g$g',
+          name: '电台组$g',
+          stations: List.generate(8, (i) => station(100 + g * 10 + i)),
+        ),
+      ),
+    );
+
+    // 推荐页下滑收起顶栏。
+    await tester.drag(find.text('大家都在听'), const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    // 首次切到电台（推荐 0 → 电台 2，跨过排行榜且电台页首访懒加载）：
+    // 顶栏应保持收起，电台内容推到 52（完全收折距离）而不是顶着 0
+    // 把搜索框闪出来。
+    await tester.tap(capsuleTab('电台'));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, sectionTitle('推荐电台')).position.pixels,
+      52.0,
+    );
+
+    // 再切回推荐、切回电台：依然保持收起。
+    await tester.tap(capsuleTab('推荐'));
+    await tester.pumpAndSettle();
+    await tester.tap(capsuleTab('电台'));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, sectionTitle('推荐电台')).position.pixels,
+      52.0,
+    );
   });
 }

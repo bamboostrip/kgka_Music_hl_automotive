@@ -86,6 +86,10 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   // 头部区间同步中的重入保护：把某个 tab 的头部进度镜像到其它 tab 时
   // 会触发它们的 listener 回调，用此标志避免递归同步。
   bool _syncingHeaderOffsets = false;
+  // 点按/外部切页的飞行目标：PageView 动画落定、onPageChanged 处理完之前，
+  // 顶栏保持只收不展，落地页推到地板高度（见 _updateHeaderShrink）。
+  // 手势滑动不需要它（落地时 page 与 _sectionIndex 不一致即可识别）。
+  int? _switchTarget;
 
   /// 顶栏完全收折所需的滚动距离：等于 delegate 默认参数下
   /// maxExtent - minExtent（topMargin 8 + searchBarHeight 36 + spacing 8）。
@@ -136,6 +140,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       _sectionIndex = widget.sectionIndex;
       if (_pageController.hasClients &&
           _pageController.page?.round() != widget.sectionIndex) {
+        _switchTarget = widget.sectionIndex;
         _pageController.animateToPage(
           widget.sectionIndex,
           duration: const Duration(milliseconds: 280),
@@ -206,9 +211,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   /// - 静止时任一 tab 在头部区间（0.._headerCollapseRange）内滚动，
   ///   把其它同样处于头部区间的 tab 镜像到同一进度；深滚（超出头部
   ///   区间）的 tab 保留各自内容进度不动。
-  /// - 切页动画中只把目标页的头部对齐到源页，不动源页（源页可见，
-  ///   动它会纵跳；目标页在屏外，对齐不可见、无抖动），使过渡期间
-  ///   顶栏高度保持稳定。
+  /// - 切页途中（点按动画/手势滑动）与刚落地时：顶栏只许收起不许展开，
+  ///   展开只能由用户在当前页上滑驱动。视角中心页不动（动它会纵跳），
+  ///   其余页推到地板高度（屏外，不可见）；落地页若刚懒加载还顶着 0，
+  ///   在落定帧推上去，不把顶栏拽下来。
+  /// - 尚未懒加载的页面没有挂载：插值时按全局顶栏状态假设，而不是按 0
+  ///   处理，否则跨页跳转（如推荐 0 → 电台 2）途中会被没出生的 0 拽开。
   /// 任一 tab 滚动或 PageView 翻页都会触发本函数（listener），只更新
   /// ValueNotifier，不 setState（镜像 jumpTo 期间用 [_syncingHeaderOffsets]
   /// 防重入）。
@@ -224,26 +232,42 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     final t = (page - i).clamp(0.0, 1.0);
     double offsetOf(int index) {
       final controller = _tabControllers[index];
-      return controller.hasClients ? controller.offset : 0.0;
+      if (!controller.hasClients) return _headerShrink.value;
+      return controller.offset;
     }
 
     final offset = offsetOf(i) + (offsetOf(j) - offsetOf(i)) * t;
-    final shrink = offset.clamp(0.0, _headerCollapseRange);
-    if ((_headerShrink.value - shrink).abs() > 0.1) {
-      _headerShrink.value = shrink;
-    }
-
+    final blend = offset.clamp(0.0, _headerCollapseRange);
     final settled = (page - page.round()).abs() < 0.02;
     if (!settled) {
-      // 切页动画中：目标页头部向源页对齐（源页不动）。
-      final src = _sectionIndex.clamp(0, 2);
-      final dst = (i == src) ? j : i;
-      if (dst != src) {
-        _alignTabToShrink(dst, offsetOf(src).clamp(0.0, _headerCollapseRange));
+      // 切页飞行中：视角中心页不动，其余页推到地板，顶栏只收不展。
+      final dominant = page.round().clamp(0, 2);
+      final floor = _headerShrink.value;
+      final keep = blend > floor ? blend : floor;
+      if ((_headerShrink.value - keep).abs() > 0.1) {
+        _headerShrink.value = keep;
       }
+      if (i != dominant) _alignTabToShrink(i, keep);
+      if (j != dominant) _alignTabToShrink(j, keep);
+      return;
+    }
+    final arrived = page.round().clamp(0, 2);
+    if (arrived != _sectionIndex || _switchTarget != null) {
+      // 刚落地、状态还没对齐（手势 index 滞后 / 点按目标刚挂载还顶着 0）：
+      // 把落地页推到地板高度，顶栏不下拉。
+      final floor = _headerShrink.value;
+      final keep = blend > floor ? blend : floor;
+      if ((_headerShrink.value - keep).abs() > 0.1) {
+        _headerShrink.value = keep;
+      }
+      _alignTabToShrink(arrived, keep);
       return;
     }
     // 静止时：头部区间内的列表互相镜像，深滚列表不动。
+    final shrink = blend;
+    if ((_headerShrink.value - shrink).abs() > 0.1) {
+      _headerShrink.value = shrink;
+    }
     _syncingHeaderOffsets = true;
     try {
       for (final controller in _tabControllers) {
@@ -267,6 +291,71 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     }
   }
 
+  /// 落页 post-frame 对齐：等目标页懒加载挂载、内容撑高后再推到地板高度。
+  ///
+  /// 根因有两层：
+  /// 1. PageView 的 onPageChanged 按四舍五入触发，跨页跳转（如推荐 0 →
+  ///    电台 2）时 page≈1.5 就报了 2，此时电台页往往还没挂载对齐不上；
+  /// 2. 电台首访先渲染骨架屏（内容矮、maxScrollExtent 很小），对齐会被
+  ///    钳到 0 附近，看起来“成功”了，但真数据把内容撑高后仍顶着 0。
+  /// 因此没真正对上就下一帧重试（pending 的回调不生产新帧，不会空转；
+  /// 有上限，超限后回落到内容真实高度），只在成功对齐后清 [_switchTarget]。
+  void _alignTargetPostFrame(int index, int attemptsLeft) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_tryAlignTabToShrink(
+        index,
+        _headerShrink.value.clamp(0.0, _headerCollapseRange),
+      )) {
+        if (_switchTarget == index) _switchTarget = null;
+      } else if (attemptsLeft > 0) {
+        _alignTargetPostFrame(index, attemptsLeft - 1);
+      } else {
+        // 一直没对上（内容本身就比头部区间矮，滚不上去）：清掉标记，
+        // 并按内容真实高度重算一次顶栏，避免顶栏卡在收起态留出空白。
+        if (_switchTarget == index) _switchTarget = null;
+        _updateHeaderShrink();
+      }
+    });
+  }
+
+  /// 尝试把目标 tab 的头部进度推高到 [shrink]，返回是否已落定无需重试。
+  ///
+  /// - 未挂载、还没 layout（无 dimensions）、内容仍是骨架（max 顶不到
+  ///   shrink）：返回 false，调用方下一帧重试。
+  /// - 已在地板高度或深滚（保留内容进度）：返回 true。
+  bool _tryAlignTabToShrink(int index, double shrink) {
+    if (index < 0 || index >= _tabControllers.length) return true;
+    final controller = _tabControllers[index];
+    if (!controller.hasClients) {
+      return false;
+    }
+    if (controller.offset > _headerCollapseRange + 0.5) return true;
+    if (controller.offset >= shrink - 0.5) return true;
+    double min;
+    double max;
+    try {
+      min = controller.position.minScrollExtent;
+      max = controller.position.maxScrollExtent;
+    } catch (_) {
+      // 还没 layout，读不到滚动范围，下一帧重试。
+      return false;
+    }
+    final target = shrink.clamp(min, max);
+    // 内容还不够高顶不到地板（如骨架屏）：不是“对上了”，继续等数据。
+    // 注意判在前：骨架态 target 会被钳到 offset 附近，先判差值会误判落定。
+    if (target < shrink - 0.5) return false;
+    if ((controller.offset - target).abs() <= 0.5) return true;
+    _syncingHeaderOffsets = true;
+    try {
+      controller.jumpTo(target);
+    } catch (_) {
+      return false;
+    } finally {
+      _syncingHeaderOffsets = false;
+    }
+    return true;
+  }
   /// 把目标 tab 的头部进度至少推高到 [shrink]（深滚不动）。
   ///
   /// 用于切页前/切页后对齐：目标还在头部区间顶部（如 offset 0）而顶栏
@@ -311,6 +400,8 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     }
     // 切页前先把目标页头部对齐到当前顶栏收折态：顶栏是三 tab 共用的
     // 同一个行动主体，收起/展开切页不重置。深滚的目标页不动。
+    // 未懒加载的目标页此处对齐不上（无挂载），靠 _switchTarget 在
+    // 飞行途中/落定帧继续对齐（顶栏只收不展）。
     _alignTabToShrink(
       value,
       _headerShrink.value.clamp(0.0, _headerCollapseRange),
@@ -318,6 +409,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     setState(() => _sectionIndex = value);
     widget.onTabSwitch?.call(value + 1);
     if (animatePage && _pageController.hasClients) {
+      // 真正起飞才挂飞行标记（车机 animatePage=false 不走 PageView，
+      // 挂了就没人清，会一直卡在落定分支）。
+      _switchTarget = value;
       _pageController.animateToPage(
         value,
         duration: const Duration(milliseconds: 260),
@@ -804,16 +898,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                     _sectionIndex = index;
                   });
                   widget.onTabSwitch?.call(index + 1);
-                  // 手势滑动切页：动画首帧已在 _updateHeaderShrink 里把目标页
-                  // 向源页对齐，这里再补一次 post-frame 对齐，兜底懒加载
-                  // 刚挂载（首帧 hasClients 为 false）的目标页。
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    _alignTabToShrink(
-                      index,
-                      _headerShrink.value.clamp(0.0, _headerCollapseRange),
-                    );
-                  });
+                  // 飞行结束：等目标页懒加载挂载后对齐（带重试），成功后
+                  // 才清点按标记回到静止镜像逻辑，见 _alignTargetPostFrame。
+                  _alignTargetPostFrame(index, 60);
                 },
                 children: [
               // Tab 0: 推荐
