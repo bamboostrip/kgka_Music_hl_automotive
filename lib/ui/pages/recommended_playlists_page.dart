@@ -366,11 +366,12 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
             },
           ),
 
-          // 悬浮 MiniPlayer
+          // 悬浮 MiniPlayer：抬高到底部安全区之上（与 playlist_detail_page
+          // 一致），避免压进 Android 手势/三键导航区。
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: MediaQuery.paddingOf(context).bottom + 10,
             child: MiniPlayer(player: widget.player, auth: widget.auth),
           ),
         ],

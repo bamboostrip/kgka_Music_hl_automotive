@@ -517,13 +517,13 @@ void main() {
     );
 
     // 切到排行榜：顶栏是三 tab 共用的同一个行动主体，头部跟随收起
-    //（52.0 = 顶栏完全收折距离，见 HomePageState._headerCollapseRange），
+    //（48.0 = 顶栏完全收折距离，见 HomePageState._headerCollapseRange），
     // 而不是重新展开冒出搜索框。
     await tester.tap(capsuleTab('排行榜'));
     await tester.pumpAndSettle();
     expect(
       nearestScrollableOf(tester, sectionTitle('排行榜')).position.pixels,
-      52.0,
+      48.0,
     );
 
     // 深滚位置互不影响：排行榜继续深滚后切回推荐再切回，
@@ -554,43 +554,71 @@ void main() {
           tester,
           sectionTitle('排行榜'),
         ).position.pixels;
-    // ignore: avoid_print
-    void log(String tag) {
-      var v = 'offstage';
-      try {
-        v = rankNow().toStringAsFixed(1);
-      } catch (_) {}
-      // ignore: avoid_print
-      print('DBG $tag rank=$v');
-    }
 
     // 切到排行榜并下滑
     await tester.tap(capsuleTab('排行榜'));
     await tester.pumpAndSettle();
     await tester.drag(sectionTitle('排行榜'), const Offset(0, -600));
     await tester.pumpAndSettle();
-    log('scroll-rank');
     final recorded = rankNow();
     expect(recorded, greaterThan(100));
 
     // 回到推荐页并下滑
     await tester.tap(capsuleTab('推荐'));
     await tester.pumpAndSettle();
-    log('back-rec');
     await tester.drag(find.text('大家都在听'), const Offset(0, -300));
     await tester.pumpAndSettle();
-    log('scroll-rec');
 
     // 单击本页顶部 tab「推荐」触发刷新
     await tester.tap(capsuleTab('推荐'));
     await tester.pumpAndSettle();
-    log('refresh-rec');
 
     // 再切回排行榜：位置应该还在
     await tester.tap(capsuleTab('排行榜'));
     await tester.pumpAndSettle();
-    log('back-rank');
     expect(rankNow(), recorded);
+  });
+
+  testWidgets('点按切页飞行被手势打断后，当前页仍可上滑回顶展开顶栏', (tester) async {
+    await pumpAppShell(tester);
+
+    // 推荐页下滑收起顶栏。
+    await tester.drag(find.text('大家都在听'), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    final deep = nearestScrollableOf(
+      tester,
+      find.text('大家都在听'),
+    ).position.pixels;
+    expect(deep, greaterThan(100));
+
+    // 点按「电台」起飞跨页飞行（全程 260ms），逐帧推进到飞行中途：
+    // 单次 pump(80ms) 不会 tick 滚动动画，需小步 pump 才能停在半路。
+    // 中途手势反向滑动打断：修复前被打断的 _switchTarget 永远等不到
+    // 落地清理，落地分支把推荐页一直 jumpTo 顶在地板高度，用户上滑
+    // 回不了顶、点当前 tab 的回顶刷新也被打回。
+    await tester.tap(capsuleTab('电台'));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // 从左下纵向内容区反向横滑打断飞行（该处无横滚滑轨，横向手势
+    // 由 PageView 接管）。
+    await tester.dragFrom(const Offset(80, 300), const Offset(600, 0));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, find.text('大家都在听')).position.pixels,
+      deep,
+    );
+
+    // 回顶恢复：点中当前 tab（推荐）触发 scrollToTopAndRefresh 回顶刷新，
+    // 修复前残留的飞行标记会一直 jumpTo 打回回顶动画（只能换 tab 解锁）。
+    await tester.tap(capsuleTab('推荐'));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, find.text('大家都在听')).position.pixels,
+      lessThan(1.0),
+    );
+    // 顶栏（搜索框）重新可见。
+    expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
   });
 
   testWidgets('两次点击间隔超过 350ms 时不触发刷新', (tester) async {
@@ -652,7 +680,7 @@ void main() {
   ) async {
     FmStation station(int i) => FmStation(id: 'fm_$i', name: '电台$i', type: 0);
     // 非车机分支分组渲染为 188 高的横滑轨道，需多组数据把内容撑到
-    // 超出一屏，否则列表滚不到 52（完全收折距离）。
+    // 超出一屏，否则列表滚不到 48（完全收折距离）。
     await pumpAppShell(
       tester,
       radioRecommended: [station(1), station(2)],
@@ -671,13 +699,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // 首次切到电台（推荐 0 → 电台 2，跨过排行榜且电台页首访懒加载）：
-    // 顶栏应保持收起，电台内容推到 52（完全收折距离）而不是顶着 0
+    // 顶栏应保持收起，电台内容推到 48（完全收折距离）而不是顶着 0
     // 把搜索框闪出来。
     await tester.tap(capsuleTab('电台'));
     await tester.pumpAndSettle();
     expect(
       nearestScrollableOf(tester, sectionTitle('推荐电台')).position.pixels,
-      52.0,
+      48.0,
     );
 
     // 再切回推荐、切回电台：依然保持收起。
@@ -687,7 +715,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       nearestScrollableOf(tester, sectionTitle('推荐电台')).position.pixels,
-      52.0,
+      48.0,
     );
   });
 }

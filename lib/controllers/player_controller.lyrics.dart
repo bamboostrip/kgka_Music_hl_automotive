@@ -113,12 +113,16 @@ mixin _PlayerLyrics on _PlayerControllerBase {
         lyrics = fresh;
         notifyListeners();
       }
-      // 写缓存（空歌词也缓存，避免重复请求）
+      // 写缓存（空歌词也缓存，避免重复请求）。写失败要吞掉异常：
+      // write 在平台层 setString 返回 false 时会 throw，unawaited 的
+      // async 错误会逃逸成未处理异常（外层同步 try/catch 接不住）。
       if (cache != null) {
         unawaited(
-          cache.write(cacheKey, {
-            'lines': fresh.map((l) => l.toCache()).toList(),
-          }),
+          cache
+              .write(cacheKey, {
+                'lines': fresh.map((l) => l.toCache()).toList(),
+              })
+              .catchError((Object _) {}),
         );
       }
     } catch (_) {

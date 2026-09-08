@@ -202,7 +202,14 @@ class RankPageState extends SwrSectionState<RankPage, List<RankCategory>>
     if (startedWith.isEmpty) return;
     String keyOf(Song s) => s.hash.isNotEmpty ? s.hash : s.id;
     try {
-      final all = await widget.api.rankAudioAll(rankId: rank.rankId);
+      final fetched = await widget.api.rankAudioAll(rankId: rank.rankId);
+      // 上游对越界页可能重复返回最后一页（replaceQueue 不去重）：
+      // 先按键去重再比较/入队，避免播放队列出现重复歌曲。
+      final seen = <String>{};
+      final all = <Song>[
+        for (final song in fetched)
+          if (seen.add(keyOf(song))) song,
+      ];
       if (!mounted || all.length <= startedWith.length) return;
       final current = widget.player.currentSong;
       final startedKeys = startedWith.map(keyOf).toSet();

@@ -134,7 +134,7 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
         try {
           final data = result.data;
           if (hasContent(data)) {
-            await _adoptRestoredData(data, sidecarFuture);
+            await _adoptRestoredData(data, sidecarFuture, epoch);
             return;
           }
         } catch (_) {
@@ -157,12 +157,14 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
   Future<void> _adoptRestoredData(
     T data,
     Future<void> sidecarFuture,
+    int epoch,
   ) async {
     cachedData = data;
     try {
       await sidecarFuture;
     } catch (_) {}
-    if (!mounted) return;
+    // 等待附加数据期间用户已手动刷新（epoch 变化）：旧缓存不能覆盖新响应。
+    if (!mounted || epoch != _loadEpoch) return;
     setState(() {
       _future = Future.value(data);
     });
@@ -229,10 +231,15 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
     final future = fetchData();
     _future = future;
     setState(() {});
-    // FutureBuilder 已处理错误，这里吞掉异常避免 fire-and-forget 调用方
-    // 产生未处理异常。
     try {
-      await future;
+      final data = await future;
+      // 与 _silentRefresh 对齐：手动刷新拿到的新数据同样落地内存/磁盘缓存，
+      // 否则刷新后离线重启会退回刷新前的旧缓存（旧版 _loadRanks 语义）。
+      if (mounted && epoch == _loadEpoch && hasContent(data)) {
+        cachedData = data;
+        unawaited(_persist(data));
+        onDataArrived(data);
+      }
     } catch (_) {}
     await _runSidecar(sidecarFuture);
     if (!mounted) return;

@@ -15,6 +15,7 @@ class LocalMusicController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     // 扫描在途时销毁控制器：不取消的话，后续扫描事件回调仍会
     // _applyFolderFilter() → notifyListeners()（对已 dispose 的
     // ChangeNotifier，debug 构建抛错）。
@@ -53,6 +54,11 @@ class LocalMusicController extends ChangeNotifier {
   bool _isScanning = false;
   /// 扫描进行中收到根目录增删触发的重扫请求：收尾时补跑一次，避免变更被静默丢弃。
   bool _rescanPending = false;
+  // dispose 后丢弃在途扫描结果/通知：_checkPermission / scanLocalMusic /
+  // _scanDesktopMusic 都有长 await（平台通道、最长 10 分钟的 Rust 扫描），
+  // 恢复执行时若仍 notifyListeners，对已 dispose 的 ChangeNotifier 在
+  // debug 构建抛错（与 DownloadController._disposed 同款防护）。
+  bool _disposed = false;
 
   // 本地专辑封面字节缓存上限（LRU，按插入顺序淘汰最早项）。
   // 50 → 100：封面为压缩字节（常见 500×500 JPEG ≈ 50-200KB），
@@ -155,6 +161,7 @@ class LocalMusicController extends ChangeNotifier {
     try {
       final granted =
           await _channel.invokeMethod<bool>('hasPermission') ?? false;
+      if (_disposed) return;
       _hasPermission = granted;
       notifyListeners();
       if (_hasPermission) {
@@ -170,6 +177,7 @@ class LocalMusicController extends ChangeNotifier {
     try {
       final granted =
           await _channel.invokeMethod<bool>('requestPermission') ?? false;
+      if (_disposed) return granted;
       _hasPermission = granted;
       notifyListeners();
       if (_hasPermission) {
@@ -231,6 +239,7 @@ class LocalMusicController extends ChangeNotifier {
       debugPrint('Error scanning local music: $e');
     }
 
+    if (_disposed) return;
     _isScanning = false;
     notifyListeners();
   }
@@ -353,6 +362,7 @@ class LocalMusicController extends ChangeNotifier {
     if (!isDesktopScanSupported) return;
     if (_desktopRoots.isEmpty) return;
     if (_isScanning) return;
+    if (_disposed) return;
 
     _isScanning = true;
     _scanDone = 0;
@@ -365,6 +375,7 @@ class LocalMusicController extends ChangeNotifier {
       final completer = Completer<void>();
       _scanSubscription = stream.listen(
         (event) {
+          if (_disposed) return;
           final failure = event.failure;
           if (failure != null) {
             debugPrint('LocalMusicController: 桌面扫描失败: $failure');
@@ -403,6 +414,7 @@ class LocalMusicController extends ChangeNotifier {
     await _scanSubscription?.cancel();
     _scanSubscription = null;
     _isScanning = false;
+    if (_disposed) return;
     notifyListeners();
 
     // 扫描期间根目录发生过增删：补跑一次，收敛到最新根目录集合

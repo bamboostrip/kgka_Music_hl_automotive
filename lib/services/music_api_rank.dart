@@ -76,9 +76,10 @@ mixin _MusicApiRank on _MusicApiBase {
     // total 只在服务端真的下发时才有值（未知保持 0）：它被 rankAudioAll /
     // RankDetailPage 用来做分页终止判定，若回退成本页过滤后条数，会把
     // 「本页恰好 N 条」误当「全榜单共 N 条」，第一页就提前终止翻页。
+    // songlist 支持顶层 / data 嵌套两种形态，total 同样需要两处都看。
     final total = raw is List
         ? 0
-        : asInt(asMap(raw)['total']) ?? 0;
+        : asInt(asMap(raw)['total'] ?? asMap(asMap(raw)['data'])['total']) ?? 0;
     return RankSongPage(songs: songs, total: total);
   }
 

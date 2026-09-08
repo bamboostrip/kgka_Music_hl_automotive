@@ -90,7 +90,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   // “本次 offset - 上次 offset”的增量驱动收折，而不是按绝对 offset，
   // 否则深滚时必须滑回顶部才能展开（见 _updateHeaderShrink）。
   final List<double> _prevTabOffsets = <double>[0.0, 0.0, 0.0];
-  // 深滚时顶栏半收折的吸附动画（0<shrink<52 且 offset>52 时松手吸附到端点，
+  // 深滚时顶栏半收折的吸附动画（0<shrink<48 且 offset>48 时松手吸附到端点，
   // 只动顶栏不动内容）。滚动重新开始时取消，避免与跟手增量打架。
   AnimationController? _headerSnapController;
   // 移动端三 tab 自制下拉刷新的下拉距离（px）：顶部下拉时内容顶出空白并
@@ -116,9 +116,11 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   int? _switchTarget;
 
   /// 顶栏完全收折所需的滚动距离：等于 delegate 默认参数下
-  /// maxExtent - minExtent（topMargin 8 + searchBarHeight 36 + spacing 8）。
-  /// 若调整 HomeCollapsibleHeaderDelegate 的默认尺寸需同步更新。
-  static const double _headerCollapseRange = 52.0;
+  /// maxExtent - minExtent = topMargin 8 + searchBarHeight 36 + spacing 8
+  /// - pinnedTopOffset 4 = 48。
+  /// 若调整 HomeCollapsibleHeaderDelegate 的默认尺寸需同步更新
+  ///（home_collapsible_header_test.dart 也断言了该值）。
+  static const double _headerCollapseRange = 48.0;
   // 排行榜 / 电台的刷新入口：双击首页按钮时调用（标题栏刷新按钮已移除）。
   final GlobalKey<RankPageState> _rankKey = GlobalKey<RankPageState>();
   final GlobalKey<_RadioSectionState> _radioKey =
@@ -217,6 +219,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       _pageController.dispose();
       _pageController = PageController(initialPage: _sectionIndex);
       _pageController.addListener(_updateHeaderShrink);
+      // 旧 controller 上的切页飞行已随销毁终止，飞行目标一并作废，
+      // 否则残留标记会在切回竖屏后一直把落地分支顶在地板高度。
+      _switchTarget = null;
       return;
     }
     final target = _sectionIndex;
@@ -238,8 +243,8 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   ///
   /// 规则（对齐 QQ 音乐 / 网易云等常用软件）：
   /// - 静止单页内：顶栏跟手增量驱动——下滑（offset 增大）等量收起，
-  ///   上滑（offset 减小）等量展开。上滑 52px 即可完全展开，无需回到顶部；
-  ///   下滑 52px 再次完全收起。深滚中途同样生效。
+  ///   上滑（offset 减小）等量展开。上滑 48px 即可完全展开，无需回到顶部；
+  ///   下滑 48px 再次完全收起。深滚中途同样生效。
   /// - 为避免内容与顶栏之间出现空白，恒保持 shrink <= offset：
   ///   顶部 offset=0 时顶栏强制完全展开。
   /// - 切页途中（点按动画/手势滑动）与刚落地时：顶栏只许收起不许展开，
@@ -297,6 +302,14 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       return;
     }
     final arrived = page.round().clamp(0, 2);
+    if (_switchTarget != null &&
+        arrived != _switchTarget &&
+        arrived == _sectionIndex) {
+      // 飞行被打断后停在了别的页：点按目标永远不会到达，作废飞行标记。
+      // 否则残留标记让下方落地分支永久生效，落地页被一直 jumpTo 顶在
+      // 地板高度，用户上滑展不开顶栏（正常落地由 _alignTargetPostFrame 清）。
+      _switchTarget = null;
+    }
     if (arrived != _sectionIndex || _switchTarget != null) {
       // 刚落地、状态还没对齐（手势 index 滞后 / 点按目标刚挂载还顶着 0）：
       // 把落地页推到地板高度，顶栏不下拉。
@@ -606,10 +619,16 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     if (!controller.hasClients) return;
     if (controller.offset > _headerCollapseRange + 0.5) return;
     if (controller.offset >= shrink - 0.5) return;
-    final target = shrink.clamp(
-      controller.position.minScrollExtent,
-      controller.position.maxScrollExtent,
-    );
+    double min;
+    double max;
+    try {
+      min = controller.position.minScrollExtent;
+      max = controller.position.maxScrollExtent;
+    } catch (_) {
+      // 还没 layout，读不到滚动范围：跳过，动画中的后续帧会继续对齐。
+      return;
+    }
+    final target = shrink.clamp(min, max);
     if ((controller.offset - target).abs() <= 0.5) return;
     _syncingHeaderOffsets = true;
     try {
@@ -1052,9 +1071,15 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
           // 各 tab 内容列表顶部留白 headerMaxExtent，滚动时内容从顶栏底下
           // 穿过；顶栏收折进度由当前 tab 的内容 offset 派生（切页动画中按
           // 页面位置在相邻 tab 间插值，见 _updateHeaderShrink）。
+          // 移动端强制 Clamping：自制下拉刷新靠 OverscrollNotification 累计
+          // 下拉量，iOS 默认的 BouncingScrollPhysics 从不产生该通知（下拉
+          // 变纯回弹、刷新失效），且负 pixels 与占位 spacer 会双重计距。
+          // 外层 AlwaysScrollableScrollPhysics 保证短内容页也能下拉刷新。
           final tabPhysics = isDesktop
               ? const ClampingScrollPhysics()
-              : const AlwaysScrollableScrollPhysics();
+              : const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                );
           final headerDelegate = HomeCollapsibleHeaderDelegate(
             api: widget.api,
             auth: widget.auth,
@@ -1159,8 +1184,8 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                 }
                 if (notification is ScrollEndNotification) {
                   // 收折吸附分两段，对齐 floating + snap 手感：
-                  // - 浅区（0..52）：内容 offset 本身即顶栏进度，动画内容到端点；
-                  // - 深滚（>52）：顶栏半收折时只吸附顶栏不动内容，上滑一点即现、
+                  // - 浅区（0..48）：内容 offset 本身即顶栏进度，动画内容到端点；
+                  // - 深滚（>48）：顶栏半收折时只吸附顶栏不动内容，上滑一点即现、
                   //   下滑继续隐藏的手感不受影响。
                   // 顶部下拉中（pull>0）不做顶栏吸附，避免跟下拉收合打架。
                   if (pullNotifier.value <= 0.5 && controller.hasClients) {
