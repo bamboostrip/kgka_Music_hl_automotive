@@ -9,6 +9,7 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
+import '../desktop/desktop_window_controls.dart';
 import '../form_factor.dart';
 import '../player/landscape_player.dart';
 import '../player/lyric_views.dart';
@@ -64,82 +65,94 @@ class _PlayerPageState extends State<PlayerPage> {
     // 整页排除语义树：仅桌面 Windows 需要——pop 动画期间 AnimatedBuilder
     // 仍会响应 player notifyListeners 重建子树，导致 AXTree 竞态原生崩溃。
     // 移动端/车机必须保留语义（TalkBack），故按平台门控。
+    Widget body = AnimatedBuilder(
+      animation: widget.player,
+      builder: (context, _) {
+        final song = widget.player.currentSong;
+        if (song == null) {
+          // 防御性空态：正常情况下底栏无歌时不会进播放页，
+          // 万一被外部路由直接打开，也不展示纯空白页。
+          final colorScheme = Theme.of(context).colorScheme;
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            appBar: AppBar(
+              leading: IconButton(
+                tooltip: '返回',
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+            ),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 84,
+                      height: 84,
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: .10),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Icon(
+                        Icons.music_note_rounded,
+                        size: 40,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      '还没有正在播放的歌曲',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '先去挑选一首喜欢的歌曲吧',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.tonal(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      child: const Text('返回'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return _PlayerBody(
+          player: widget.player,
+          auth: widget.auth,
+          song: song,
+          onClose: () => Navigator.of(context).pop(),
+          // 与底栏共用同一队列面板：点当前行只关面板不重播、删歌不重载
+          onQueue: () => showQueueSheet(context, widget.player),
+        );
+      },
+    );
+    // 桌面端播放页是整屏路由，盖住了 DesktopShell 的标题栏：叠加窗口
+    // 控制浮层（拖拽条 + 右上角三键），否则窗口拖不动也关不掉。
+    // 播放页背景是黑色封面，图标用白色。
+    if (isDesktopFormFactor) {
+      body = Stack(
+        children: [
+          body,
+          const DesktopWindowControlsOverlay(iconColor: Colors.white),
+        ],
+      );
+    }
     return ExcludeSemantics(
       excluding: isDesktopPlatform,
-      child: AnimatedBuilder(
-        animation: widget.player,
-        builder: (context, _) {
-          final song = widget.player.currentSong;
-          if (song == null) {
-            // 防御性空态：正常情况下底栏无歌时不会进播放页，
-            // 万一被外部路由直接打开，也不展示纯空白页。
-            final colorScheme = Theme.of(context).colorScheme;
-            return Scaffold(
-              backgroundColor: colorScheme.surface,
-              appBar: AppBar(
-                leading: IconButton(
-                  tooltip: '返回',
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-              ),
-              body: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 84,
-                        height: 84,
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withValues(alpha: .10),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Icon(
-                          Icons.music_note_rounded,
-                          size: 40,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        '还没有正在播放的歌曲',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '先去挑选一首喜欢的歌曲吧',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.tonal(
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        child: const Text('返回'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-
-          return _PlayerBody(
-            player: widget.player,
-            auth: widget.auth,
-            song: song,
-            onClose: () => Navigator.of(context).pop(),
-            // 与底栏共用同一队列面板：点当前行只关面板不重播、删歌不重载
-            onQueue: () => showQueueSheet(context, widget.player),
-          );
-        },
-      ),
+      child: body,
     );
   }
 
@@ -306,7 +319,13 @@ class _PlayerBodyState extends State<_PlayerBody>
                     SafeArea(
                       // 横屏时同样需要处理顶部状态栏和底部系统导航栏（如车机空调控制栏）的遮挡。
                       // 竖屏已由外层 Scaffold 处理，这里对所有方向统一保留 SafeArea。
-                      child: Column(
+                      // 桌面端再给顶部的窗口控制浮层（40px 拖拽条）让位，
+                      // 避免 TopBar 按钮被浮层压在下面。
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: isDesktopFormFactor ? 40 : 0,
+                        ),
+                        child: Column(
                         children: [
                           if (!useSplitLayout)
                             TopBar(
@@ -395,6 +414,7 @@ class _PlayerBodyState extends State<_PlayerBody>
                                   ),
                           ),
                         ],
+                      ),
                       ),
                     ),
                   ],

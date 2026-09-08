@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../controllers/player_controller.dart';
+import 'desktop_window_controls.dart';
 
 /// 桌面沉浸式自定义标题栏。
 ///
@@ -132,11 +133,11 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
             ),
           ),
 
-          // 右侧窗口控制按钮区
+          // 右侧窗口控制按钮区（与全屏页面浮层共用同一套按钮）
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _WindowCaptionButton(
+              DesktopWindowCaptionButton(
                 icon: Icons.remove_rounded,
                 tooltip: '最小化',
                 onTap: () async {
@@ -145,7 +146,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                   } catch (_) {}
                 },
               ),
-              _WindowCaptionButton(
+              DesktopWindowCaptionButton(
                 icon: _isMaximized
                     ? Icons.filter_none_rounded
                     : Icons.crop_square_rounded,
@@ -160,7 +161,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                   } catch (_) {}
                 },
               ),
-              _WindowCaptionButton(
+              DesktopWindowCaptionButton(
                 icon: Icons.close_rounded,
                 tooltip: '关闭',
                 hoverColor: const Color(0xFFE81123),
@@ -176,72 +177,5 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
         ],
       ),
     );
-  }
-}
-
-class _WindowCaptionButton extends StatefulWidget {
-  const _WindowCaptionButton({
-    required this.icon,
-    required this.onTap,
-    this.hoverColor,
-    this.hoverIconColor,
-    this.tooltip,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final Color? hoverColor;
-  final Color? hoverIconColor;
-  final String? tooltip;
-
-  @override
-  State<_WindowCaptionButton> createState() => _WindowCaptionButtonState();
-}
-
-class _WindowCaptionButtonState extends State<_WindowCaptionButton> {
-  bool _isHovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final defaultIconColor = Theme.of(context).colorScheme.onSurfaceVariant;
-    final defaultHoverBg =
-        Theme.of(context).colorScheme.onSurface.withValues(alpha: .08);
-
-    final bgColor = _isHovering
-        ? (widget.hoverColor ?? defaultHoverBg)
-        : Colors.transparent;
-    final iconColor = _isHovering
-        ? (widget.hoverIconColor ?? defaultIconColor)
-        : defaultIconColor;
-
-    Widget button = MouseRegion(
-      onEnter: (_) => setState(() => _isHovering = true),
-      onExit: (_) => setState(() => _isHovering = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: Container(
-          width: 46,
-          height: 40,
-          color: bgColor,
-          alignment: Alignment.center,
-          child: Icon(
-            widget.icon,
-            size: 16,
-            color: iconColor,
-          ),
-        ),
-      ),
-    );
-
-    if (widget.tooltip != null) {
-      button = Tooltip(
-        message: widget.tooltip!,
-        waitDuration: const Duration(milliseconds: 600),
-        child: button,
-      );
-    }
-
-    return button;
   }
 }

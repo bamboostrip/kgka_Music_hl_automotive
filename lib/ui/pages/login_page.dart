@@ -9,6 +9,8 @@ import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/music_api.dart';
+import '../desktop/desktop_window_controls.dart';
+import '../form_factor.dart';
 import '../widgets/toast.dart';
 
 class LoginPage extends StatefulWidget {
@@ -348,11 +350,22 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
+            // 桌面无边框窗口：登录页不在 DesktopShell 内（未登录时整体
+            // 替换 home），没有标题栏就既拖不动也没有最小化/关闭按钮。
+            // 顶部叠加窗口控制浮层（拖拽条 + 右上角三键）。
+            if (isDesktopFormFactor)
+              const DesktopWindowControlsOverlay(),
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(22, 34, 22, 24),
+                    // 桌面端顶部给窗口控制浮层（40px 拖拽条）让位。
+                    padding: EdgeInsets.fromLTRB(
+                      22,
+                      isDesktopFormFactor ? 48 : 34,
+                      22,
+                      24,
+                    ),
                     child: ConstrainedBox(
                       // clamp 防止横屏矮屏下 maxHeight - 58 为负导致断言失败
                       constraints: BoxConstraints(
