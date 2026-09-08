@@ -40,11 +40,19 @@ class _LoginPageState extends State<LoginPage> {
   Timer? _qrPollTimer;
   // 上一次轮询请求尚未返回时跳过本次 tick，避免弱网下请求堆积
   bool _qrPollInFlight = false;
+  // 已扫码等待手机确认：期间不自动轮换二维码（换了 key 会使待确认的
+  // 扫码作废，用户需要重扫）
+  bool _qrScanned = false;
+  // 二维码自动轮换：固定 30 秒换一张新码（未扫码时）。换码瞬间才有
+  // 加载过渡（“闪”），平时轮询状态不再触发任何重建闪烁。
+  Timer? _qrRotateTimer;
+  static const _qrRotateInterval = Duration(seconds: 30);
 
   @override
   void dispose() {
     _codeTimer?.cancel();
     _qrPollTimer?.cancel();
+    _qrRotateTimer?.cancel();
     _mobileController.dispose();
     _codeController.dispose();
     _mobileFocus.dispose();
@@ -218,6 +226,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _loadQrCode() async {
     _qrPollTimer?.cancel();
+    _qrRotateTimer?.cancel();
     setState(() {
       _qrCode = null;
       _qrStatusText = '获取二维码中...';
@@ -227,12 +236,14 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final qr = await widget.api.getQrCode();
       if (!mounted) return;
+      _qrScanned = false;
       setState(() {
         _qrCode = qr;
         _qrLoading = false;
         _qrStatusText = '请使用酷狗音乐App扫码';
       });
       _startQrPolling(qr.key);
+      _startQrRotateTimer();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -242,6 +253,16 @@ class _LoginPageState extends State<LoginPage> {
       });
       _showErrorDialog('获取二维码失败：$e');
     }
+  }
+
+  /// 30 秒自动换码：到期时未扫码则拉新码（连同轮询一起重启）；已扫码
+  /// 等待确认 / 已过期（等用户手动点刷新）则跳过。
+  void _startQrRotateTimer() {
+    _qrRotateTimer?.cancel();
+    _qrRotateTimer = Timer(_qrRotateInterval, () {
+      if (!mounted || _tabIndex != 1 || _qrScanned || _qrExpired) return;
+      _loadQrCode();
+    });
   }
 
   void _startQrPolling(String key) {
@@ -270,17 +291,25 @@ class _LoginPageState extends State<LoginPage> {
         }
         if (result.isExpired) {
           _qrPollTimer?.cancel();
+          _qrRotateTimer?.cancel();
           setState(() {
             _qrStatusText = '二维码已过期，点击刷新';
             _qrExpired = true;
           });
           return;
         }
-        setState(() {
-          _qrStatusText = result.isWaitingForConfirm
-              ? '扫码成功，请在手机上确认'
-              : '请使用酷狗音乐App扫码';
-        });
+        if (result.isWaitingForConfirm) {
+          // 已扫码：停止 30 秒自动换码，避免作废用户待确认的扫码。
+          _qrScanned = true;
+        }
+        // 文案没变化就不 setState：避免每 2 秒无谓重建整页（旧实现里
+        // 这正是二维码持续闪烁的触发源之一）。
+        final text = result.isWaitingForConfirm
+            ? '扫码成功，请在手机上确认'
+            : '请使用酷狗音乐App扫码';
+        if (_qrStatusText != text) {
+          setState(() => _qrStatusText = text);
+        }
       } catch (_) {
         if (!mounted) return;
       } finally {
@@ -345,8 +374,9 @@ class _LoginPageState extends State<LoginPage> {
                                   if (i == 1) {
                                     _loadQrCode();
                                   } else {
-                                    // 切回手机号登录时停止二维码轮询
+                                    // 切回手机号登录时停止二维码轮询与自动换码
                                     _qrPollTimer?.cancel();
+                                    _qrRotateTimer?.cancel();
                                   }
                                 },
                               ),
@@ -1111,6 +1141,28 @@ class _QrImageState extends State<_QrImage> {
   String? _detectedUrl;
   bool _inverted = false;
 
+  // data URI 的解析/解码结果按 URL 缓存，同一 URL 重建时复用同一个
+  // Uint8List 对象：MemoryImage 按 bytes 的对象身份判等，每次 build
+  // 重新 contentAsBytes() 会产生新对象，Image 就当成“换了新图”重新
+  // 解析图片流；gaplessPlayback 默认 false 时旧帧先被丢弃，二维码随
+  // 状态轮询的 setState 每 2 秒白闪一次。
+  String? _dataUrl;
+  UriData? _uriData;
+  Uint8List? _uriBytes;
+
+  void _refreshDataCache(String url) {
+    if (_dataUrl == url) return;
+    _dataUrl = url;
+    final uri = Uri.tryParse(url);
+    _uriData = uri?.data;
+    _uriBytes = null;
+    final data = _uriData;
+    if (data != null) {
+      final bytes = data.contentAsBytes();
+      _uriBytes = bytes.isEmpty ? null : bytes;
+    }
+  }
+
   void _ensureDetected(String url, Uint8List bytes) {
     if (_detectedUrl == url) return;
     _detectedUrl = url;
@@ -1153,10 +1205,12 @@ class _QrImageState extends State<_QrImage> {
     if (uri == null) return fallback();
 
     // data:image/png;base64,... -> 解码字节后用 Image.memory 渲染
-    final data = uri.data;
+    // （解码结果按 URL 缓存，见 _refreshDataCache 注释）
+    _refreshDataCache(widget.imageUrl);
+    final data = _uriData;
+    final bytes = _uriBytes;
     if (data != null) {
-      final bytes = data.contentAsBytes();
-      if (bytes.isEmpty) return fallback();
+      if (bytes == null) return fallback();
       _ensureDetected(widget.imageUrl, bytes);
       Widget image = Image.memory(
         bytes,
@@ -1165,6 +1219,8 @@ class _QrImageState extends State<_QrImage> {
         fit: BoxFit.contain,
         cacheWidth: (widget.size * 2).ceil().clamp(1, 512),
         cacheHeight: (widget.size * 2).ceil().clamp(1, 512),
+        // 换码时旧帧保留到新帧解码完成，无空白闪烁
+        gaplessPlayback: true,
         errorBuilder: (_, _, _) => fallback(),
       );
       if (_inverted) {
@@ -1181,6 +1237,7 @@ class _QrImageState extends State<_QrImage> {
         fit: BoxFit.contain,
         cacheWidth: (widget.size * 2).ceil().clamp(1, 512),
         cacheHeight: (widget.size * 2).ceil().clamp(1, 512),
+        gaplessPlayback: true,
         errorBuilder: (_, _, _) => fallback(),
       ),
     );
