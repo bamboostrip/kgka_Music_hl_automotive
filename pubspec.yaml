@@ -53,6 +53,7 @@ dependencies:
   connectivity_plus: ^7.3.1
   local_notifier: ^0.1.6
   launch_at_startup: ^0.3.1
+  flutter_svg: ^2.2.0
 
 dev_dependencies:
   flutter_test:
@@ -79,4 +80,5 @@ flutter:
   assets:
     - update.md
     - lib/assets/logo.png
+    - lib/assets/logo_line.svg
     - lib/assets/app_icon.ico

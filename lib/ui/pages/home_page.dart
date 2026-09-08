@@ -14,7 +14,6 @@ import '../../models/music_models.dart';
 import '../../services/app_update_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
-import '../../services/network_monitor.dart';
 import '../adaptive_layout.dart';
 import '../form_factor.dart';
 import '../widgets/app_update_widgets.dart';
@@ -23,6 +22,8 @@ import '../widgets/cover_play_overlay.dart';
 import '../widgets/home_collapsible_header.dart';
 import '../widgets/home_song_row.dart';
 import '../widgets/horizontal_wheel_scroll.dart';
+import '../widgets/refresh_equalizer.dart';
+import '../widgets/swr_section_state.dart';
 import '../widgets/toast.dart';
 import '../player/song_tap_handler.dart';
 import 'artist_detail_page.dart';
@@ -64,52 +65,56 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> {
-  static _HomeData? _cachedData;
+class HomePageState extends SwrSectionState<HomePage, HomeData>
+    with TickerProviderStateMixin {
+  static HomeData? _cachedData;
   static bool _hasAutoPlayed = false;
 
   final ScrollController _scrollController = ScrollController();
-  // 非车机三 tab 顶部描点：双击首页按钮时用 Scrollable.ensureVisible 回到对应 tab
-  // 顶部（内层滚动由 NestedScrollView 协调，不能自配 ScrollController）。
-  final GlobalKey _recommendTopKey = GlobalKey();
+  // 非车机三 tab 内容列表各自的滚动控制器。顶栏（搜索栏 + 标签栏）是
+  // 页面层固定组件（Stack 覆盖在 PageView 之上，见 build）：横向切页时
+  // 顶栏纹丝不动，只有内容区随页面切换；顶栏收折进度由各 tab 的内容
+  // 滚动 offset 派生（见 _updateHeaderShrink），不再需要 NestedScrollView
+  // 外层 offset 镜像。
+  final List<ScrollController> _tabControllers = List.generate(
+    3,
+    (_) => ScrollController(),
+  );
+  // 顶栏收折进度（0 = 完全展开，_headerCollapseRange = 完全收折）：
+  // 只驱动顶栏自身的重绘，切页/滚动都不触发整页 setState。
+  final ValueNotifier<double> _headerShrink = ValueNotifier<double>(0.0);
+
+  /// 顶栏完全收折所需的滚动距离：等于 delegate 默认参数下
+  /// maxExtent - minExtent（topMargin 8 + searchBarHeight 36 + spacing 8）。
+  /// 若调整 HomeCollapsibleHeaderDelegate 的默认尺寸需同步更新。
+  static const double _headerCollapseRange = 52.0;
   // 排行榜 / 电台的刷新入口：双击首页按钮时调用（标题栏刷新按钮已移除）。
   final GlobalKey<RankPageState> _rankKey = GlobalKey<RankPageState>();
   final GlobalKey<_RadioSectionState> _radioKey =
       GlobalKey<_RadioSectionState>();
 
-  Future<_HomeData>? _future;
   late final AppUpdateService _updateService;
   AppVersionInfo? _availableUpdate;
   var _sectionIndex = 0;
   var _updateBannerDismissed = false;
   var _autoUpdateDialogShown = false;
-  StreamSubscription<void>? _networkRestoredSub;
-  bool _silentRefreshing = false;
-  late final PageController _pageController;
+  late PageController _pageController;
+  // 车机/竖屏形态切换记忆：车机模式下 PageView 离树，PageController 会丢失
+  // 当前页（重建时回退到 initialPage=0 即推荐页）。记录上帧形态，
+  // 车机切回竖屏时用 _sectionIndex 重建控制器，保证回到对应 tab。
+  bool? _lastIsCarMode;
 
   @override
   void initState() {
     super.initState();
     _sectionIndex = widget.sectionIndex;
     _pageController = PageController(initialPage: _sectionIndex);
-    _updateService = AppUpdateService();
-    final cached = _cachedData;
-    if (cached != null) {
-      _future = Future.value(cached);
-      _checkAndAutoPlay(cached);
-      // 有缓存数据，立即显示并后台静默刷新
-      _silentRefresh();
-    } else if (!widget.auth.isRestoring) {
-      _future = _load();
-    } else {
-      _tryRestoreFromCache();
+    _pageController.addListener(_updateHeaderShrink);
+    for (final controller in _tabControllers) {
+      controller.addListener(_updateHeaderShrink);
     }
+    _updateService = AppUpdateService();
     widget.auth.addListener(_handleAuthChanged);
-    // 断网进入首页时会停留在缓存歌曲上（静默刷新失败被吞掉），且缓存
-    // 内容可能与线上不同；恢复网络后重新拉取，让首页与线上同步。
-    _networkRestoredSub = NetworkMonitor.instance.onConnectivityRestored.listen(
-      (_) => _silentRefresh(),
-    );
     if (AppUpdateService.isSupportedPlatform) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     }
@@ -119,6 +124,7 @@ class HomePageState extends State<HomePage> {
   void didUpdateWidget(HomePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionIndex != widget.sectionIndex) {
+      // 外部切换 tab（如侧栏/底部导航）。
       _sectionIndex = widget.sectionIndex;
       if (_pageController.hasClients &&
           _pageController.page?.round() != widget.sectionIndex) {
@@ -135,21 +141,112 @@ class HomePageState extends State<HomePage> {
   void dispose() {
     _pageController.dispose();
     _scrollController.dispose();
-    _networkRestoredSub?.cancel();
+    for (final controller in _tabControllers) {
+      controller.dispose();
+    }
+    _headerShrink.dispose();
     widget.auth.removeListener(_handleAuthChanged);
     super.dispose();
+  }
+
+  /// 车机/竖屏形态切换时同步 PageView 到 [_sectionIndex]。
+  ///
+  /// 根因：竖屏三 tab 靠 PageView + PageController 承载，车机模式下
+  /// PageView 离树（改用单 CustomScrollView + _PersistentTabPane），
+  /// controller 失活；切回竖屏时新 PageView 会用创建时的 initialPage
+  ///（多为 0=推荐）重建，而不是当前 [_sectionIndex]（如 1=排行榜），
+  /// 于是从排行榜进车机再缩回会闪回推荐页。
+  /// 此处在车机→竖屏的首帧同步重建控制器（无闪烁），已挂载的极端
+  /// 情况降级为 post-frame jumpToPage。
+  void _syncPageControllerForMode(bool isCarMode) {
+    if (_lastIsCarMode == null) {
+      _lastIsCarMode = isCarMode;
+      return;
+    }
+    if (_lastIsCarMode == isCarMode) return;
+    final wasCarMode = _lastIsCarMode!;
+    _lastIsCarMode = isCarMode;
+    // 仅处理车机→竖屏：竖屏→车机时 PageView 即将离树，无需动 controller。
+    if (!wasCarMode || isCarMode) return;
+    if (!_pageController.hasClients &&
+        _pageController.initialPage != _sectionIndex) {
+      // 首帧同步重建：新 PageView 直接落在对应 tab，无“推荐闪一下”；
+      // 旧 controller 无挂载，dispose 安全。
+      _pageController.dispose();
+      _pageController = PageController(initialPage: _sectionIndex);
+      _pageController.addListener(_updateHeaderShrink);
+      return;
+    }
+    final target = _sectionIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pageController.hasClients &&
+          _pageController.page?.round() != target) {
+        _pageController.jumpToPage(target);
+      }
+    });
+  }
+
+  /// 由三 tab 内容滚动位置推导顶栏收折进度。
+  ///
+  /// 顶栏是页面层固定组件，不再随 PageView 横向平移；切页动画过程中按
+  /// PageView 的页面位置在相邻两 tab 的内容 offset 之间线性插值，使顶栏
+  /// 高度在「当前页收折态 → 目标页收折态」之间平滑过渡。任一 tab 滚动或
+  /// PageView 翻页都会触发本函数（listener），只更新 ValueNotifier，
+  /// 不 setState。
+  void _updateHeaderShrink() {
+    if (!mounted) return;
+    var page = _sectionIndex.toDouble();
+    if (_pageController.hasClients &&
+        _pageController.position.haveDimensions) {
+      page = (_pageController.page ?? page).clamp(0.0, 2.0);
+    }
+    final i = page.floor().clamp(0, 2);
+    final j = (i + 1).clamp(0, 2);
+    final t = (page - i).clamp(0.0, 1.0);
+    double offsetOf(int index) {
+      final controller = _tabControllers[index];
+      return controller.hasClients ? controller.offset : 0.0;
+    }
+
+    final offset = offsetOf(i) + (offsetOf(j) - offsetOf(i)) * t;
+    final shrink = offset.clamp(0.0, _headerCollapseRange);
+    if ((_headerShrink.value - shrink).abs() > 0.1) {
+      _headerShrink.value = shrink;
+    }
   }
 
   /// 当前子 tab 对应的刷新入口：双击首页与桌面头部刷新按钮共用同一语义。
   Future<void> _refreshCurrentSection() => switch (_sectionIndex) {
         1 => _rankKey.currentState?.refresh() ?? Future<void>.value(),
         2 => _radioKey.currentState?.refresh() ?? Future<void>.value(),
-        _ => _refresh(),
+        _ => refresh(),
       };
+
+  /// 判定滚动的阈值（px）：超过即认为用户已在本页下滑。
+  static const double _tapRefreshScrollThreshold = 8.0;
+
+  /// 顶部胶囊 tab 点击：点到其它 tab 只切换（各 tab 内容状态靠 KeepAlive
+  /// 保留，不刷新）；点中当前 tab 则无条件回顶刷新（含顶部均衡器动画）。
+  void _handleSectionTap(int value, {required bool animatePage}) {
+    if (value == _sectionIndex) {
+      unawaited(scrollToTopAndRefresh());
+      return;
+    }
+    setState(() => _sectionIndex = value);
+    widget.onTabSwitch?.call(value + 1);
+    if (animatePage && _pageController.hasClients) {
+      _pageController.animateToPage(
+        value,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
 
   /// 双击底部首页按钮：回到当前 tab 顶部并且刷新对应内容。
   /// 推荐 tab 刷新推荐流，排行榜 / 电台 tab 刷新各自内容（标题栏刷新按钮已移除，
-  /// 统一收敛到这里）。
+  /// 统一收敛到这里）。车机顶栏点中当前 tab 同样走这里（含均衡器动画）。
   Future<void> scrollToTopAndRefresh() async {
     final size = MediaQuery.sizeOf(context);
     final isCarMode =
@@ -164,24 +261,17 @@ class HomePageState extends State<HomePage> {
         );
       }
     } else {
-      // 移动端 NestedScrollView：内层滚动由协调器接管，用描点回到对应 tab 顶部，
-      // 会连带把外层折叠头一并展开。
-      final anchor = switch (_sectionIndex) {
-        1 => _rankKey,
-        2 => _radioKey,
-        _ => _recommendTopKey,
-      };
-      final anchorContext = anchor.currentContext;
-      if (anchorContext != null) {
+      // 内容回顶；顶栏收折进度由内容 offset 派生，随动画自动展开。
+      final controller = _tabControllers[_sectionIndex];
+      if (controller.hasClients) {
         try {
-          await Scrollable.ensureVisible(
-            anchorContext,
-            duration: const Duration(milliseconds: 350),
+          await controller.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            alignment: 0.0,
           );
         } catch (_) {
-          // 描点不可见时退化为仅刷新，不抛错。
+          // 滚动中页面已销毁时忽略。
         }
       }
     }
@@ -189,19 +279,23 @@ class HomePageState extends State<HomePage> {
     await _refreshCurrentSection();
   }
 
+  /// 车机模式是否已滚动（单滚动容器偏离顶部即算）。
+  /// 供车机顶栏点中当前 tab 时判断，未滚动则什么都不做。
+  bool get isCarScrolled {
+    if (!mounted) return false;
+    return _scrollController.hasClients &&
+        _scrollController.offset > _tapRefreshScrollThreshold;
+  }
+
   void _handleAuthChanged() {
     if (widget.auth.isRestoring || !widget.auth.isLoggedIn) {
       return;
     }
-    // 首次加载（无缓存）或 auth 恢复完成后触发加载
-    if (_future == null) {
-      setState(() {
-        _future = _load();
-      });
-    }
+    // 首次加载（无缓存）或 auth 恢复完成后触发加载（已有数据则基类忽略）。
+    loadIfNeverLoaded();
   }
 
-  void _checkAndAutoPlay(_HomeData data) {
+  void _checkAndAutoPlay(HomeData data) {
     if (!widget.player.autoPlayOnStartupEnabled || _hasAutoPlayed) return;
     _hasAutoPlayed = true;
 
@@ -241,104 +335,26 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  /// 后台静默刷新首页数据。
-  ///
-  /// 先从缓存显示（已在 initState/_tryRestoreFromCache 中完成），
-  /// 然后后台请求最新数据，成功后更新 UI，失败则保持缓存数据。
-  Future<void> _silentRefresh() async {
-    // 网络恢复事件可能与启动时的静默刷新重叠，避免并发请求。
-    if (_silentRefreshing) return;
-    _silentRefreshing = true;
-    try {
-      final results = await Future.wait([
-        widget.api.dailyRecommend(),
-        widget.api.recommendedPlaylists(),
-        _loadTopSongsSafe(),
-      ]);
-      if (!mounted) return;
-      final data = _HomeData(
-        daily: results[0] as DailyRecommend,
-        playlists: results[1] as List<PlaylistSummary>,
-        topSongs: results[2] as List<Song>,
-      );
-      _cachedData = data;
-      await _persistHomeCache(data);
-      if (!mounted) return;
-      _checkAndAutoPlay(data);
-      setState(() {
-        _future = Future.value(data);
-      });
-    } catch (_) {
-      // 静默刷新失败，保持缓存数据不变
-    } finally {
-      _silentRefreshing = false;
-    }
-  }
+  // ---------------- SWR 数据钩子（骨架见 SwrSectionState） ----------------
 
-  /// 缓存写入失败只记日志，不影响已拿到的网络数据上屏（对齐 RankPage._persistRanks）。
-  Future<void> _persistHomeCache(_HomeData data) async {
-    try {
-      await widget.cache.write('cache_home', {
-        'daily': data.daily.toCache(),
-        'playlists': data.playlists.map((p) => p.toCache()).toList(),
-        'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
-      });
-    } catch (_) {
-      // 磁盘缓存写失败不丢弃网络数据。
-    }
-  }
+  @override
+  CacheService get cache => widget.cache;
 
-  Future<_HomeData> _load() async {
-    final results = await Future.wait([
-      widget.api.dailyRecommend(),
-      widget.api.recommendedPlaylists(),
-      _loadTopSongsSafe(),
-    ]);
-    final data = _HomeData(
-      daily: results[0] as DailyRecommend,
-      playlists: results[1] as List<PlaylistSummary>,
-      topSongs: results[2] as List<Song>,
-    );
-    _cachedData = data;
-    await _persistHomeCache(data);
-    _checkAndAutoPlay(data);
-    return data;
-  }
+  @override
+  HomeData? get cachedData => _cachedData;
 
-  Future<void> _tryRestoreFromCache() async {
-    final cached = await widget.cache.read<Map<String, dynamic>>(
-      'cache_home',
-      decode: (json) => json,
-      ttl: AppConfig.homeCacheTtl,
-    );
-    if (!mounted || _future != null) return;
-    if (cached != null) {
-      try {
-        final data = _homeDataFromCache(cached.data);
-        _cachedData = data;
-        _checkAndAutoPlay(data);
-        setState(() {
-          _future = Future.value(data);
-        });
-        // 缓存数据已显示，后台静默刷新
-        _silentRefresh();
-      } catch (_) {
-        // 缓存损坏时回退到网络加载，避免首页停留在骨架屏。
-        if (!mounted) return;
-        setState(() {
-          _future = _load();
-        });
-      }
-    } else {
-      // 无缓存数据，直接从网络加载
-      setState(() {
-        _future = _load();
-      });
-    }
-  }
+  @override
+  set cachedData(HomeData? value) => _cachedData = value;
 
-  _HomeData _homeDataFromCache(Map<String, dynamic> json) {
-    return _HomeData(
+  @override
+  String get cacheKey => 'cache_home';
+
+  @override
+  Duration get cacheTtl => AppConfig.homeCacheTtl;
+
+  @override
+  HomeData decodeCache(Map<String, dynamic> json) {
+    return HomeData(
       daily: DailyRecommend.fromCache(json['daily'] as Map<String, dynamic>),
       playlists: (json['playlists'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -352,17 +368,37 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _refresh() async {
-    final future = _load();
-    setState(() {
-      _future = future;
-    });
-    // FutureBuilder 各自处理错误，这里只需等待完成，忽略异常，
-    // 避免刷新按钮/下拉刷新/网络恢复监听等 fire-and-forget 调用产生未处理异常。
-    try {
-      await future;
-    } catch (_) {}
+  @override
+  Map<String, dynamic> encodeCache(HomeData data) => {
+        'daily': data.daily.toCache(),
+        'playlists': data.playlists.map((p) => p.toCache()).toList(),
+        'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
+      };
+
+  /// 三个板块是否至少有一个非空：全空说明多半是接口异常的静默空数据，
+  /// 不应写入/覆盖内存与磁盘缓存。
+  @override
+  bool hasContent(HomeData data) =>
+      data.daily.songs.isNotEmpty ||
+      data.playlists.isNotEmpty ||
+      data.topSongs.isNotEmpty;
+
+  @override
+  Future<HomeData> fetchData() async {
+    final results = await Future.wait([
+      widget.api.dailyRecommend(),
+      widget.api.recommendedPlaylists(),
+      _loadTopSongsSafe(),
+    ]);
+    return HomeData(
+      daily: results[0] as DailyRecommend,
+      playlists: results[1] as List<PlaylistSummary>,
+      topSongs: results[2] as List<Song>,
+    );
   }
+
+  @override
+  void onDataArrived(HomeData data) => _checkAndAutoPlay(data);
 
   Future<void> _checkForUpdates() async {
     try {
@@ -555,18 +591,22 @@ class HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_HomeData>(
-      future: _future,
+    return FutureBuilder<HomeData>(
+      future: sectionFuture,
       builder: (context, snapshot) {
         final data = snapshot.data ?? _cachedData;
         // 桌面端：无下拉刷新手势（PC 无此惯例），滚动物理用桌面常规；
-        // 数据重载入口改为页头刷新按钮（复用 _refresh 同一逻辑）。
-        // 移动端 / 车机端：RefreshIndicator + AlwaysScrollable 原样。
+        // 数据重载入口改为页头刷新按钮（复用 refresh 同一逻辑）。
+        // 移动端：RefreshIndicator + AlwaysScrollable 原样。
+        // 车机端：无 RefreshIndicator 小圆圈，刷新统一走顶栏点中当前 tab，
+        // 反馈与移动端一致用顶部均衡器动画（RefreshEqualizer）。
         final isDesktop = isDesktopFormFactor;
         final size = MediaQuery.sizeOf(context);
         final topPadding = MediaQuery.paddingOf(context).top;
         final isLandscape = size.width > size.height;
         final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
+        // 车机↔竖屏切换时把 PageView 对齐到当前子 tab，避免缩回时掉回推荐页。
+        _syncPageControllerForMode(isCarMode);
 
         Widget content;
         if (data == null) {
@@ -578,7 +618,7 @@ class HomePageState extends State<HomePage> {
                   hasScrollBody: false,
                   child: _ErrorView(
                     message: snapshot.error.toString(),
-                    onRetry: _refresh,
+                    onRetry: refresh,
                   ),
                 ),
               ],
@@ -590,180 +630,232 @@ class HomePageState extends State<HomePage> {
             );
           }
         } else if (!isCarMode) {
-          content = NestedScrollView(
-            controller: _scrollController,
-            physics: isDesktop
-                ? const ClampingScrollPhysics()
-                : const AlwaysScrollableScrollPhysics(),
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: HomeCollapsibleHeaderDelegate(
-                    api: widget.api,
-                    auth: widget.auth,
-                    player: widget.player,
-                    sectionIndex: _sectionIndex,
-                    // 胶囊指示器直接监听 PageController：滑动过程中只重建
-                    // 头部内的小胶囊条，不再每像素 setState 整棵首页子树。
-                    pageTracker: _pageController,
-                    onSectionChanged: (value) {
-                      if (value == -1) {
-                        widget.onTabSwitch?.call(0);
-                      } else {
-                        setState(() {
-                          _sectionIndex = value;
-                        });
-                        widget.onTabSwitch?.call(value + 1);
-                        if (_pageController.hasClients) {
-                          _pageController.animateToPage(
-                            value,
-                            duration: const Duration(milliseconds: 260),
-                            curve: Curves.easeOutCubic,
-                          );
-                        }
-                      }
-                    },
-                    onRefresh: isDesktop ? _refreshCurrentSection : null,
-                    topPadding: topPadding,
+          // 顶栏（搜索栏 + 标签栏）是页面层固定组件：Stack 覆盖在 PageView
+          // 之上，横向切页时顶栏纹丝不动，只有下方内容区随页面切换。
+          // 各 tab 内容列表顶部留白 headerMaxExtent，滚动时内容从顶栏底下
+          // 穿过；顶栏收折进度由当前 tab 的内容 offset 派生（切页动画中按
+          // 页面位置在相邻 tab 间插值，见 _updateHeaderShrink）。
+          final tabPhysics = isDesktop
+              ? const ClampingScrollPhysics()
+              : const AlwaysScrollableScrollPhysics();
+          final headerDelegate = HomeCollapsibleHeaderDelegate(
+            api: widget.api,
+            auth: widget.auth,
+            player: widget.player,
+            sectionIndex: _sectionIndex,
+            // 胶囊指示器直接监听 PageController：滑动过程中只重建头部内
+            // 的小胶囊条，不再每像素 setState 整棵首页子树。
+            pageTracker: _pageController,
+            vsync: this,
+            onSectionChanged: (value) {
+              if (value == -1) {
+                widget.onTabSwitch?.call(0);
+              } else {
+                _handleSectionTap(value, animatePage: true);
+              }
+            },
+            onRefresh: isDesktop ? _refreshCurrentSection : null,
+            topPadding: topPadding,
+          );
+          final headerMaxExtent = headerDelegate.maxExtent;
+
+          Widget tabScrollView({
+            required ScrollController controller,
+            required PageStorageKey<String> bodyKey,
+            required List<Widget> slivers,
+          }) {
+            return NotificationListener<ScrollEndNotification>(
+              onNotification: (notification) {
+                // 收折吸附：松手时收折到一半则动画到最近端点，对齐旧
+                // SliverPersistentHeader floating + snap 的手感。
+                if (controller.hasClients) {
+                  final offset = controller.offset;
+                  if (offset > 0 && offset < _headerCollapseRange) {
+                    final target = offset < _headerCollapseRange / 2
+                        ? 0.0
+                        : _headerCollapseRange;
+                    unawaited(
+                      controller.animateTo(
+                        target,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutCubic,
+                      ),
+                    );
+                  }
+                }
+                return false;
+              },
+              child: CustomScrollView(
+                key: bodyKey,
+                controller: controller,
+                physics: tabPhysics,
+                slivers: [
+                  // 顶部留白 = 顶栏完全展开的高度：内容从顶栏底下穿过。
+                  SliverPadding(
+                    padding: EdgeInsets.only(top: headerMaxExtent),
                   ),
-                ),
-                if (_availableUpdate != null && !_updateBannerDismissed)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: AppUpdateBanner(
-                        version: _availableUpdate!,
-                        onTap: _showUpdateDetails,
-                        onClose: () =>
-                            setState(() => _updateBannerDismissed = true),
+                  if (_availableUpdate != null && !_updateBannerDismissed)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: AppUpdateBanner(
+                          version: _availableUpdate!,
+                          onTap: _showUpdateDetails,
+                          onClose: () =>
+                              setState(() => _updateBannerDismissed = true),
+                        ),
                       ),
                     ),
-                  ),
-              ];
-            },
-            body: PageView(
-              key: const Key('home_tabs_page_view'),
-              controller: _pageController,
-              onPageChanged: (index) {
-                setState(() {
-                  _sectionIndex = index;
-                });
-                widget.onTabSwitch?.call(index + 1);
-              },
-              children: [
-                // Tab 0: 推荐
-                _HomeTabKeepAlive(
-                  child: CustomScrollView(
-                    key: const PageStorageKey<String>('home_tab_recommend'),
-                    physics: isDesktop
-                        ? const ClampingScrollPhysics()
-                        : const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          key: _recommendTopKey,
-                          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                          child: _FeatureShelf(
-                            daily: data.daily,
-                            onDailyPlay: () {
-                              final songs = data.daily.songs;
-                              if (songs.isNotEmpty) {
-                                widget.player.playSong(
-                                  songs.first,
-                                  queue: songs,
-                                );
-                              }
-                            },
-                            onDailyTap: () =>
-                                _openDailyRecommend(data.daily),
-                          ),
+                  ...slivers,
+                ],
+              ),
+            );
+          }
+
+          content = Stack(
+            children: [
+              PageView(
+                key: const Key('home_tabs_page_view'),
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    _sectionIndex = index;
+                  });
+                  widget.onTabSwitch?.call(index + 1);
+                },
+                children: [
+              // Tab 0: 推荐
+              _HomeTabKeepAlive(
+                child: tabScrollView(
+                  controller: _tabControllers[0],
+                  bodyKey:
+                      const PageStorageKey<String>('home_tab_recommend'),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: RefreshEqualizer(
+                        visible: showRefreshEqualizer,
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                        child: _FeatureShelf(
+                          daily: data.daily,
+                          onDailyPlay: () {
+                            final songs = data.daily.songs;
+                            if (songs.isNotEmpty) {
+                              widget.player.playSong(
+                                songs.first,
+                                queue: songs,
+                              );
+                            }
+                          },
+                          onDailyTap: () =>
+                              _openDailyRecommend(data.daily),
                         ),
                       ),
-                      SliverToBoxAdapter(
-                        child: _SongSection(
-                          title: '大家都在听',
-                          songs: data.daily.songs,
-                          onPlay: _playSong,
-                          isLiked: (song) => widget.auth.isLiked(song),
-                          onLikeTap: (song) => widget.auth.toggleLike(song),
-                          auth: widget.auth,
-                          player: widget.player,
-                          onViewArtist: _openArtist,
-                        ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: _SongSection(
+                        key: ValueKey('song_section_$railResetEpoch'),
+                        title: '大家都在听',
+                        songs: data.daily.songs,
+                        onPlay: _playSong,
+                        isLiked: (song) => widget.auth.isLiked(song),
+                        onLikeTap: (song) =>
+                            widget.auth.toggleLike(song),
+                        auth: widget.auth,
+                        player: widget.player,
+                        onViewArtist: _openArtist,
                       ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: _PlaylistRail(
+                        key: ValueKey('playlist_rail_$railResetEpoch'),
+                        playlists: data.playlists,
+                        onTap: _openPlaylist,
+                        onPlay: _playPlaylist,
+                        onTapTitle: () =>
+                            _openRecommendedPlaylists(data.playlists),
+                      ),
+                    ),
+                    if (data.topSongs.isNotEmpty)
                       SliverToBoxAdapter(
-                        child: _PlaylistRail(
-                          playlists: data.playlists,
-                          onTap: _openPlaylist,
-                          onPlay: _playPlaylist,
+                        child: _TopSongRail(
+                          key: ValueKey('topsong_rail_$railResetEpoch'),
+                          songs: data.topSongs,
+                          onPlay: (song) =>
+                              _playSong(song, data.topSongs),
                           onTapTitle: () =>
-                              _openRecommendedPlaylists(data.playlists),
+                              _openTopSongs(data.topSongs),
                         ),
                       ),
-                      if (data.topSongs.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: _TopSongRail(
-                            songs: data.topSongs,
-                            onPlay: (song) =>
-                                _playSong(song, data.topSongs),
-                            onTapTitle: () =>
-                                _openTopSongs(data.topSongs),
-                          ),
-                        ),
-                      SliverToBoxAdapter(
-                        child: SizedBox(height: isDesktop ? 24 : 166),
-                      ),
-                    ],
-                  ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: isDesktop ? 24 : 166),
+                    ),
+                  ],
                 ),
-                // Tab 1: 排行榜
-                _HomeTabKeepAlive(
-                  child: CustomScrollView(
-                    key: const PageStorageKey<String>('home_tab_rank'),
-                    physics: isDesktop
-                        ? const ClampingScrollPhysics()
-                        : const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: RankPage(
-                          key: _rankKey,
-                          api: widget.api,
-                          auth: widget.auth,
-                          player: widget.player,
-                          cache: widget.cache,
-                        ),
+              ),
+              // Tab 1: 排行榜
+              _HomeTabKeepAlive(
+                child: tabScrollView(
+                  controller: _tabControllers[1],
+                  bodyKey: const PageStorageKey<String>('home_tab_rank'),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: RankPage(
+                        key: _rankKey,
+                        api: widget.api,
+                        auth: widget.auth,
+                        player: widget.player,
+                        cache: widget.cache,
                       ),
-                      SliverToBoxAdapter(
-                        child: SizedBox(height: isDesktop ? 24 : 166),
-                      ),
-                    ],
-                  ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: isDesktop ? 24 : 166),
+                    ),
+                  ],
                 ),
-                // Tab 2: 电台
-                _HomeTabKeepAlive(
-                  child: CustomScrollView(
-                    key: const PageStorageKey<String>('home_tab_radio'),
-                    physics: isDesktop
-                        ? const ClampingScrollPhysics()
-                        : const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _RadioSection(
-                          key: _radioKey,
-                          api: widget.api,
-                          player: widget.player,
-                          cache: widget.cache,
-                        ),
+              ),
+              // Tab 2: 电台
+              _HomeTabKeepAlive(
+                child: tabScrollView(
+                  controller: _tabControllers[2],
+                  bodyKey: const PageStorageKey<String>('home_tab_radio'),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _RadioSection(
+                        key: _radioKey,
+                        api: widget.api,
+                        player: widget.player,
+                        cache: widget.cache,
                       ),
-                      SliverToBoxAdapter(
-                        child: SizedBox(height: isDesktop ? 24 : 166),
-                      ),
-                    ],
-                  ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: isDesktop ? 24 : 166),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+                ],
+              ),
+              // 页面层固定顶栏：覆盖在 PageView 之上，横向切页时固定不动；
+              // 收折进度由 _headerShrink 驱动（当前 tab 内容 offset 派生）。
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _headerShrink,
+                  builder: (context, shrink, _) =>
+                      HomeCollapsibleHeaderView(
+                        delegate: headerDelegate,
+                        shrinkOffset: shrink,
+                      ),
+                ),
+              ),
+            ],
           );
         } else {
           // 车机模式：保留原有车机定制滚动与卡片布局
@@ -773,6 +865,16 @@ class HomePageState extends State<HomePage> {
                 ? const ClampingScrollPhysics()
                 : const AlwaysScrollableScrollPhysics(),
             slivers: [
+              // 均衡器置顶（与移动端各 tab 首个 sliver 对齐）：推荐/排行/电台
+              // 刷新时都在内容最顶部展示。之前它藏在推荐 pane 内，被头部大卡
+              // （猜你喜欢 + 统计 pills）顶到首屏之外，看起来像推荐页没有刷新。
+              // 这里只响应首页自身的刷新（推荐）；排行/电台刷新时本标志为 false，
+              // 各自 pane 内的均衡器负责展示，不会重复。
+              SliverToBoxAdapter(
+                child: RefreshEqualizer(
+                  visible: showRefreshEqualizer,
+                ),
+              ),
               SliverToBoxAdapter(
                 child: _RecommendHeader(
                   auth: widget.auth,
@@ -782,8 +884,7 @@ class HomePageState extends State<HomePage> {
                     if (value == -1) {
                       widget.onTabSwitch?.call(0); // Switch to My tab
                     } else {
-                      setState(() => _sectionIndex = value);
-                      widget.onTabSwitch?.call(value + 1);
+                      _handleSectionTap(value, animatePage: false);
                     }
                   },
                   onDailyPlay: () {
@@ -801,7 +902,7 @@ class HomePageState extends State<HomePage> {
                   onUpdateClose: () {
                     setState(() => _updateBannerDismissed = true);
                   },
-                  onRefresh: isDesktop ? _refresh : null,
+                  onRefresh: isDesktop ? refresh : null,
                 ),
               ),
               SliverToBoxAdapter(
@@ -812,6 +913,7 @@ class HomePageState extends State<HomePage> {
                       child: Column(
                         children: [
                           _SongSection(
+                            key: ValueKey('car_song_section_$railResetEpoch'),
                             title: '大家都在听',
                             songs: data.daily.songs,
                             onPlay: _playSong,
@@ -822,6 +924,7 @@ class HomePageState extends State<HomePage> {
                             onViewArtist: _openArtist,
                           ),
                           _PlaylistRail(
+                            key: ValueKey('car_playlist_rail_$railResetEpoch'),
                             playlists: data.playlists,
                             onTap: _openPlaylist,
                             onPlay: _playPlaylist,
@@ -830,6 +933,7 @@ class HomePageState extends State<HomePage> {
                           ),
                           if (data.topSongs.isNotEmpty)
                             _TopSongRail(
+                              key: ValueKey('car_topsong_rail_$railResetEpoch'),
                               songs: data.topSongs,
                               onPlay: (song) =>
                                   _playSong(song, data.topSongs),
@@ -873,9 +977,11 @@ class HomePageState extends State<HomePage> {
           child: content,
         );
 
-        return isDesktop
+        // 桌面/车机均无 Material 小圆圈：桌面走页头刷新按钮，
+        // 车机走顶栏点中当前 tab，两者反馈都用顶部均衡器动画。
+        return isDesktop || isCarMode
             ? safeContent
-            : RefreshIndicator(onRefresh: _refresh, child: safeContent);
+            : RefreshIndicator(onRefresh: refresh, child: safeContent);
       },
     );
   }
@@ -1242,6 +1348,7 @@ class _FeatureCard extends StatelessWidget {
 
 class _SongSection extends StatefulWidget {
   const _SongSection({
+    super.key,
     required this.title,
     required this.songs,
     required this.onPlay,
@@ -1480,6 +1587,7 @@ class _SongSectionState extends State<_SongSection> {
 /// 新歌速递横向区块。
 class _TopSongRail extends StatelessWidget {
   const _TopSongRail({
+    super.key,
     required this.songs,
     required this.onPlay,
     this.onTapTitle,
@@ -1680,6 +1788,7 @@ class _TopSongCard extends StatelessWidget {
 
 class _PlaylistRail extends StatelessWidget {
   const _PlaylistRail({
+    super.key,
     required this.playlists,
     required this.onTap,
     this.onPlay,
@@ -2075,56 +2184,38 @@ class _RadioSection extends StatefulWidget {
   State<_RadioSection> createState() => _RadioSectionState();
 }
 
-class _RadioSectionState extends State<_RadioSection> {
+class _RadioSectionState extends SwrSectionState<_RadioSection, _RadioData> {
   static _RadioData? _cachedData;
 
-  Future<_RadioData>? _future;
   String? _loadingStationId;
-  StreamSubscription<void>? _networkRestoredSub;
-  bool _silentRefreshing = false;
-
-  /// 加载代数：新一轮加载启动时自增，旧代数晚到的响应不再写缓存、
-  /// 不再覆盖 UI（与 RankPageState._loadEpoch 同一防倒灌机制）。
-  int _loadEpoch = 0;
 
   @override
-  void initState() {
-    super.initState();
-    final cached = _cachedData;
-    if (cached != null) {
-      _future = Future.value(cached);
-      // 有内存缓存：立即显示并后台静默刷新（与推荐页一致）。
-      _silentRefresh();
-    } else {
-      // 无内存缓存：先读磁盘再决定是否走网络，避免冷启动双请求浪费车机流量。
-      _future = null;
-      _initFromDiskOrNetwork();
-    }
-    // 断网进入电台 tab 会停留在错误/缓存页上，恢复网络后静默刷新。
-    _networkRestoredSub = NetworkMonitor.instance.onConnectivityRestored.listen(
-      (_) => _silentRefresh(),
-    );
-  }
+  CacheService get cache => widget.cache;
 
   @override
-  void dispose() {
-    _networkRestoredSub?.cancel();
-    super.dispose();
-  }
+  _RadioData? get cachedData => _cachedData;
 
-  void _persistRadio(_RadioData data) {
-    unawaited(() async {
-      try {
-        await widget.cache.write('cache_radio', data.toCache());
-      } catch (_) {
-        // 缓存写入失败不影响已拿到的网络数据上屏。
-      }
-    }());
-  }
+  @override
+  set cachedData(_RadioData? value) => _cachedData = value;
 
-  /// [epoch] 为发起本请求时的代数；响应返回时若已被更新一轮加载取代，
-  /// 则跳过缓存写入（返回值仍交给调用方按代数决定是否上屏）。
-  Future<_RadioData> _load({int? epoch}) async {
+  @override
+  String get cacheKey => 'cache_radio';
+
+  @override
+  Duration get cacheTtl => AppConfig.radioCacheTtl;
+
+  @override
+  _RadioData decodeCache(Map<String, dynamic> json) => _RadioData.fromCache(json);
+
+  @override
+  Map<String, dynamic> encodeCache(_RadioData data) => data.toCache();
+
+  @override
+  bool hasContent(_RadioData data) =>
+      data.recommended.isNotEmpty || data.groups.isNotEmpty;
+
+  @override
+  Future<_RadioData> fetchData() async {
     final results = await Future.wait([
       widget.api.fmRecommendedStations(),
       widget.api.fmClassGroups(),
@@ -2143,7 +2234,7 @@ class _RadioSectionState extends State<_RadioSection> {
       return image == null ? station : station.mergeImage(image);
     }
 
-    final data = _RadioData(
+    return _RadioData(
       recommended: recommended.map(applyImage).toList(),
       groups: groups
           .map(
@@ -2155,80 +2246,6 @@ class _RadioSectionState extends State<_RadioSection> {
           )
           .toList(),
     );
-    if (epoch == null || epoch == _loadEpoch) {
-      _cachedData = data;
-      _persistRadio(data);
-    }
-    return data;
-  }
-
-  /// 冷启动单 flight：先读磁盘，命中则显示缓存+静默刷新，未命中才走网络。
-  Future<void> _initFromDiskOrNetwork() async {
-    final epoch = ++_loadEpoch;
-    try {
-      final cached = await widget.cache.read<Map<String, dynamic>>(
-        'cache_radio',
-        decode: (json) => json,
-        ttl: AppConfig.radioCacheTtl,
-      );
-      // 磁盘读取期间用户已手动刷新（epoch 变化）：让位，不再回写缓存态。
-      if (!mounted || epoch != _loadEpoch) return;
-      if (cached != null) {
-        try {
-          final data = _RadioData.fromCache(cached.data);
-          if (data.recommended.isNotEmpty || data.groups.isNotEmpty) {
-            _cachedData = data;
-            setState(() {
-              _future = Future.value(data);
-            });
-            _silentRefresh();
-            return;
-          }
-        } catch (_) {
-          // 缓存损坏则继续走网络。
-        }
-      }
-    } catch (_) {
-      // 磁盘读取失败则继续走网络。
-    }
-    if (!mounted || epoch != _loadEpoch) return;
-    final future = _load(epoch: epoch);
-    setState(() {
-      _future = future;
-    });
-  }
-
-  /// 后台静默刷新：成功更新 UI 与缓存，失败保持缓存不变（与推荐页一致）。
-  Future<void> _silentRefresh() async {
-    if (_silentRefreshing) return;
-    final epoch = ++_loadEpoch;
-    _silentRefreshing = true;
-    try {
-      final data = await _load(epoch: epoch);
-      // 等待期间用户已手动刷新（epoch 变化）：丢弃本响应，避免旧数据倒灌。
-      if (!mounted || epoch != _loadEpoch) return;
-      setState(() {
-        _future = Future.value(data);
-      });
-    } catch (_) {
-      // 静默刷新失败，保持缓存数据不变
-    } finally {
-      _silentRefreshing = false;
-    }
-  }
-
-  /// 对外入口：双击首页按钮时回到电台顶部并刷新（标题栏刷新按钮已移除）。
-  Future<void> refresh() async {
-    // 双击刷新优先级最高：使在途的静默刷新/冷启动恢复响应作废。
-    final epoch = ++_loadEpoch;
-    final future = _load(epoch: epoch);
-    setState(() {
-      _future = future;
-    });
-    // FutureBuilder 已处理错误，这里吞掉异常避免 fire-and-forget 调用方产生未处理异常。
-    try {
-      await future;
-    } catch (_) {}
   }
 
   Future<void> _playStation(FmStation station) async {
@@ -2267,8 +2284,8 @@ class _RadioSectionState extends State<_RadioSection> {
     // 电台双卡+网格布局是车机专属，普通横屏用原布局。
     final isCarMode = isLandscape && ThemeController.instance.carModeEnabled;
 
-    // 磁盘恢复中（_future 尚未确定）：显示骨架，避免闪现空态。
-    final future = _future;
+    // 磁盘恢复中（主数据 Future 尚未确定）：显示骨架，避免闪现空态。
+    final future = sectionFuture;
     if (future == null) {
       return const _RadioSkeleton();
     }
@@ -2295,6 +2312,8 @@ class _RadioSectionState extends State<_RadioSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 顶部均衡器刷新动画：刷新在途时出现，平时收起不占位。
+                RefreshEqualizer(visible: showRefreshEqualizer),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
                   child: _RadioSectionTitle(
@@ -2379,6 +2398,8 @@ class _RadioSectionState extends State<_RadioSection> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 顶部均衡器刷新动画：刷新在途时出现，平时收起不占位。
+              RefreshEqualizer(visible: showRefreshEqualizer),
               _RadioSectionTitle(
                 title: '推荐电台',
                 icon: Icons.radio_rounded,
@@ -2393,6 +2414,7 @@ class _RadioSectionState extends State<_RadioSection> {
               if (radio.recommended.length > 1) ...[
                 const SizedBox(height: 14),
                 _RadioStationRail(
+                  key: ValueKey('radio_rec_rail_$railResetEpoch'),
                   stations: radio.recommended.skip(1).toList(),
                   loadingStationId: _loadingStationId,
                   onTap: _playStation,
@@ -2407,6 +2429,7 @@ class _RadioSectionState extends State<_RadioSection> {
                 ),
                 const SizedBox(height: 12),
                 _RadioStationRail(
+                  key: ValueKey('radio_group_${group.id}_$railResetEpoch'),
                   stations: group.stations,
                   loadingStationId: _loadingStationId,
                   onTap: _playStation,
@@ -2619,6 +2642,7 @@ class _RadioHeroCard extends StatelessWidget {
 
 class _RadioStationRail extends StatelessWidget {
   const _RadioStationRail({
+    super.key,
     required this.stations,
     required this.loadingStationId,
     required this.onTap,
@@ -3146,8 +3170,11 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-class _HomeData {
-  const _HomeData({
+/// 首页推荐 tab 的组合数据模型（每日推荐 + 推荐歌单 + 新歌速递）。
+/// 公开可见是 [HomePageState] 作为 `SwrSectionState<HomePage, HomeData>`
+/// 的泛型参数所需；仅在首页内部使用。
+class HomeData {
+  const HomeData({
     required this.daily,
     required this.playlists,
     this.topSongs = const [],

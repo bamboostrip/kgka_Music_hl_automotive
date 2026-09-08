@@ -4,11 +4,18 @@ import 'package:shiyin_music/services/music_api.dart';
 
 /// 假客户端：按调用顺序返回预置的 /rank/audio 响应，并记录请求参数。
 class _FakeRankClient implements ApiClientInterface {
-  _FakeRankClient(this.pages);
+  _FakeRankClient(this.pages, {this.total, this.hashlessPerPage = 0});
 
-  /// 每页的原始条数（与真实接口一致：rawItems 长度即分页判断依据之外的
-  /// 展示条数；这里直接按过滤后的条数构造 songlist）。
+  /// 每页的原始条数（songlist 长度）。
   final List<int> pages;
+
+  /// 服务端下发的全榜单 total（null 表示响应不带 total 字段）。
+  final int? total;
+
+  /// 每页混入的无 hash 条数：模拟服务端脏数据，song 解析后会被
+  /// hash 过滤掉（原始条数 > 可播条数），用于回归「按过滤后条数
+  /// 判末页导致提前终止翻页」的问题。
+  final int hashlessPerPage;
   final calls = <Map<String, Object?>>[];
 
   @override
@@ -24,6 +31,12 @@ class _FakeRankClient implements ApiClientInterface {
         'singername': '歌手',
       };
 
+  Map<String, Object?> _hashlessSong(int i) => {
+        'hash': '',
+        'filename': '歌手 - 脏数据$i',
+        'singername': '歌手',
+      };
+
   @override
   Future<dynamic> get(String path, [Map<String, Object?> query = const {}]) async {
     calls.add({'path': path, ...query});
@@ -33,7 +46,11 @@ class _FakeRankClient implements ApiClientInterface {
     final pageIndex = calls.length - 1;
     final count = pageIndex < pages.length ? pages[pageIndex] : 0;
     return {
-      'songlist': [for (var i = 0; i < count; i++) _song(pageIndex * 100 + i)],
+      if (total != null) 'total': total,
+      'songlist': [
+        for (var i = 0; i < count; i++)
+          i < hashlessPerPage ? _hashlessSong(pageIndex * 100 + i) : _song(pageIndex * 100 + i),
+      ],
     };
   }
 
@@ -95,6 +112,30 @@ void main() {
 
       expect(songs.length, 150);
       expect(client.calls.length, 3);
+    });
+
+    test('total 下发且页内混入脏数据（过滤后不足页大小）时，不提前终止翻页', () async {
+      // 每页原始 50 条中有 2 条无 hash 被过滤（可播 48 < 50）：
+      // 旧的「过滤后条数 < pageSize 即末页」判定会在第 1 页就误停，
+      // 只拉到 48 首；total 感知后应翻满 3 页（48+48+28=124）。
+      final client = _FakeRankClient([50, 50, 30], total: 124, hashlessPerPage: 2);
+      final api = MusicApi(client);
+
+      final songs = await api.rankAudioAll(rankId: 8888, pageSize: 50);
+
+      expect(songs.length, 124);
+      expect(client.calls.length, 3);
+    });
+
+    test('total 未知时回退页大小启发式（脏数据导致的提前终止仅作已知局限）', () async {
+      final client = _FakeRankClient([50, 30], hashlessPerPage: 2);
+      final api = MusicApi(client);
+
+      final songs = await api.rankAudioAll(rankId: 8888, pageSize: 50);
+
+      // 第 1 页过滤后 48 < 50 → 按启发式判末页，只请求 1 页。
+      expect(songs.length, 48);
+      expect(client.calls.length, 1);
     });
   });
 }

@@ -128,6 +128,18 @@ class DownloadController extends ChangeNotifier {
   /// 避免清空后复活 failed/downloaded 条目。
   int _generation = 0;
 
+  /// 控制器是否已销毁。地址解析（最多 20s）与文件传输（分钟级）期间
+  /// 可能跨 dispose 存活，回调里凭此不再写回条目、不再 notifyListeners
+  /// （对已 dispose 的 ChangeNotifier，debug 构建会抛 used after being
+  /// disposed）。_generation 只服务 clearAllDownloads，不服务 dispose。
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   /// 在播本地路径提供方（main.dart 注入 player 的当前歌曲路径）。
   /// 清理/裁剪时保护该文件，避免播一半被删导致后续 Range 404。
   String? Function()? playingPathProvider;
@@ -455,7 +467,7 @@ class DownloadController extends ChangeNotifier {
     }
 
     Future<void> worker() async {
-      while (cursor < songs.length && gen == _generation) {
+      while (cursor < songs.length && gen == _generation && !_disposed) {
         final song = songs[cursor++];
         final hash = song.hash;
         final existing = _downloads[hash];
@@ -480,7 +492,8 @@ class DownloadController extends ChangeNotifier {
           final playUrl = await _api.songUrl(song, quality: quality);
           // 等待解析期间已被清空/取消（代际过期或条目不在下载态）：
           // 静默中止，不写回条目；tracker 仍要结束计数以保守恒。
-          if (gen != _generation ||
+          if (_disposed ||
+              gen != _generation ||
               _downloads[hash]?.status != DownloadStatus.downloading) {
             tracker?.trackFinished(succeeded: false);
             continue;
@@ -508,7 +521,8 @@ class DownloadController extends ChangeNotifier {
             ),
           );
         } catch (error) {
-          if (gen != _generation ||
+          if (_disposed ||
+              gen != _generation ||
               _downloads[hash]?.status != DownloadStatus.downloading) {
             tracker?.trackFinished(succeeded: false);
             continue;
@@ -567,6 +581,7 @@ class DownloadController extends ChangeNotifier {
         quality: quality,
         url: url,
         onProgress: (received, total) {
+          if (_disposed) return;
           final progress = total > 0 ? received / total : 0.0;
           final entry = _downloads[hash];
           if (entry?.status == DownloadStatus.downloading) {
@@ -575,7 +590,7 @@ class DownloadController extends ChangeNotifier {
           }
         },
       );
-      if (gen != _generation) {
+      if (gen != _generation || _disposed) {
         debugPrint('[时音][download] 代际过期，丢弃传输结果: ${song.title}');
         return;
       }
@@ -591,7 +606,7 @@ class DownloadController extends ChangeNotifier {
       await _persistDownloads();
       succeeded = true;
     } catch (error) {
-      if (gen != _generation) {
+      if (gen != _generation || _disposed) {
         // 清空后落地的过期结果（含取消）：直接丢弃，不复活条目
         return;
       }

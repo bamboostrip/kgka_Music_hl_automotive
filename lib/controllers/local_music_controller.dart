@@ -13,6 +13,16 @@ class LocalMusicController extends ChangeNotifier {
     _init();
   }
 
+  @override
+  void dispose() {
+    // 扫描在途时销毁控制器：不取消的话，后续扫描事件回调仍会
+    // _applyFolderFilter() → notifyListeners()（对已 dispose 的
+    // ChangeNotifier，debug 构建抛错）。
+    unawaited(_scanSubscription?.cancel());
+    _scanSubscription = null;
+    super.dispose();
+  }
+
   static const _channel = MethodChannel('kgka_music_hl/local_music');
   static const _excludedFoldersKey = 'settings.local_music_excluded_folders';
 

@@ -95,8 +95,9 @@ class FmStation {
       classId: asString(json['classId']),
       className: asString(json['className']),
       description: asString(json['description']),
-      bannerUrl: asString(json['bannerUrl']),
-      imageUrl: asString(json['imageUrl']),
+      // 幂等补一次 normalize：防止旧版本缓存混入 {size} 占位符死链。
+      bannerUrl: normalizeImageUrl(asString(json['bannerUrl'])),
+      imageUrl: normalizeImageUrl(asString(json['imageUrl'])),
       previewSongs: (json['previewSongs'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(Song.fromCache)

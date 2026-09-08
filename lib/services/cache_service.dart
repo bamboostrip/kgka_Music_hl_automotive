@@ -63,19 +63,29 @@ class CacheService {
           DateTime.now().millisecondsSinceEpoch - savedAt.toInt() >
               ttl.inMilliseconds;
       return CacheResult<T>(data: decode(payload), isStale: isStale);
-    } catch (_) {
+    } catch (error) {
+      // 缓存损坏/结构变更按「无缓存」降级，但留日志：否则「离线为什么没
+      // 兜底」无从排查。
+      debugPrint('CacheService: 读取缓存 $key 失败（按无缓存处理）: $error');
       return null;
     }
   }
 
   /// 写入缓存（记录 savedAt = 当前时间）。
+  ///
+  /// 平台层写失败时 [SharedPreferences.setString] 返回 false 而不抛异常，
+  /// 这里转为抛出，让调用方的 try/catch（及 swr 的「写失败不降级」分支）
+  /// 能感知到，而不是静默丢写。
   Future<void> write(String key, Map<String, dynamic> payload) async {
     final prefs = await SharedPreferences.getInstance();
     final wrapper = jsonEncode({
       _savedAtKey: DateTime.now().millisecondsSinceEpoch,
       _payloadKey: payload,
     });
-    await prefs.setString(key, wrapper);
+    final ok = await prefs.setString(key, wrapper);
+    if (!ok) {
+      throw Exception('CacheService: 写入缓存 $key 失败（平台层 setString 返回 false）');
+    }
   }
 
   /// 移除单条缓存。

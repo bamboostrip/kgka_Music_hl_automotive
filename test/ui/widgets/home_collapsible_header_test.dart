@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shiyin_music/controllers/auth_controller.dart';
@@ -140,17 +141,17 @@ void main() {
   });
 
   group('HomeBrandHeader Widget', () {
-    testWidgets('renders brand title and logo', (tester) async {
+    testWidgets('renders line-art svg logo', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: HomeBrandHeader(title: '时音'),
+            body: HomeBrandHeader(),
           ),
         ),
       );
+      await tester.pump();
 
-      expect(find.text('时音'), findsOneWidget);
-      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(SvgPicture), findsOneWidget);
     });
   });
 

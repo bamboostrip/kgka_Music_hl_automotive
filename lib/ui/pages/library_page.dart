@@ -41,10 +41,38 @@ class LibraryPage extends StatefulWidget {
   final LocalMusicController localMusic;
 
   @override
-  State<LibraryPage> createState() => _LibraryPageState();
+  State<LibraryPage> createState() => LibraryPageState();
 }
 
-class _LibraryPageState extends State<LibraryPage> {
+class LibraryPageState extends State<LibraryPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  /// 是否已滚动（供车机顶栏点中当前「我的」时判断）。
+  bool get isScrolled =>
+      _scrollController.hasClients && _scrollController.offset > 8.0;
+
+  /// 车机顶栏点中当前「我的」时回到顶部（无刷新）。
+  /// 未滚动时直接返回，避免无意义动画。
+  Future<void> scrollToTop() async {
+    if (!isScrolled) {
+      return;
+    }
+    try {
+      await _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    } catch (_) {
+      // 滚动中页面已销毁时忽略。
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
   // 折叠状态管理（改 tab 为折叠）
   bool _expandedCreated = true;
   bool _expandedCollected = true;
@@ -313,6 +341,7 @@ class _LibraryPageState extends State<LibraryPage> {
               final sortedAlbums = _sortedPlaylists(albums);
 
               return CustomScrollView(
+                controller: _scrollController,
                 slivers: [
                   // 1. 顶部 Header
                   SliverToBoxAdapter(

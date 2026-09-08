@@ -73,17 +73,21 @@ mixin _MusicApiRank on _MusicApiBase {
         .map(Song.fromRank)
         .where((s) => s.hash.isNotEmpty)
         .toList();
+    // total 只在服务端真的下发时才有值（未知保持 0）：它被 rankAudioAll /
+    // RankDetailPage 用来做分页终止判定，若回退成本页过滤后条数，会把
+    // 「本页恰好 N 条」误当「全榜单共 N 条」，第一页就提前终止翻页。
     final total = raw is List
-        ? raw.length
-        : asInt(asMap(raw)['total']) ?? songs.length;
+        ? 0
+        : asInt(asMap(raw)['total']) ?? 0;
     return RankSongPage(songs: songs, total: total);
   }
 
   /// 拉取榜单全部分页歌曲（排行榜详情页"播放全部"与后台补全播放队列用）。
   ///
-  /// 与 [playlistSongs] 的 fetchAll 同构：循环翻页直到某页不足 [pageSize]
-  /// （过滤后条数，与 RankDetailPage 的 _hasMore 判定一致）或达到 [maxPages]
-  /// 防御上限（防止上游异常数据导致死循环）。
+  /// 终止判定优先用服务端 total：song 列表已按空 hash 过滤，页内被过滤掉
+  /// 几条时按「过滤后条数 < pageSize」比较会把非末页误判为末页，导致
+  /// "播放全部"队列缺歌。total 未知（<=0）时退回页大小启发式，并加空页
+  /// 兜底与 [maxPages] 防御上限（防止上游异常数据导致死循环）。
   Future<List<Song>> rankAudioAll({
     required int rankId,
     int rankCid = 0,
@@ -99,7 +103,12 @@ mixin _MusicApiRank on _MusicApiBase {
         pageSize: pageSize,
       );
       allSongs.addAll(result.songs);
-      if (result.songs.length < pageSize) break;
+      if (result.songs.isEmpty) break;
+      if (result.total > 0) {
+        if (allSongs.length >= result.total) break;
+      } else if (result.songs.length < pageSize) {
+        break;
+      }
     }
     return allSongs;
   }

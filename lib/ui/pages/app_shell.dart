@@ -55,12 +55,26 @@ DateTime Function() appShellNow = DateTime.now;
 
 class _AppShellState extends State<AppShell> {
   final GlobalKey<HomePageState> _homeKey = GlobalKey<HomePageState>();
+  final GlobalKey<LibraryPageState> _libraryKey =
+      GlobalKey<LibraryPageState>();
   var _index = 1; // Default to '推荐' tab (index 1) in landscape
   var _lastHomeTab =
       1; // Tracks the last active Home sub-tab (1=推荐, 2=排行榜, 3=电台)
   final _navigatorKey = GlobalKey<NavigatorState>();
   DateTime? _lastRailHomeTapTime;
   DateTime? _lastDoubleTapExecutedTime;
+
+  /// 车机顶栏点中当前 tab：直接回到顶部并刷新（含均衡器动画，
+  /// 与移动端点中当前 tab 语义一致）。不判断是否滚动过——在当前页
+  /// 再点一次就刷新，逻辑简单明确；已在顶部时回顶动画自然无操作。
+  /// 「我的」无刷新内容，只回顶；「推荐/排行榜/电台」回顶并刷新对应内容。
+  void _handleCarTabReselect(int index) {
+    if (index == 0) {
+      unawaited(_libraryKey.currentState?.scrollToTop());
+    } else {
+      unawaited(_homeKey.currentState?.scrollToTopAndRefresh());
+    }
+  }
 
   int _getPortraitIndex() {
     return _index == 0 ? 1 : 0;
@@ -189,6 +203,7 @@ class _AppShellState extends State<AppShell> {
                           );
 
                           final libraryPage = LibraryPage(
+                            key: _libraryKey,
                             api: widget.api,
                             auth: widget.auth,
                             player: widget.player,
@@ -253,6 +268,7 @@ class _AppShellState extends State<AppShell> {
     );
 
     final libraryPage = LibraryPage(
+      key: _libraryKey,
       api: widget.api,
       auth: widget.auth,
       player: widget.player,
@@ -440,12 +456,16 @@ class _AppShellState extends State<AppShell> {
                         selected: _index == entry.$1,
                         onSelected: (selected) {
                           if (selected) {
+                            // 切到其它页面：只切换、保持各页滚动位置，不刷新。
                             setState(() {
                               _index = entry.$1;
                               if (entry.$1 >= 1 && entry.$1 <= 3) {
                                 _lastHomeTab = entry.$1;
                               }
                             });
+                          } else {
+                            // 点中当前页面：回顶并刷新，不切换页面。
+                            _handleCarTabReselect(entry.$1);
                           }
                         },
                         selectedColor: colorScheme.primary.withValues(

@@ -12,9 +12,20 @@ class PlaybackHistoryService {
   static const _key = 'playback_history';
   static const _maxRecords = 500;
 
+  /// 读改写互斥链：快速连续切歌时多个 record 的 get→mutate→save 串行执行，
+  /// 避免并发交错时后写覆盖前写丢历史。链上吞掉错误，保证后续任务不被卡死
+  /// （与 PlaybackStatsService._mutationLock 同一机制）。
+  Future<void> _mutationLock = Future.value();
+
   /// 记录一次播放：去重后插入到头部，超出上限时截断。
-  Future<void> record(Song song) async {
-    if (song.hash.isEmpty) return;
+  Future<void> record(Song song) {
+    if (song.hash.isEmpty) return Future.value();
+    final result = _mutationLock.then((_) => _recordNow(song));
+    _mutationLock = result.catchError((Object _) {});
+    return result;
+  }
+
+  Future<void> _recordNow(Song song) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     List<dynamic> list = [];

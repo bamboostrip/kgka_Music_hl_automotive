@@ -221,6 +221,10 @@ class PlayerController extends _PlayerControllerBase
   @override
   void dispose() {
     _disposed = true;
+    // 使在途的响度分析结果失效：cancelAnalysis 只能阻断后续进度，
+    // 拦不住已在回调队列里的中途/最终值，不递增 serial 的话它们会在
+    // dispose 完成后 notifyListeners 并对已释放的 AudioPlayer 应用增益。
+    _loudnessSerial++;
     _pauseListeningTimeTracker();
     _networkRestoredSub?.cancel();
     _autoResumeTimer?.cancel();

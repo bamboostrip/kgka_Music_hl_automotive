@@ -115,6 +115,53 @@ class SearchAlbumResult {
 // 排行榜 (Rank)
 // ---------------------------------------------------------------------------
 
+/// 榜单前三预览（仅展示用，不可播放）。
+///
+/// `/rank/list?withsong=1` 随榜下发的 `songinfo` 只有 `name/author/songname`，
+/// 没有可播 `hash`，因此不进 [Song]（全链路按 `hash.isNotEmpty` 过滤），
+/// 单独用轻量结构承载 QQ 式右列。
+class RankPreviewSong {
+  const RankPreviewSong({required this.title, this.artist = '', this.coverUrl});
+
+  final String title;
+  final String artist;
+
+  /// TOP1 歌曲封面（`trans_param.union_cover`），榜单卡片用它代替官方模板图。
+  final String? coverUrl;
+
+  factory RankPreviewSong.fromJson(Map<String, dynamic> json) {
+    var title = asString(json['name']) ?? '';
+    var artist = asString(json['author']) ?? '';
+    if (title.isEmpty || artist.isEmpty) {
+      // 退化解析 `songname`（形如 "歌手 - 歌名"）。
+      final full = asString(json['songname']) ?? '';
+      final sep = full.indexOf(' - ');
+      if (sep >= 0) {
+        artist = artist.isEmpty ? full.substring(0, sep).trim() : artist;
+        title = title.isEmpty ? full.substring(sep + 3).trim() : title;
+      } else if (title.isEmpty) {
+        title = full;
+      }
+    }
+    final transParam = asMap(json['trans_param']);
+    return RankPreviewSong(
+      title: title,
+      artist: artist,
+      coverUrl: normalizeImageUrl(asString(transParam['union_cover'])),
+    );
+  }
+
+  Map<String, dynamic> toCache() => {'t': title, 'a': artist, 'c': coverUrl};
+
+  factory RankPreviewSong.fromCache(Map<String, dynamic> json) {
+    return RankPreviewSong(
+      title: asString(json['t']) ?? '未知歌曲',
+      artist: asString(json['a']) ?? '',
+      coverUrl: normalizeImageUrl(asString(json['c'])),
+    );
+  }
+}
+
 class RankCategory {
   const RankCategory({
     required this.rankId,
@@ -123,6 +170,7 @@ class RankCategory {
     this.imageUrl,
     this.children = const [],
     this.songs = const [],
+    this.topPreviews = const [],
     this.updateFrequency = '',
   });
 
@@ -132,16 +180,33 @@ class RankCategory {
   final String? imageUrl;
   final List<RankCategory> children;
   final List<Song> songs;
+
+  /// 榜单前三预览（展示用，不可播；可播歌曲走 [songs] / 详情页）。
+  final List<RankPreviewSong> topPreviews;
   final String updateFrequency;
+
+  /// 卡片封面：TOP1 预览歌曲封面（无则回落官方榜单图）。
+  String? get cardCoverUrl =>
+      topPreviews.isNotEmpty && topPreviews.first.coverUrl != null
+          ? topPreviews.first.coverUrl
+          : imageUrl;
 
   factory RankCategory.fromJson(Map<String, dynamic> json) {
     final children = asList(
       json['children'],
     ).whereType<Map<String, dynamic>>().map(RankCategory.fromJson).toList();
-    final songs = asList(json['songlist'])
+    final songs = asList(
+      json['songlist'] ?? json['songs'] ?? json['song_list'],
+    )
         .whereType<Map<String, dynamic>>()
         .map(Song.fromRank)
         .where((s) => s.hash.isNotEmpty)
+        .toList();
+    final topPreviews = asList(json['songinfo'])
+        .whereType<Map<String, dynamic>>()
+        .map(RankPreviewSong.fromJson)
+        .where((s) => s.title.isNotEmpty)
+        .take(3)
         .toList();
     return RankCategory(
       rankId: asInt(json['rankid']) ?? 0,
@@ -150,6 +215,7 @@ class RankCategory {
       imageUrl: normalizeImageUrl(asString(json['imgurl'])),
       children: children,
       songs: songs,
+      topPreviews: topPreviews,
       updateFrequency:
           asString(json['update_frequency']) ??
           asString(json['frequency']) ??
@@ -166,6 +232,7 @@ class RankCategory {
       'imageUrl': imageUrl,
       'updateFrequency': updateFrequency,
       'songs': songs.map((s) => s.toCache()).toList(),
+      'previews': topPreviews.map((s) => s.toCache()).toList(),
       'children': children.map((c) => c.toCache()).toList(),
     };
   }
@@ -175,12 +242,19 @@ class RankCategory {
       rankId: asInt(json['rankId']) ?? 0,
       rankName: asString(json['rankName']) ?? '未知榜单',
       rankType: asInt(json['rankType']) ?? 0,
-      imageUrl: asString(json['imageUrl']),
+      // 幂等补一次 normalize：防止旧版本缓存混入 {size} 占位符死链。
+      imageUrl: normalizeImageUrl(asString(json['imageUrl'])),
       updateFrequency: asString(json['updateFrequency']) ?? '',
       songs: (json['songs'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(Song.fromCache)
           .where((s) => s.hash.isNotEmpty)
+          .toList(),
+      topPreviews: (json['previews'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(RankPreviewSong.fromCache)
+          .where((s) => s.title.isNotEmpty)
+          .take(3)
           .toList(),
       children: (json['children'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()

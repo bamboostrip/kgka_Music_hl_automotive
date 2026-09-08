@@ -772,6 +772,10 @@ class AuthController extends ChangeNotifier {
   @override
   void dispose() {
     _networkRestoredSub?.cancel();
+    // 摘除 VIP 后台任务的成功回调：VipBackgroundTask 由 PlayerController
+    // 长期持有，不摘除的话本控制器销毁后领取成功仍会调 refreshProfile →
+    // notifyListeners（对已 dispose 的 ChangeNotifier）。
+    _vipBackgroundTask.onClaimSuccess = null;
     super.dispose();
   }
 }

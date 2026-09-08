@@ -20,7 +20,14 @@ class HorizontalWheelScroll extends StatefulWidget {
 }
 
 class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
-  final _controller = ScrollController();
+  // keepScrollOffset: false——横轨不参与 PageStorage 位置存取：
+  // 1) 切 tab 往返时横轨位置靠 _HomeTabKeepAlive 保活即可保留，无需
+  //    PageStorage；
+  // 2) 刷新重建横轨（页面用 railResetEpoch 做 ValueKey）时必须真正归零，
+  //    若允许 PageStorage 恢复，旧 offset 会被同标识符（最近的
+  //    PageStorageKey 祖先，如 home_tab_recommend）下的残值复活，
+  //    「刷新后横轨回最左」失效。
+  final _controller = ScrollController(keepScrollOffset: false);
 
   @override
   void dispose() {

@@ -537,21 +537,21 @@ class Song {
         )
         .where((artist) => artist.name.isNotEmpty)
         .toList();
-    final cleanedTitle = cleanSongTitle(
-      title,
-      artist: artist,
-      artists: artists,
-    );
+    // [toCache] 写入的 title 已是清洗结果，这里直接使用：
+    // cleanSongTitle 非幂等，对「X - Y - Z」型标题二次清洗会继续切割丢前缀。
+    // rawTitle 缺失就保持缺失，不回填清洗后标题（否则原始名永久丢失）。
     return Song(
       id: asString(json['id']) ?? '',
-      title: cleanedTitle,
-      rawTitle: rawTitle ?? title,
+      title: title,
+      rawTitle: rawTitle,
       artist: artist,
       hash: asString(json['hash']) ?? '',
       albumId: asString(json['albumId']),
       albumAudioId: asString(json['albumAudioId']),
       albumName: asString(json['albumName']),
-      coverUrl: asString(json['coverUrl']),
+      // 幂等补一次 normalize：隐式依赖「写入侧已 normalize」太脆，旧版本
+      // 缓存或异常路径混入 {size} 占位符时会变成死链。
+      coverUrl: normalizeImageUrl(asString(json['coverUrl'])),
       duration: durationFromMilliseconds(json['durationMs']),
       artists: artists,
       isCloudDrive: json['isCloudDrive'] == true,

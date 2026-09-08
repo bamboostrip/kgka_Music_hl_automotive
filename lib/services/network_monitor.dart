@@ -56,15 +56,10 @@ class NetworkMonitor {
   bool get isListening => _sub != null;
 
   Future<void> start() async {
+    // 先同步占住订阅位再 await checkConnectivity：否则并发 start() 都能
+    // 通过 null 检查，产生双重订阅（_sub 只留最后一条，前一条泄漏且
+    // _onChanged 每事件被调多次）。
     if (_sub != null) return;
-    try {
-      final results = await _connectivity.checkConnectivity();
-      _results = results;
-      _hasNetwork = results.any((r) => r != ConnectivityResult.none);
-    } catch (_) {
-      _results = const [];
-      _hasNetwork = false;
-    }
     _sub = _connectivity.onConnectivityChanged.listen(
       _onChanged,
       // 个别 Linux 桌面/极简环境没有 NetworkManager，connectivity_plus
@@ -74,6 +69,14 @@ class NetworkMonitor {
         debugPrint('NetworkMonitor: 连接状态流错误（已降级忽略）: $error');
       },
     );
+    try {
+      final results = await _connectivity.checkConnectivity();
+      _results = results;
+      _hasNetwork = results.any((r) => r != ConnectivityResult.none);
+    } catch (_) {
+      _results = const [];
+      _hasNetwork = false;
+    }
   }
 
   Future<void> stop() async {

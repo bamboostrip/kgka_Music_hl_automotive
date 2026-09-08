@@ -250,6 +250,9 @@ mixin _PlayerEffects on _PlayerControllerBase {
         // 中途值用渐变(ramp),最终值也用渐变(平滑收敛)。
         // 缓存命中的 instant 应用已在 playSong 里处理,不走到这里。
         unawaited(_applyLoudnessGain(instant: false));
+        // dispose 守卫：serial 检查在回调入口，这里兜住 dispose 晚于检查
+        // 发生的窗口（dispose 会递增 serial，但已进入回调体的仍会走到这里）。
+        if (_disposed) return;
         notifyListeners();
       },
     );
@@ -268,6 +271,7 @@ mixin _PlayerEffects on _PlayerControllerBase {
       if (_pendingGainDb != null) {
         _pendingGainDb = null;
         await _applyLoudnessGain(instant: false);
+        if (_disposed) return;
         notifyListeners();
       }
       return;
@@ -280,6 +284,7 @@ mixin _PlayerEffects on _PlayerControllerBase {
       );
       _pendingGainDb = gain;
       await _applyLoudnessGain(instant: true);
+      if (_disposed) return;
       notifyListeners();
     } else {
       LoudnessService.log(

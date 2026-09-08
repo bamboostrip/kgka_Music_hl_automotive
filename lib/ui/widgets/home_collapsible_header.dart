@@ -1,9 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show FloatingHeaderSnapConfiguration;
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../services/music_api.dart';
 import '../pages/search_page.dart';
+
+/// 页面层固定吸顶头视图：以普通 widget 形式渲染
+/// [HomeCollapsibleHeaderDelegate] 的布局与绘制（搜索行淡出上移、标签栏
+/// 吸顶、背景随收折渐显），但自身不参与任何滚动。
+///
+/// 用于「顶栏提升到 PageView 之上」的架构：三个 tab 的内容列表在下方
+/// PageView 中横向切换，顶栏固定不动；收折进度由外部按当前 tab 的内容
+/// 滚动 offset（切页动画中为相邻两 tab 的插值）计算后经 [shrinkOffset]
+/// 传入。高度随收折从 maxExtent 收缩到 minExtent，与 sliver 版行为一致。
+class HomeCollapsibleHeaderView extends StatelessWidget {
+  const HomeCollapsibleHeaderView({
+    super.key,
+    required this.delegate,
+    required this.shrinkOffset,
+  });
+
+  final HomeCollapsibleHeaderDelegate delegate;
+  final double shrinkOffset;
+
+  @override
+  Widget build(BuildContext context) {
+    final collapseRange = delegate.maxExtent - delegate.minExtent;
+    final effective = shrinkOffset.clamp(0.0, collapseRange);
+    return SizedBox(
+      height: delegate.maxExtent - effective,
+      child: delegate.build(context, effective, false),
+    );
+  }
+}
 
 /// 首页吸顶收折头部 Delegate。
 ///
@@ -18,6 +49,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.onSectionChanged,
     this.pageTracker,
     this.onRefresh,
+    this.vsync,
     this.topPadding = 0.0,
     this.topMargin = 8.0,
     this.searchBarHeight = 36.0,
@@ -37,6 +69,13 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
   /// 避免外部为每个像素触发整页 setState。
   final PageController? pageTracker;
   final Future<void> Function()? onRefresh;
+
+  /// 浮出吸附动画的 vsync：配合 SliverPersistentHeader 的 floating +
+  /// NestedScrollView 的 floatHeaderSlivers，上滑浮现搜索栏后松手自动
+  /// 完全展开。测试场景可不传（此时无吸附动画）。
+  @override
+  final TickerProvider? vsync;
+
   final double topPadding;
   final double topMargin;
   final double searchBarHeight;
@@ -54,9 +93,18 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
       topPadding + topMargin + searchBarHeight + spacing + tabBarHeight + bottomPadding;
 
   @override
+  FloatingHeaderSnapConfiguration? get snapConfiguration => vsync == null
+      ? null
+      : FloatingHeaderSnapConfiguration(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+
+  @override
   bool shouldRebuild(covariant HomeCollapsibleHeaderDelegate oldDelegate) {
     return oldDelegate.sectionIndex != sectionIndex ||
         oldDelegate.pageTracker != pageTracker ||
+        oldDelegate.vsync != vsync ||
         oldDelegate.topPadding != topPadding ||
         oldDelegate.topMargin != topMargin ||
         oldDelegate.pinnedTopOffset != pinnedTopOffset ||
@@ -94,7 +142,14 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
 
     final effectiveOffset = shrinkOffset.clamp(0.0, maxExtent - minExtent);
 
-    return ClipRect(
+    // 拦截横向拖动：顶栏（搜索框 + 标签栏）是跨 tab 的"固定顶区"，
+    // 按住它左右滑不应穿透到底层 PageView 触发切页——只有下方内容区
+    // 可以横向滑动切页。子级 GestureDetector 的横向拖动识别器在手势
+    // 竞技场中先于父级 PageView 的滚动识别器声明胜利；只声明横向，
+    // 垂直滚动的收折/展开行为不受影响。
+    return GestureDetector(
+      onHorizontalDragStart: (_) {},
+      child: ClipRect(
       child: Container(
         decoration: BoxDecoration(
           color: effectiveBgColor,
@@ -119,7 +174,7 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
         ),
         child: Stack(
           children: [
-            // 顶行：Logo品牌 + 搜索框（参考 IT 之家布局，随着滚动平滑淡出并上移）
+            // 顶行：搜索框 + 线稿 Logo（参考 QQ 音乐布局，随滚动平滑淡出并上移）
             Positioned(
               top: topPadding + topMargin - effectiveOffset,
               left: 16,
@@ -131,8 +186,6 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
                   ignoring: progress >= 0.75,
                   child: Row(
                     children: [
-                      const HomeBrandHeader(),
-                      const SizedBox(width: 10),
                       Expanded(
                         child: HomeSearchBar(
                           api: api,
@@ -141,6 +194,8 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
                           height: searchBarHeight,
                         ),
                       ),
+                      const SizedBox(width: 14),
+                      const HomeBrandHeader(),
                     ],
                   ),
                 ),
@@ -162,21 +217,23 @@ class HomeCollapsibleHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
           ],
         ),
+        ),
       ),
     );
   }
 }
 
-/// 首页顶部品牌 Logo 与应用名展示组件（参考 IT 之家品牌标识区）
+/// 首页顶部品牌线稿 Logo（参考 QQ 音乐：无底色、无阴影，随主题变色）。
+///
+/// SVG 全部描边使用 currentColor，通过 colorFilter 整体着色：
+/// 浅色模式下为深灰墨色，深色模式下为高亮白色。
 class HomeBrandHeader extends StatelessWidget {
   const HomeBrandHeader({
     super.key,
-    this.size = 28.0,
-    this.title = '时音',
+    this.size = 26.0,
   });
 
   final double size;
-  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -184,56 +241,30 @@ class HomeBrandHeader extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(size * 0.28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
-                blurRadius: 4,
-                offset: const Offset(0, 1.5),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(size * 0.28),
-            child: Image.asset(
-              'lib/assets/logo.png',
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                color: colorScheme.primaryContainer,
-                child: Icon(
-                  Icons.music_note_rounded,
-                  size: size * 0.7,
-                  color: colorScheme.primary,
-                ),
-              ),
-            ),
-          ),
+    final lineColor = isDark
+        ? Colors.white.withValues(alpha: 0.92)
+        : colorScheme.onSurface.withValues(alpha: 0.82);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: SvgPicture.asset(
+        'lib/assets/logo_line.svg',
+        width: size,
+        height: size,
+        colorFilter: ColorFilter.mode(lineColor, BlendMode.srcIn),
+        semanticsLabel: '时音',
+        placeholderBuilder: (_) => Icon(
+          Icons.music_note_rounded,
+          size: size,
+          color: lineColor,
         ),
-        const SizedBox(width: 7),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.2,
-            color: colorScheme.onSurface,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
-/// 首页顶部搜索框组件（参考 IT 之家轻量胶囊样式）。
+/// 首页顶部搜索框组件（参考 QQ 音乐：整胶囊、提示文案居中、极浅底色）。
 class HomeSearchBar extends StatelessWidget {
   const HomeSearchBar({
     super.key,
@@ -282,35 +313,30 @@ class HomeSearchBar extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : const Color(0xFFF1F3F6),
+                ? Colors.white.withValues(alpha: 0.07)
+                : const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(height / 2),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.04),
-              width: 0.8,
-            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 Icons.search_rounded,
                 size: 16.5,
                 color: colorScheme.onSurfaceVariant.withValues(
-                  alpha: isDark ? 0.7 : 0.55,
+                  alpha: isDark ? 0.65 : 0.5,
                 ),
               ),
               const SizedBox(width: 6),
-              Expanded(
+              Flexible(
                 child: Text(
                   hintText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: isDark ? 0.75 : 0.65,
+                          alpha: isDark ? 0.7 : 0.6,
                         ),
                         fontWeight: FontWeight.w400,
                         fontSize: 13.5,

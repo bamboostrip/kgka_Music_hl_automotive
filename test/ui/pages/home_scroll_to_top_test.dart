@@ -20,6 +20,7 @@ class _FakeMusicApi implements MusicApi {
   List<Song> topSongsData = const [];
   List<PlaylistSummary> playlists = const [];
   List<Song> playlistSongsData = const [];
+  List<RankCategory> ranks = const [];
 
   @override
   Future<List<Song>> playlistSongs(
@@ -53,7 +54,7 @@ class _FakeMusicApi implements MusicApi {
   }
 
   @override
-  Future<List<RankCategory>> rankList({int withSong = 0}) async => const [];
+  Future<List<RankCategory>> rankList({int withSong = 0}) async => ranks;
 
   @override
   Future<List<Song>> newSongs({int rankId = 0, int page = 1}) async =>
@@ -212,6 +213,10 @@ void main() {
       ..playlists = List.generate(
         8,
         (i) => PlaylistSummary(id: 'pl_$i', title: '歌单$i', coverUrl: null),
+      )
+      ..ranks = List.generate(
+        10,
+        (i) => RankCategory(rankId: 100 + i, rankName: '榜单$i'),
       );
 
     await tester.pumpWidget(
@@ -299,6 +304,57 @@ void main() {
     expect(api.dailyRecommendCalls, greaterThan(initialDailyCalls));
   });
 
+  testWidgets('滚动内容区后双击底部「首页」，内层回顶且搜索栏展开并刷新', (tester) async {
+    final api = await pumpAppShell(tester);
+    final initialDailyCalls = api.dailyRecommendCalls;
+
+    final searchBarTextFinder = find.text('搜索歌曲、歌手、专辑');
+    expect(searchBarTextFinder, findsOneWidget);
+
+    // 直接拖动推荐 tab 的内层列表（模拟真实手指滚动内容区）。
+    final innerFinder = find.byKey(
+      const PageStorageKey<String>('home_tab_recommend'),
+    );
+    expect(innerFinder, findsOneWidget);
+    await tester.drag(innerFinder, const Offset(0, -800));
+    await tester.pumpAndSettle();
+
+    final collapsedOpacity = tester.widget<Opacity>(
+      find.ancestor(
+        of: searchBarTextFinder,
+        matching: find.byType(Opacity),
+      ).first,
+    );
+    expect(collapsedOpacity.opacity, 0.0);
+
+    // Double tap '首页' item on bottom bar
+    final homeTabFinder = find.text('首页');
+    await tester.tap(homeTabFinder);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(homeTabFinder);
+    await tester.pumpAndSettle();
+
+    // 内层回到顶部
+    final innerState =
+        tester.state<ScrollableState>(find.descendant(
+      of: innerFinder,
+      matching: find.byType(Scrollable),
+    ).first);
+    expect(innerState.position.pixels, 0.0);
+
+    // 搜索栏重新展开
+    final restoredOpacity = tester.widget<Opacity>(
+      find.ancestor(
+        of: searchBarTextFinder,
+        matching: find.byType(Opacity),
+      ).first,
+    );
+    expect(restoredOpacity.opacity, 1.0);
+
+    // Verify refresh API was called
+    expect(api.dailyRecommendCalls, greaterThan(initialDailyCalls));
+  });
+
   testWidgets('直接双击底部「首页」，触发刷新 API', (tester) async {
     final api = await pumpAppShell(tester);
     final initialDailyCalls = api.dailyRecommendCalls;
@@ -346,6 +402,168 @@ void main() {
     expect(api.dailyRecommendCalls, initialDailyCalls);
   });
 
+  ScrollableState playlistRailScrollable(WidgetTester tester) {
+    final states = tester.stateList<ScrollableState>(
+      find.ancestor(
+        of: find.text('歌单1'),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    // 横轨是离卡片最近的横向 Scrollable（ancestor 按由近到远排序，取 first；
+    // 外层 PageView 也是横向，在更后面）。
+    return states.where((s) => s.position.axis == Axis.horizontal).first;
+  }
+
+  testWidgets('刷新后推荐歌单横轨回到最左侧', (tester) async {
+    final api = await pumpAppShell(tester);
+    expect(find.text('歌单1'), findsOneWidget);
+
+    // 把推荐歌单横轨滚到中间（直接定位，避免手势被 PageView 抢走）。
+    playlistRailScrollable(tester).position.jumpTo(200);
+    await tester.pump();
+    expect(playlistRailScrollable(tester).position.pixels, 200);
+
+    // 双击底部「首页」触发刷新
+    final homeTabFinder = find.text('首页');
+    await tester.tap(homeTabFinder);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(homeTabFinder);
+    await tester.pumpAndSettle();
+
+    // 横轨被重建，回到最左
+    expect(playlistRailScrollable(tester).position.pixels, 0.0);
+    expect(api.dailyRecommendCalls, greaterThan(0));
+  });
+
+  testWidgets('未滚动时单击本页顶部 tab 同样刷新', (tester) async {
+    final api = await pumpAppShell(tester);
+    final initialDailyCalls = api.dailyRecommendCalls;
+
+    await tester.tap(find.text('推荐'));
+    await tester.pumpAndSettle();
+
+    expect(api.dailyRecommendCalls, greaterThan(initialDailyCalls));
+  });
+
+  testWidgets('下滑后单击本页顶部 tab 回顶并刷新', (tester) async {
+    final api = await pumpAppShell(tester);
+    final initialDailyCalls = api.dailyRecommendCalls;
+
+    // 模拟手指下滑内容
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -250));
+    await tester.pumpAndSettle();
+
+    // 单击当前页的顶部 tab「推荐」
+    await tester.tap(find.text('推荐'));
+    await tester.pumpAndSettle();
+
+    expect(api.dailyRecommendCalls, greaterThan(initialDailyCalls));
+    // 回到顶部，搜索栏重新展开
+    final restoredOpacity = tester.widget<Opacity>(
+      find.ancestor(
+        of: find.text('搜索歌曲、歌手、专辑'),
+        matching: find.byType(Opacity),
+      ).first,
+    );
+    expect(restoredOpacity.opacity, 1.0);
+  });
+
+  testWidgets('点击其他顶部 tab 只切换不刷新推荐流', (tester) async {
+    final api = await pumpAppShell(tester);
+    final initialDailyCalls = api.dailyRecommendCalls;
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -250));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('排行榜'));
+    await tester.pumpAndSettle();
+
+    expect(api.dailyRecommendCalls, initialDailyCalls);
+  });
+
+  ScrollableState nearestScrollableOf(WidgetTester tester, Finder finder) {
+    // ancestor 按由近到远排序，first 即离目标最近的 Scrollable。
+    return tester.state<ScrollableState>(
+      find.ancestor(of: finder, matching: find.byType(Scrollable)).first,
+    );
+  }
+
+  /// 顶部胶囊 tab（14.5px）：与内容区同名标题（如 17px 的「排行榜」分区标题）区分。
+  Finder capsuleTab(String label) => find.byWidgetPredicate(
+        (w) => w is Text && w.data == label && w.style?.fontSize == 14.5,
+      );
+
+  /// 内容区分区标题（17px），直接处于内层纵滑之下，适合取内层滚动位置。
+  Finder sectionTitle(String label) => find.byWidgetPredicate(
+        (w) => w is Text && w.data == label && w.style?.fontSize == 17,
+      );
+
+  testWidgets('切换 tab 不联动滚动位置', (tester) async {
+    await pumpAppShell(tester);
+
+    // 推荐页下滑
+    await tester.drag(find.text('大家都在听'), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, find.text('大家都在听')).position.pixels,
+      greaterThan(100),
+    );
+
+    // 切到排行榜：应保持自己的位置（顶部），不受推荐页影响
+    await tester.tap(capsuleTab('排行榜'));
+    await tester.pumpAndSettle();
+    expect(
+      nearestScrollableOf(tester, sectionTitle('排行榜')).position.pixels,
+      0.0,
+    );
+  });
+
+  testWidgets('刷新推荐页后排行榜 tab 的滚动位置保持不变', (tester) async {
+    await pumpAppShell(tester);
+
+    double rankNow() => nearestScrollableOf(
+          tester,
+          sectionTitle('排行榜'),
+        ).position.pixels;
+    // ignore: avoid_print
+    void log(String tag) {
+      var v = 'offstage';
+      try {
+        v = rankNow().toStringAsFixed(1);
+      } catch (_) {}
+      // ignore: avoid_print
+      print('DBG $tag rank=$v');
+    }
+
+    // 切到排行榜并下滑
+    await tester.tap(capsuleTab('排行榜'));
+    await tester.pumpAndSettle();
+    await tester.drag(sectionTitle('排行榜'), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    log('scroll-rank');
+    final recorded = rankNow();
+    expect(recorded, greaterThan(100));
+
+    // 回到推荐页并下滑
+    await tester.tap(capsuleTab('推荐'));
+    await tester.pumpAndSettle();
+    log('back-rec');
+    await tester.drag(find.text('大家都在听'), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    log('scroll-rec');
+
+    // 单击本页顶部 tab「推荐」触发刷新
+    await tester.tap(capsuleTab('推荐'));
+    await tester.pumpAndSettle();
+    log('refresh-rec');
+
+    // 再切回排行榜：位置应该还在
+    await tester.tap(capsuleTab('排行榜'));
+    await tester.pumpAndSettle();
+    log('back-rank');
+    expect(rankNow(), recorded);
+  });
+
   testWidgets('两次点击间隔超过 350ms 时不触发刷新', (tester) async {
     final api = await pumpAppShell(tester);
     final initialDailyCalls = api.dailyRecommendCalls;
@@ -379,7 +597,7 @@ void main() {
     await pumpAppShell(tester);
 
     // 切到首页的「排行榜」子 tab（PageView 第 2 页）。
-    await tester.tap(find.text('排行榜'));
+    await tester.tap(capsuleTab('排行榜'));
     await tester.pumpAndSettle();
     expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
 
@@ -396,7 +614,7 @@ void main() {
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
     expect(find.text('搜索歌曲、歌手、专辑'), findsOneWidget);
-    final rankTabText = tester.widget<Text>(find.text('排行榜'));
+    final rankTabText = tester.widget<Text>(capsuleTab('排行榜'));
     expect(rankTabText.style?.fontWeight, FontWeight.w800);
   });
 }
