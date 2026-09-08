@@ -149,7 +149,7 @@ Finder carChip(String label) => find.byWidgetPredicate(
           (w.label as Text).data == label,
     );
 
-Future<_FakeMusicApi> pumpCarShell(
+Future<_FakeMusicApi> _pumpCarShell(
   WidgetTester tester,
   ThemeController theme,
 ) async {
@@ -259,7 +259,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final api = await pumpCarShell(tester, theme);
+    final api = await _pumpCarShell(tester, theme);
     expect(carChip('推荐'), findsOneWidget);
 
     HomePageState homeState() =>
@@ -317,7 +317,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await pumpCarShell(tester, theme);
+    await _pumpCarShell(tester, theme);
     // 车机：刷新只走均衡器，不挂 Material 下拉小圆圈
     expect(find.byType(RefreshIndicator), findsNothing);
 
@@ -343,7 +343,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await pumpCarShell(tester, theme);
+    await _pumpCarShell(tester, theme);
 
     // 切到我的
     await tester.tap(carChip('我的'));
