@@ -38,8 +38,9 @@ class ThemeController extends ChangeNotifier {
   /// 车机模式下文字放大倍数（远距离观看更清晰）。
   static const double carModeFontScaleFactor = 1.12;
 
-  /// 预设种子色列表。
+  /// 预设种子色列表（首位即默认配色）。
   static const presetColors = <_PresetColor>[
+    _PresetColor(name: '拾音金', color: Color(0xFFF6A200)),
     _PresetColor(name: '经典蓝', color: Color(0xFF1478FF)),
     _PresetColor(name: '酷狗红', color: Color(0xFFFF2D55)),
     _PresetColor(name: '清新绿', color: Color(0xFF24C768)),
@@ -50,7 +51,10 @@ class ThemeController extends ChangeNotifier {
     _PresetColor(name: '石墨灰', color: Color(0xFF64748B)),
   ];
 
-  Color _seedColor = const Color(0xFF1478FF);
+  /// 项目默认种子色（新 Logo 金）。
+  static const defaultSeedColor = Color(0xFFF6A200);
+
+  Color _seedColor = defaultSeedColor;
   bool _backgroundEnabled = false;
   String? _backgroundImagePath;
   double _backgroundOpacity = 0.15;
@@ -74,7 +78,7 @@ class ThemeController extends ChangeNotifier {
   bool get isAutomotiveDevice => _isAutomotiveDevice;
 
   /// 是否使用了非默认种子色。
-  bool get hasCustomSeedColor => _seedColor != const Color(0xFF1478FF);
+  bool get hasCustomSeedColor => _seedColor != defaultSeedColor;
 
   /// 检测是否为 Android Automotive 车机并缓存结果。
   /// 设备类型不变，启动时调用一次即可。须在 [load] 之前调用，

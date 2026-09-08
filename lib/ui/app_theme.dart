@@ -8,6 +8,7 @@ import 'form_factor.dart';
 
 class AppTheme {
   static const blue = Color(0xFF1478FF);
+  static const gold = Color(0xFFF6A200);
   static const musicRed = Color(0xFFFF2D55);
 
   /// 桌面形态的页面转场：三桌面平台统一为轻快 fade。
@@ -20,19 +21,19 @@ class AppTheme {
 
   static ThemeData light({Color? seedColor, bool transparentBackground = false}) {
     return _theme(Brightness.light,
-        seedColor: seedColor ?? blue,
+        seedColor: seedColor ?? gold,
         transparentBackground: transparentBackground);
   }
 
   static ThemeData dark({Color? seedColor, bool transparentBackground = false}) {
     return _theme(Brightness.dark,
-        seedColor: seedColor ?? blue,
+        seedColor: seedColor ?? gold,
         transparentBackground: transparentBackground);
   }
 
   static ThemeData _theme(
     Brightness brightness, {
-    Color seedColor = blue,
+    Color seedColor = gold,
     bool transparentBackground = false,
   }) {
     final isDark = brightness == Brightness.dark;

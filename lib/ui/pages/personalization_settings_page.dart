@@ -58,7 +58,8 @@ class _PersonalizationSettingsPageState
                       icon: Icons.refresh_rounded,
                       iconColor: colorScheme.primary,
                       title: '恢复默认配色',
-                      onTap: () => tc.setSeedColor(const Color(0xFF1478FF)),
+                      onTap: () =>
+                          tc.setSeedColor(ThemeController.defaultSeedColor),
                     ),
                   ],
                 ],
