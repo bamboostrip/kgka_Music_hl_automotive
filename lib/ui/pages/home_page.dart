@@ -86,6 +86,30 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   // 头部区间同步中的重入保护：把某个 tab 的头部进度镜像到其它 tab 时
   // 会触发它们的 listener 回调，用此标志避免递归同步。
   bool _syncingHeaderOffsets = false;
+  // 各 tab 上一帧的内容 offset：静止态下顶栏跟手（floating）需要按
+  // “本次 offset - 上次 offset”的增量驱动收折，而不是按绝对 offset，
+  // 否则深滚时必须滑回顶部才能展开（见 _updateHeaderShrink）。
+  final List<double> _prevTabOffsets = <double>[0.0, 0.0, 0.0];
+  // 深滚时顶栏半收折的吸附动画（0<shrink<52 且 offset>52 时松手吸附到端点，
+  // 只动顶栏不动内容）。滚动重新开始时取消，避免与跟手增量打架。
+  AnimationController? _headerSnapController;
+  // 移动端三 tab 自制下拉刷新的下拉距离（px）：顶部下拉时内容顶出空白并
+  // 出现均衡器，松手达阈值触发对应页刷新。全程不用 Material 小圆圈，
+  // 与桌面/车机/双击的均衡器反馈统一。下标 0/1/2 对应推荐/排行/电台。
+  final List<ValueNotifier<double>> _pullExtents = <ValueNotifier<double>>[
+    ValueNotifier<double>(0.0),
+    ValueNotifier<double>(0.0),
+    ValueNotifier<double>(0.0),
+  ];
+  // 下拉释放后的收合/吸附动画（同一时间只有一个 tab 在下拉，用单个控制器复用）。
+  AnimationController? _pullAnimController;
+  // 下拉触发的刷新在途保护：避免一次下拉重复触发、也避免下拉与双击刷新并发。
+  final List<bool> _pullBusy = <bool>[false, false, false];
+
+  /// 下拉触发阈值 / 最大下拉距离 / 刷新时指示器高度（均衡器 26px）。
+  static const double _pullTriggerDistance = 60.0;
+  static const double _pullMaxDistance = 90.0;
+  static const double _pullRefreshHeight = 26.0;
   // 点按/外部切页的飞行目标：PageView 动画落定、onPageChanged 处理完之前，
   // 顶栏保持只收不展，落地页推到地板高度（见 _updateHeaderShrink）。
   // 手势滑动不需要它（落地时 page 与 _sectionIndex 不一致即可识别）。
@@ -152,6 +176,11 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
 
   @override
   void dispose() {
+    _headerSnapController?.dispose();
+    _pullAnimController?.dispose();
+    for (final pull in _pullExtents) {
+      pull.dispose();
+    }
     _pageController.dispose();
     _scrollController.dispose();
     for (final controller in _tabControllers) {
@@ -200,17 +229,19 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     });
   }
 
-  /// 由三 tab 内容滚动位置推导顶栏收折进度。
+  /// 由三 tab 内容滚动位置推导顶栏收折进度（floating 跟手语义）。
   ///
   /// 顶栏是页面层固定组件，不再随 PageView 横向平移，是三个 tab 共用的
   /// 同一个行动主体：收折态全局统一，切页不重置——推荐页下滑收起搜索框
   /// 后切到排行榜/电台时搜索框保持收起，反之任一页上滑展开后其它页也
   /// 同步展开，不再出现“一个有搜索框、一个没有”的跳变。
   ///
-  /// 规则：
-  /// - 静止时任一 tab 在头部区间（0.._headerCollapseRange）内滚动，
-  ///   把其它同样处于头部区间的 tab 镜像到同一进度；深滚（超出头部
-  ///   区间）的 tab 保留各自内容进度不动。
+  /// 规则（对齐 QQ 音乐 / 网易云等常用软件）：
+  /// - 静止单页内：顶栏跟手增量驱动——下滑（offset 增大）等量收起，
+  ///   上滑（offset 减小）等量展开。上滑 52px 即可完全展开，无需回到顶部；
+  ///   下滑 52px 再次完全收起。深滚中途同样生效。
+  /// - 为避免内容与顶栏之间出现空白，恒保持 shrink <= offset：
+  ///   顶部 offset=0 时顶栏强制完全展开。
   /// - 切页途中（点按动画/手势滑动）与刚落地时：顶栏只许收起不许展开，
   ///   展开只能由用户在当前页上滑驱动。视角中心页不动（动它会纵跳），
   ///   其余页推到地板高度（屏外，不可见）；落地页若刚懒加载还顶着 0，
@@ -219,7 +250,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   ///   处理，否则跨页跳转（如推荐 0 → 电台 2）途中会被没出生的 0 拽开。
   /// 任一 tab 滚动或 PageView 翻页都会触发本函数（listener），只更新
   /// ValueNotifier，不 setState（镜像 jumpTo 期间用 [_syncingHeaderOffsets]
-  /// 防重入）。
+  /// 防重入；[_prevTabOffsets] 记录各 tab 上一帧 offset 用于求增量）。
   void _updateHeaderShrink() {
     if (!mounted || _syncingHeaderOffsets) return;
     var page = _sectionIndex.toDouble();
@@ -236,6 +267,19 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       return controller.offset;
     }
 
+    void rememberOffsets() {
+      for (var k = 0; k < _tabControllers.length; k++) {
+        final controller = _tabControllers[k];
+        if (controller.hasClients) {
+          try {
+            _prevTabOffsets[k] = controller.offset;
+          } catch (_) {
+            // 布局未就绪时保持旧值，下一帧继续对齐。
+          }
+        }
+      }
+    }
+
     final offset = offsetOf(i) + (offsetOf(j) - offsetOf(i)) * t;
     final blend = offset.clamp(0.0, _headerCollapseRange);
     final settled = (page - page.round()).abs() < 0.02;
@@ -249,6 +293,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       }
       if (i != dominant) _alignTabToShrink(i, keep);
       if (j != dominant) _alignTabToShrink(j, keep);
+      rememberOffsets();
       return;
     }
     final arrived = page.round().clamp(0, 2);
@@ -261,33 +306,227 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
         _headerShrink.value = keep;
       }
       _alignTabToShrink(arrived, keep);
+      rememberOffsets();
       return;
     }
-    // 静止时：头部区间内的列表互相镜像，深滚列表不动。
-    final shrink = blend;
-    if ((_headerShrink.value - shrink).abs() > 0.1) {
-      _headerShrink.value = shrink;
+    // 静止单页：跟手增量驱动顶栏（floating），深滚同样上滑即现。
+    final controller = _tabControllers[arrived];
+    if (!controller.hasClients) {
+      rememberOffsets();
+      return;
     }
-    _syncingHeaderOffsets = true;
+    double currentOffset;
     try {
-      for (final controller in _tabControllers) {
-        if (!controller.hasClients) continue;
-        if (controller.offset <= _headerCollapseRange + 0.5) {
-          final target = shrink.clamp(
-            controller.position.minScrollExtent,
-            controller.position.maxScrollExtent,
-          );
-          if ((controller.offset - target).abs() > 0.5) {
-            try {
-              controller.jumpTo(target);
-            } catch (_) {
-              // 滚动中或布局未就绪时忽略，下次滚动/切页会再次对齐。
-            }
+      currentOffset = controller.offset;
+    } catch (_) {
+      return;
+    }
+    final prevOffset = _prevTabOffsets[arrived];
+    final delta = currentOffset - prevOffset;
+    _prevTabOffsets[arrived] = currentOffset;
+    // 其它 tab 的记忆同步刷新，避免切页后用陈旧值算出跳变增量。
+    for (var k = 0; k < _tabControllers.length; k++) {
+      if (k == arrived) continue;
+      final other = _tabControllers[k];
+      if (other.hasClients) {
+        try {
+          _prevTabOffsets[k] = other.offset;
+        } catch (_) {}
+      }
+    }
+    if (delta.abs() < 0.01) return;
+    // 用户重新开始滚动：取消深滚吸附动画，避免打架。
+    _cancelHeaderSnap();
+    var next = (_headerShrink.value + delta).clamp(0.0, _headerCollapseRange);
+    // 防空白钳制：顶栏高度不能超过内容已滚走的距离。
+    final ceiling = currentOffset.clamp(0.0, _headerCollapseRange);
+    if (next > ceiling) next = ceiling;
+    if (currentOffset <= 0.5) next = 0.0;
+    if ((_headerShrink.value - next).abs() > 0.1) {
+      _headerShrink.value = next;
+    }
+    // 浅区其它页只许往上推到地板（防切页空白），不往下拉（保留各自进度）；
+    // 深滚页不动。
+    if (delta > 0) {
+      _syncingHeaderOffsets = true;
+      try {
+        for (var k = 0; k < _tabControllers.length; k++) {
+          if (k == arrived) continue;
+          final other = _tabControllers[k];
+          if (!other.hasClients) continue;
+          double otherOffset;
+          try {
+            otherOffset = other.offset;
+          } catch (_) {
+            continue;
+          }
+          if (otherOffset > _headerCollapseRange + 0.5) continue;
+          if (otherOffset >= next - 0.5) continue;
+          double min;
+          double max;
+          try {
+            min = other.position.minScrollExtent;
+            max = other.position.maxScrollExtent;
+          } catch (_) {
+            continue;
+          }
+          final target = next.clamp(min, max);
+          if ((otherOffset - target).abs() <= 0.5) continue;
+          // 内容不够高顶不到地板：不硬推，等数据撑高后由切页对齐处理。
+          if (target < next - 0.5) continue;
+          try {
+            other.jumpTo(target);
+            _prevTabOffsets[k] = target;
+          } catch (_) {
+            // 滚动中或布局未就绪时忽略，下次滚动/切页会再次对齐。
           }
         }
+      } finally {
+        _syncingHeaderOffsets = false;
       }
-    } finally {
-      _syncingHeaderOffsets = false;
+    }
+  }
+
+  /// 取消深滚顶栏吸附动画（用户重新滚动 / dispose 前调用）。
+  void _cancelHeaderSnap() {
+    final snap = _headerSnapController;
+    if (snap != null) {
+      _headerSnapController = null;
+      try {
+        snap.stop();
+      } catch (_) {}
+      snap.dispose();
+    }
+  }
+
+  /// 深滚松手后顶栏半收折时吸附到最近端点（只动顶栏不动内容）。
+  void _snapHeaderDeep() {
+    if (!mounted) return;
+    final current = _headerShrink.value;
+    if (current <= 0.5 || current >= _headerCollapseRange - 0.5) return;
+    _cancelHeaderSnap();
+    final target = current < _headerCollapseRange / 2
+        ? 0.0
+        : _headerCollapseRange;
+    final snap = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _headerSnapController = snap;
+    final tween = Tween<double>(begin: current, end: target);
+    snap.addListener(() {
+      if (!mounted || _headerSnapController != snap) return;
+      _headerShrink.value = tween.evaluate(snap);
+    });
+    snap.addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        if (_headerSnapController == snap) _headerSnapController = null;
+        snap.dispose();
+      }
+    });
+    unawaited(snap.forward());
+  }
+
+  /// 取消下拉收合动画（用户重新开始下拉时调用，避免与跟手打架）。
+  /// 会同步完成等待中的 [_animatePullTo]，避免 await 悬挂导致刷新不触发。
+  Completer<void>? _pullAnimCompleter;
+
+  void _cancelPullAnim() {
+    final completer = _pullAnimCompleter;
+    _pullAnimCompleter = null;
+    final anim = _pullAnimController;
+    _pullAnimController = null;
+    if (anim != null) {
+      try {
+        anim.stop();
+      } catch (_) {}
+      anim.dispose();
+    }
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  /// 把指定 tab 的下拉距离动画到 [target]，完成后返回（可 await）。
+  Future<void> _animatePullTo(int tabIndex, double target) {
+    if (!mounted) {
+      _pullExtents[tabIndex].value = target;
+      return Future<void>.value();
+    }
+    _cancelPullAnim();
+    final notifier = _pullExtents[tabIndex];
+    final start = notifier.value;
+    if ((start - target).abs() < 0.5) {
+      notifier.value = target;
+      return Future<void>.value();
+    }
+    final controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _pullAnimController = controller;
+    final tween = Tween<double>(begin: start, end: target);
+    controller.addListener(() {
+      if (_pullAnimController != controller) return;
+      notifier.value = tween.evaluate(controller);
+    });
+    final completer = Completer<void>();
+    _pullAnimCompleter = completer;
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        if (_pullAnimController == controller) _pullAnimController = null;
+        if (_pullAnimCompleter == completer) _pullAnimCompleter = null;
+        controller.dispose();
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    unawaited(controller.forward());
+    return completer.future;
+  }
+
+  /// 下拉松手后的统一出口：达阈值触发对应页刷新并保持指示器，
+  /// 未达阈值收合取消。桌面/车机不走这里（无下拉手势）。
+  void _releasePull(int tabIndex, Future<void> Function() onRefresh) {
+    final pull = _pullExtents[tabIndex].value;
+    if (pull <= 0.5) return;
+    if (_pullBusy[tabIndex]) {
+      // 刷新在途中的新下拉：不重复触发，只把预览收合，避免卡住。
+      unawaited(_animatePullTo(tabIndex, 0.0));
+      return;
+    }
+    if (pull < _pullTriggerDistance) {
+      // 未达阈值：收合取消。
+      unawaited(_animatePullTo(tabIndex, 0.0));
+      return;
+    }
+    _pullBusy[tabIndex] = true;
+    if (tabIndex == 0) {
+      // 推荐页：下拉指示器与刷新均衡器是同一个 widget，先把下拉吸附到
+      // 刷新高度再起刷新，高度 70→26 有动画，不会“直接出现”。
+      unawaited(() async {
+        try {
+          await _animatePullTo(tabIndex, _pullRefreshHeight);
+          if (!mounted) return;
+          // 吸附到位后再发请求：高度已是 26，刷新均衡器接管无跳变。
+          await onRefresh();
+        } finally {
+          if (mounted) await _animatePullTo(tabIndex, 0.0);
+          _pullBusy[tabIndex] = false;
+        }
+      }());
+    } else {
+      // 排行/电台：下拉预览收合的同时子页内部均衡器展开（都是 250ms 级），
+      // 总高度单调 70→26，不会出现双均衡器叠出 52px。
+      unawaited(_animatePullTo(tabIndex, 0.0));
+      unawaited(() async {
+        try {
+          await onRefresh();
+        } finally {
+          _pullBusy[tabIndex] = false;
+        }
+      }());
     }
   }
 
@@ -349,6 +588,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     _syncingHeaderOffsets = true;
     try {
       controller.jumpTo(target);
+      _prevTabOffsets[index] = target;
     } catch (_) {
       return false;
     } finally {
@@ -374,6 +614,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     _syncingHeaderOffsets = true;
     try {
       controller.jumpTo(target);
+      _prevTabOffsets[index] = target;
     } catch (_) {
       // 滚动中或布局未就绪时忽略，动画中的后续帧会继续对齐。
     } finally {
@@ -773,7 +1014,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
         final data = snapshot.data ?? _cachedData;
         // 桌面端：无下拉刷新手势（PC 无此惯例），滚动物理用桌面常规；
         // 数据重载入口改为页头刷新按钮（复用 refresh 同一逻辑）。
-        // 移动端：RefreshIndicator + AlwaysScrollable 原样。
+        // 移动端：三 tab 各自 RefreshIndicator + AlwaysScrollable（见 tabScrollView）。
         // 车机端：无 RefreshIndicator 小圆圈，刷新统一走顶栏点中当前 tab，
         // 反馈与移动端一致用顶部均衡器动画（RefreshEqualizer）。
         final isDesktop = isDesktopFormFactor;
@@ -839,24 +1080,110 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
             required ScrollController controller,
             required PageStorageKey<String> bodyKey,
             required List<Widget> slivers,
+            required Future<void> Function() onRefresh,
+            required int tabIndex,
+            bool combinedRefreshIndicator = false,
           }) {
-            return NotificationListener<ScrollEndNotification>(
-              onNotification: (notification) {
-                // 收折吸附：松手时收折到一半则动画到最近端点，对齐旧
-                // SliverPersistentHeader floating + snap 的手感。
-                if (controller.hasClients) {
-                  final offset = controller.offset;
-                  if (offset > 0 && offset < _headerCollapseRange) {
-                    final target = offset < _headerCollapseRange / 2
-                        ? 0.0
-                        : _headerCollapseRange;
-                    unawaited(
-                      controller.animateTo(
-                        target,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
+            final pullNotifier = _pullExtents[tabIndex];
+            // 下拉指示器：顶在内容最顶部（箭头所指的缝隙处）。下拉时高度跟手
+            // 顶出空白并渐现均衡器，松手达阈值吸附到 26 再刷新，全程无小圆圈。
+            // 推荐页下拉与刷新共用同一个（combinedRefreshIndicator），
+            // 排行/电台下拉只是预览、刷新由子页内部均衡器接管。
+            Widget pullSpacer() {
+              if (isDesktop || isCarMode) return const SizedBox.shrink();
+              return ValueListenableBuilder<double>(
+                valueListenable: pullNotifier,
+                builder: (context, pull, _) {
+                  if (combinedRefreshIndicator) {
+                    final refreshing = showRefreshEqualizer;
+                    final height = refreshing
+                        ? _pullRefreshHeight
+                        : pull.clamp(0.0, _pullMaxDistance);
+                    if (height <= 0.5) return const SizedBox.shrink();
+                    final showBars = refreshing || pull > 12.0;
+                    return SizedBox(
+                      height: height,
+                      child: Center(
+                        child: showBars
+                            ? const RefreshEqualizer(
+                                visible: true,
+                                height: 20,
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     );
+                  }
+                  if (pull <= 0.5) return const SizedBox.shrink();
+                  return SizedBox(
+                    height: pull,
+                    child: Center(
+                      child: pull > 12.0
+                          ? const RefreshEqualizer(
+                              visible: true,
+                              height: 20,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  );
+                },
+              );
+            }
+
+            return NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                // 内层横向滑轨（歌单/新歌横滚）的通知不上报，只处理最外层纵向。
+                if (notification.depth != 0 ||
+                    notification.metrics.axis != Axis.vertical) {
+                  return false;
+                }
+                // 自制下拉跟手：仅移动端在顶部下拉时累计，离开顶部即取消。
+                if (!isDesktop && !isCarMode) {
+                  if (notification is ScrollStartNotification) {
+                    if ((notification.metrics.extentBefore) <= 0.5) {
+                      _cancelPullAnim();
+                    }
+                  } else if (notification is OverscrollNotification) {
+                    if (notification.metrics.extentBefore <= 0.5 &&
+                        notification.overscroll < 0) {
+                      _cancelPullAnim();
+                      final next = (pullNotifier.value - notification.overscroll)
+                          .clamp(0.0, _pullMaxDistance);
+                      pullNotifier.value = next;
+                    }
+                  } else if (notification is ScrollUpdateNotification) {
+                    if (notification.metrics.extentBefore > 0.5 &&
+                        pullNotifier.value > 0) {
+                      pullNotifier.value = 0.0;
+                    }
+                  }
+                }
+                if (notification is ScrollEndNotification) {
+                  // 收折吸附分两段，对齐 floating + snap 手感：
+                  // - 浅区（0..52）：内容 offset 本身即顶栏进度，动画内容到端点；
+                  // - 深滚（>52）：顶栏半收折时只吸附顶栏不动内容，上滑一点即现、
+                  //   下滑继续隐藏的手感不受影响。
+                  // 顶部下拉中（pull>0）不做顶栏吸附，避免跟下拉收合打架。
+                  if (pullNotifier.value <= 0.5 && controller.hasClients) {
+                    final offset = controller.offset;
+                    if (offset > 0 && offset < _headerCollapseRange) {
+                      _cancelHeaderSnap();
+                      final target = offset < _headerCollapseRange / 2
+                          ? 0.0
+                          : _headerCollapseRange;
+                      unawaited(
+                        controller.animateTo(
+                          target,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
+                        ),
+                      );
+                    } else if (offset >= _headerCollapseRange) {
+                      _snapHeaderDeep();
+                    }
+                  }
+                  // 下拉松手：达阈值触发刷新并保持指示器，未达收合。
+                  if (!isDesktop && !isCarMode) {
+                    _releasePull(tabIndex, onRefresh);
                   }
                 }
                 return false;
@@ -877,11 +1204,13 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                         child: AppUpdateBanner(
                           version: _availableUpdate!,
                           onTap: _showUpdateDetails,
-                          onClose: () =>
-                              setState(() => _updateBannerDismissed = true),
+                          onClose: () => setState(
+                            () => _updateBannerDismissed = true,
+                          ),
                         ),
                       ),
                     ),
+                  SliverToBoxAdapter(child: pullSpacer()),
                   ...slivers,
                 ],
               ),
@@ -909,12 +1238,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                   controller: _tabControllers[0],
                   bodyKey:
                       const PageStorageKey<String>('home_tab_recommend'),
+                  onRefresh: refresh,
+                  tabIndex: 0,
+                  // 下拉与刷新共用顶部的自制指示器（替代旧的独立均衡器 sliver，
+                  // 下拉跟手顶出空白、松手吸附到 26 再刷新，无小圆圈）。
+                  combinedRefreshIndicator: true,
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: RefreshEqualizer(
-                        visible: showRefreshEqualizer,
-                      ),
-                    ),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding:
@@ -981,6 +1310,10 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                 child: tabScrollView(
                   controller: _tabControllers[1],
                   bodyKey: const PageStorageKey<String>('home_tab_rank'),
+                  onRefresh: () =>
+                      _rankKey.currentState?.refresh() ??
+                      Future<void>.value(),
+                  tabIndex: 1,
                   slivers: [
                     SliverToBoxAdapter(
                       child: RankPage(
@@ -1002,6 +1335,10 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                 child: tabScrollView(
                   controller: _tabControllers[2],
                   bodyKey: const PageStorageKey<String>('home_tab_radio'),
+                  onRefresh: () =>
+                      _radioKey.currentState?.refresh() ??
+                      Future<void>.value(),
+                  tabIndex: 2,
                   slivers: [
                     SliverToBoxAdapter(
                       child: _RadioSection(
@@ -1020,7 +1357,8 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                 ],
               ),
               // 页面层固定顶栏：覆盖在 PageView 之上，横向切页时固定不动；
-              // 收折进度由 _headerShrink 驱动（当前 tab 内容 offset 派生）。
+              // 收折进度由 _headerShrink 驱动（当前 tab 内容滚动增量跟手，
+              // 上滑即现、下滑即隐，见 _updateHeaderShrink）。
               Positioned(
                 top: 0,
                 left: 0,
@@ -1156,11 +1494,14 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
           child: content,
         );
 
-        // 桌面/车机均无 Material 小圆圈：桌面走页头刷新按钮，
-        // 车机走顶栏点中当前 tab，两者反馈都用顶部均衡器动画。
-        return isDesktop || isCarMode
-            ? safeContent
-            : RefreshIndicator(onRefresh: refresh, child: safeContent);
+        // 移动端下拉刷新由各 tab 自制下拉头承载（见 tabScrollView 的 pullSpacer，
+        // 推荐/排行/电台各刷各页）：顶部下拉时内容顶出空白并渐现均衡器，
+        // 松手达阈值吸附到 26 再刷新，全程无 Material 小圆圈。
+        // 外层不再包任何刷新 widget——外层 child 是横向 PageView，
+        // 纵向下拉到不了它，且只能刷推荐一页，在排行/电台页会刷错页。
+        // 桌面/车机无下拉手势：桌面走页头刷新按钮，车机走顶栏点中当前 tab，
+        // 反馈都用顶部均衡器动画。
+        return safeContent;
       },
     );
   }

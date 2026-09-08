@@ -321,10 +321,11 @@ void main() {
     // 车机：刷新只走均衡器，不挂 Material 下拉小圆圈
     expect(find.byType(RefreshIndicator), findsNothing);
 
-    // 缩回竖屏：下拉刷新恢复
+    // 缩回竖屏：下拉刷新恢复（自制下拉头，无 Material 小圆圈，
+    // 这里只保证车机/竖屏都没有小圆圈，具体下拉由均衡器反馈）。
     tester.view.physicalSize = const Size(400, 800);
     await tester.pumpAndSettle();
-    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsNothing);
   });
 
   testWidgets('车机点中当前我的回到顶部', (tester) async {

@@ -370,7 +370,9 @@ void main() {
   testWidgets('移动端：保留下拉刷新，无页头刷新按钮、无悬浮播放蒙层', (tester) async {
     await pumpHome(tester, desktop: false);
 
-    expect(find.byType(RefreshIndicator), findsOneWidget);
+    // 自制下拉头：全端无 Material 小圆圈，下拉反馈只用顶部均衡器。
+    // 这里不断言具体下拉 widget，只保证桌面专属入口在移动端不存在。
+    expect(find.byType(RefreshIndicator), findsNothing);
     expect(find.byTooltip('刷新'), findsNothing);
     // 蒙层动画层（AnimatedOpacity）在移动端不存在（enabled=false 直接返回封面）。
     expect(find.byType(AnimatedOpacity), findsNothing);
