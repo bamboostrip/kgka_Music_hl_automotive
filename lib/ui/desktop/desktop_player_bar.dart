@@ -41,13 +41,23 @@ const double kPlayerBarLeftWidthCompact = 232;
 ///
 /// 无歌曲时保持占位布局（高度稳定，不随播放状态跳变）。
 class DesktopPlayerBar extends StatelessWidget {
-  const DesktopPlayerBar({super.key, required this.player, required this.auth});
+  const DesktopPlayerBar({
+    super.key,
+    required this.player,
+    required this.auth,
+    this.onOpenPlayerPage,
+  });
 
   final PlayerController player;
   final AuthController auth;
+  final VoidCallback? onOpenPlayerPage;
 
   void _openPlayerPage(BuildContext context) {
     if (player.currentSong == null) return;
+    if (onOpenPlayerPage != null) {
+      onOpenPlayerPage!();
+      return;
+    }
     PlayerPageRoute.open(context, player: player, auth: auth);
   }
 
@@ -60,18 +70,25 @@ class DesktopPlayerBar extends StatelessWidget {
       animation: player,
       builder: (context, _) {
         final song = player.currentSong;
-        return Container(
-          height: 80,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E2433) : Colors.white,
-            border: Border(
-              top: BorderSide(
-                color: colorScheme.outlineVariant.withValues(alpha: .5),
-                width: 1,
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: song == null ? null : () => _openPlayerPage(context),
+          child: MouseRegion(
+            cursor: song == null
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
+            child: Container(
+              height: 80,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2433) : Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: .5),
+                    width: 1,
+                  ),
+                ),
               ),
-            ),
-          ),
-          child: LayoutBuilder(
+              child: LayoutBuilder(
             builder: (context, constraints) {
               final compact =
                   constraints.maxWidth < kPlayerBarCompactBreakpoint;
@@ -216,9 +233,11 @@ class DesktopPlayerBar extends StatelessWidget {
               );
             },
           ),
-        );
-      },
+        ),
+      ),
     );
+  },
+);
   }
 }
 
@@ -245,7 +264,6 @@ class SongInfo extends StatefulWidget {
   State<SongInfo> createState() => _SongInfoState();
 }
 
-typedef _SongInfo = SongInfo;
 
 class _SongInfoState extends State<SongInfo> {
   bool _coverHovered = false;
@@ -342,28 +360,32 @@ class _SongInfoState extends State<SongInfo> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LikeButton(
-                        auth: widget.auth,
-                        song: song,
-                        iconColor: iconColor,
-                        activeColor: colorScheme.secondary,
-                      ),
-                      const SizedBox(width: 8),
-                      _CommentButton(
-                        player: widget.player,
-                        song: song,
-                        iconColor: iconColor,
-                      ),
-                      const SizedBox(width: 8),
-                      SongMoreButton(
-                        player: widget.player,
-                        auth: widget.auth,
-                        song: song,
-                      ),
-                    ],
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {},
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _LikeButton(
+                          auth: widget.auth,
+                          song: song,
+                          iconColor: iconColor,
+                          activeColor: colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        _CommentButton(
+                          player: widget.player,
+                          song: song,
+                          iconColor: iconColor,
+                        ),
+                        const SizedBox(width: 8),
+                        SongMoreButton(
+                          player: widget.player,
+                          auth: widget.auth,
+                          song: song,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -420,14 +442,13 @@ class _LikeButton extends StatelessWidget {
     required this.song,
     required this.iconColor,
     required this.activeColor,
-    this.iconSize = 18.0,
   });
 
   final AuthController? auth;
   final Song? song;
   final Color iconColor;
   final Color activeColor;
-  final double iconSize;
+  static const double _iconSize = 18.0;
 
   @override
   Widget build(BuildContext context) {
@@ -436,7 +457,7 @@ class _LikeButton extends StatelessWidget {
         tooltip: '喜欢',
         onPressed: null,
         icon: const Icon(Icons.favorite_border_rounded),
-        iconSize: iconSize,
+        iconSize: _iconSize,
         color: iconColor,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
@@ -465,7 +486,7 @@ class _LikeButton extends StatelessWidget {
                 ? Icons.favorite_rounded
                 : Icons.favorite_border_rounded,
           ),
-          iconSize: iconSize,
+          iconSize: _iconSize,
           color: isLiked ? activeColor : iconColor,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 28, height: 28),
@@ -480,13 +501,12 @@ class _CommentButton extends StatelessWidget {
     required this.player,
     required this.song,
     required this.iconColor,
-    this.iconSize = 18.0,
   });
 
   final PlayerController? player;
   final Song? song;
   final Color iconColor;
-  final double iconSize;
+  static const double _iconSize = 18.0;
 
   @override
   Widget build(BuildContext context) {
@@ -510,7 +530,7 @@ class _CommentButton extends StatelessWidget {
               );
             },
       icon: const Icon(Icons.chat_bubble_outline_rounded),
-      iconSize: iconSize,
+      iconSize: _iconSize,
       color: iconColor,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 28, height: 28),

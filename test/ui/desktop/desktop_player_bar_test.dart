@@ -140,6 +140,19 @@ class _FakePlayerController extends ChangeNotifier implements PlayerController {
 }
 
 class _FakeAuthController extends ChangeNotifier implements AuthController {
+  bool liked = false;
+  int toggleLikeCalls = 0;
+
+  @override
+  bool isLiked(Song song) => liked;
+
+  @override
+  Future<void> toggleLike(Song song) async {
+    toggleLikeCalls++;
+    liked = !liked;
+    notifyListeners();
+  }
+
   @override
   List<PlaylistSummary> get createdPlaylists => [];
 
@@ -153,6 +166,7 @@ Future<void> _pumpBar(
   WidgetTester tester,
   _FakePlayerController player, {
   _FakeAuthController? auth,
+  VoidCallback? onOpenPlayerPage,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1.0;
@@ -165,6 +179,7 @@ Future<void> _pumpBar(
           child: DesktopPlayerBar(
             player: player,
             auth: auth ?? _FakeAuthController(),
+            onOpenPlayerPage: onOpenPlayerPage,
           ),
         ),
       ),
@@ -715,6 +730,67 @@ void main() {
       await tester.pump();
 
       expect(copiedText, '测试歌曲 - 测试歌手');
+    });
+  });
+
+  group('底栏全域空白点击进入播放页', () {
+    testWidgets('有歌曲时，点击底栏非交互空白区域触发进入全屏播放页', (tester) async {
+      int openCalls = 0;
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(
+        tester,
+        player,
+        onOpenPlayerPage: () => openCalls++,
+      );
+
+      // 点击底栏最左侧空白边距 (x: 4, y: 860)
+      await tester.tapAt(const Offset(4, 860));
+      await tester.pump();
+      expect(openCalls, 1);
+
+      // 点击歌曲标题跑马灯区域也可以进入播放页
+      await tester.tap(find.byType(MarqueeText));
+      await tester.pump();
+      expect(openCalls, 2);
+    });
+
+    testWidgets('点击具名控制按钮不触发进入全屏播放页', (tester) async {
+      int openCalls = 0;
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(
+        tester,
+        player,
+        onOpenPlayerPage: () => openCalls++,
+      );
+
+      // 点击下一首
+      await tester.tap(find.byTooltip('下一首'));
+      await tester.pump();
+      expect(openCalls, 0);
+
+      // 点击播放模式
+      await tester.tap(find.byTooltip('列表循环（点击切换）'));
+      await tester.pump();
+      expect(openCalls, 0);
+
+      // 点击喜欢
+      await tester.tap(find.byTooltip('喜欢'));
+      await tester.pump();
+      expect(openCalls, 0);
+    });
+
+    testWidgets('无歌曲时，点击空白处不触发进入全屏播放页', (tester) async {
+      int openCalls = 0;
+      final player = _FakePlayerController()..currentSong = null;
+      await _pumpBar(
+        tester,
+        player,
+        onOpenPlayerPage: () => openCalls++,
+      );
+
+      await tester.tapAt(const Offset(4, 860));
+      await tester.pump();
+      expect(openCalls, 0);
     });
   });
 }
