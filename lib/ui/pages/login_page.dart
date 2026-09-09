@@ -350,11 +350,6 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
-            // 桌面无边框窗口：登录页不在 DesktopShell 内（未登录时整体
-            // 替换 home），没有标题栏就既拖不动也没有最小化/关闭按钮。
-            // 顶部叠加窗口控制浮层（拖拽条 + 右上角三键）。
-            if (isDesktopFormFactor)
-              const DesktopWindowControlsOverlay(),
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -424,6 +419,15 @@ class _LoginPageState extends State<LoginPage> {
                 },
               ),
             ),
+            // 桌面无边框窗口：登录页不在 DesktopShell 内（未登录时整体
+            // 替换 home），没有标题栏就既拖不动也没有最小化/关闭按钮。
+            // 顶部叠加窗口控制浮层（拖拽条 + 右上角三键）。
+            // 必须是 Stack 最后一个 child：靠后的 child 优先参与命中
+            // 测试，上面的 SingleChildScrollView 默认 opaque 命中，
+            // 连顶部空白 padding 区的点击也整块吞掉，浮层不在最上层
+            // 就点不着也拖不动。
+            if (isDesktopFormFactor)
+              const DesktopWindowControlsOverlay(),
           ],
         ),
       ),
