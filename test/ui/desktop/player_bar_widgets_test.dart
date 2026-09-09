@@ -1,8 +1,11 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiyin_music/controllers/player_controller.dart';
+import 'package:shiyin_music/models/music_models.dart' hide formatDuration;
 import 'package:shiyin_music/ui/desktop/desktop_player_bar.dart';
 import 'package:shiyin_music/ui/desktop/player_bar_widgets.dart';
+import 'package:shiyin_music/ui/widgets/artwork.dart';
 
 void main() {
   group('playbackModeIcon', () {
@@ -140,7 +143,99 @@ void main() {
       expect(defaultIcon.strokeWidth, 2.0);
     });
   });
+
+  group('SongInfo (封面与歌曲详情展开)', () {
+    const testSong = Song(
+      id: '1',
+      title: '测试曲目',
+      artist: '测试歌手',
+      hash: 'hash123',
+    );
+
+    testWidgets('悬停封面展示 ExpandDetailIcon 与"展开歌曲详情页" Tooltip，点击触发 onTap 回调', (tester) async {
+      bool tapped = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Row(
+                children: [
+                  SongInfo(
+                    song: testSong,
+                    colorScheme: const ColorScheme.light(),
+                    onTap: () => tapped = true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 未悬停时不显示 ExpandDetailIcon
+      expect(find.byType(ExpandDetailIcon), findsNothing);
+
+      // 存在对应 tooltip 文案
+      expect(find.byTooltip('展开歌曲详情页'), findsOneWidget);
+
+      // 鼠标移入封面
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(Artwork)));
+      await tester.pump();
+
+      // 悬停后展示 ExpandDetailIcon
+      expect(find.byType(ExpandDetailIcon), findsOneWidget);
+
+      // 点击触发 onTap（点击展开图标）
+      await tester.tap(find.byType(ExpandDetailIcon));
+      await tester.pump();
+      expect(tapped, isTrue);
+
+      // 鼠标移出后 ExpandDetailIcon 消失
+      await gesture.moveTo(const Offset(999, 999));
+      await tester.pump();
+      expect(find.byType(ExpandDetailIcon), findsNothing);
+    });
+
+    testWidgets('无歌曲时悬停不展示 ExpandDetailIcon，点击不触发 onTap', (tester) async {
+      bool tapped = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Row(
+                children: [
+                  SongInfo(
+                    song: null,
+                    colorScheme: const ColorScheme.light(),
+                    onTap: () => tapped = true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 鼠标移入封面
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(Artwork)));
+      await tester.pump();
+
+      expect(find.byType(ExpandDetailIcon), findsNothing);
+      expect(find.byTooltip('展开歌曲详情页'), findsNothing);
+
+      await tester.tap(find.byType(Artwork));
+      await tester.pump();
+      expect(tapped, isFalse);
+    });
+  });
 }
+
 
 
 

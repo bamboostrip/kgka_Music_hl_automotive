@@ -295,20 +295,21 @@ class _ExpandDetailPainter extends CustomPainter {
 
     final w = size.width;
     final h = size.height;
+    final p = strokeWidth / 2;
     final arm = w * 0.42;
 
     // 左下角 └
     final pathBottomLeft = Path()
-      ..moveTo(0, h - arm)
-      ..lineTo(0, h)
-      ..lineTo(arm, h);
+      ..moveTo(p, h - p - arm)
+      ..lineTo(p, h - p)
+      ..lineTo(p + arm, h - p);
     canvas.drawPath(pathBottomLeft, paint);
 
     // 右上角 ┐
     final pathTopRight = Path()
-      ..moveTo(w - arm, 0)
-      ..lineTo(w, 0)
-      ..lineTo(w, arm);
+      ..moveTo(w - p - arm, p)
+      ..lineTo(w - p, p)
+      ..lineTo(w - p, p + arm);
     canvas.drawPath(pathTopRight, paint);
   }
 

@@ -229,8 +229,10 @@ class DesktopPlayerBar extends StatelessWidget {
 
 /// 左区：封面 + 曲名/歌手。悬停封面或歌名时，封面上浮出半透明蒙层 +
 /// 放大图标提示可进入播放页，点击整个区域进入。
-class _SongInfo extends StatefulWidget {
-  const _SongInfo({
+@visibleForTesting
+class SongInfo extends StatefulWidget {
+  const SongInfo({
+    super.key,
     required this.song,
     required this.colorScheme,
     required this.onTap,
@@ -241,10 +243,12 @@ class _SongInfo extends StatefulWidget {
   final VoidCallback onTap;
 
   @override
-  State<_SongInfo> createState() => _SongInfoState();
+  State<SongInfo> createState() => _SongInfoState();
 }
 
-class _SongInfoState extends State<_SongInfo> {
+typedef _SongInfo = SongInfo;
+
+class _SongInfoState extends State<SongInfo> {
   bool _hovered = false;
 
   @override
@@ -254,9 +258,11 @@ class _SongInfoState extends State<_SongInfo> {
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: InkWell(
-          onTap: song == null ? null : widget.onTap,
-          borderRadius: BorderRadius.circular(8),
+        child: Tooltip(
+          message: song == null ? '' : '展开歌曲详情页',
+          child: InkWell(
+            onTap: song == null ? null : widget.onTap,
+            borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
@@ -323,6 +329,7 @@ class _SongInfoState extends State<_SongInfo> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
