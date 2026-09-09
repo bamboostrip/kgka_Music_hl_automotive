@@ -14,6 +14,8 @@ import '../widgets/climax_slider_track.dart';
 import '../widgets/desktop_anchored_menu.dart';
 import '../widgets/desktop_queue_panel.dart';
 import '../widgets/marquee_text.dart';
+import '../widgets/playback_speed_sheet.dart';
+import '../widgets/sleep_timer_sheet.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import 'player_bar_widgets.dart';
@@ -436,6 +438,30 @@ dynamic _safeApi(PlayerController player) {
   }
 }
 
+String _safePlaybackSpeedLabel(PlayerController player) {
+  try {
+    return player.playbackSpeedLabel;
+  } catch (_) {
+    return '1.0x';
+  }
+}
+
+String? _safeSleepTimerSubtitle(PlayerController player) {
+  try {
+    if (player.isSleepTimerActive) {
+      final rem = player.sleepTimerRemaining;
+      final text = formatSleepRemaining(rem);
+      return text.isNotEmpty ? '剩余 $text' : null;
+    }
+    if (player.isSleepFinishCurrentSong) {
+      return '播完歌曲后停止';
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
 class _LikeButton extends StatelessWidget {
   const _LikeButton({
     required this.auth,
@@ -539,7 +565,7 @@ class _CommentButton extends StatelessWidget {
 }
 
 @visibleForTesting
-class SongMoreButton extends StatelessWidget {
+class SongMoreButton extends StatefulWidget {
   const SongMoreButton({
     super.key,
     required this.player,
@@ -554,133 +580,206 @@ class SongMoreButton extends StatelessWidget {
   final double iconSize;
 
   @override
+  State<SongMoreButton> createState() => _SongMoreButtonState();
+}
+
+class _SongMoreButtonState extends State<SongMoreButton> {
+  bool _isOpen = false;
+
+  Future<void> _openMenu(BuildContext buttonContext) async {
+    final s = widget.song;
+    if (s == null) return;
+    final p = widget.player;
+    final a = widget.auth;
+    final ctrl = p == null ? null : _safeDownloadController(p);
+    bool downloaded = false;
+    if (ctrl != null) {
+      try {
+        downloaded = ctrl.isDownloaded(s);
+      } catch (_) {
+        downloaded = false;
+      }
+    }
+
+    final actions = <SongSheetAction>[
+      if (p != null)
+        SongSheetAction(
+          icon: Icons.queue_music_rounded,
+          title: '下一首播放',
+          onTap: () async {
+            try {
+              await p.insertNext(s);
+              Toast.show('已设为下一首播放');
+            } catch (e) {
+              Toast.error('添加失败：$e');
+            }
+          },
+        ),
+      if (a != null)
+        SongSheetAction(
+          icon: Icons.playlist_add_rounded,
+          title: '添加到歌单',
+          onTap: () => showAddToPlaylistSheet(
+            context: buttonContext,
+            auth: a,
+            song: s,
+          ),
+        ),
+      if (p != null)
+        SongSheetAction(
+          icon: Icons.auto_awesome_rounded,
+          title: '试听高潮',
+          subtitle: '播放歌曲高潮片段',
+          onTap: () async {
+            try {
+              final ok = await p.playClimaxPreview();
+              if (!ok) Toast.error('暂无高潮片段');
+            } catch (_) {
+              Toast.error('暂无高潮片段');
+            }
+          },
+        ),
+      if (p != null)
+        SongSheetAction(
+          icon: Icons.speed_rounded,
+          title: '倍速播放',
+          subtitle: _safePlaybackSpeedLabel(p),
+          onTap: () => showPlaybackSpeedSheet(
+            context: buttonContext,
+            player: p,
+          ),
+        ),
+      if (p != null)
+        SongSheetAction(
+          icon: Icons.bedtime_rounded,
+          title: '定时播放',
+          subtitle: _safeSleepTimerSubtitle(p),
+          onTap: () => showSleepTimerSheet(
+            context: buttonContext,
+            player: p,
+          ),
+        ),
+      if (ctrl != null && p != null)
+        SongSheetAction(
+          icon: downloaded
+              ? Icons.download_done_rounded
+              : Icons.download_rounded,
+          title: downloaded ? '已下载' : '下载',
+          onTap: () {
+            if (downloaded) {
+              Toast.info('歌曲已下载');
+            } else {
+              try {
+                ctrl.download(s, p.audioQuality);
+                Toast.success('已加入下载队列');
+              } catch (_) {
+                Toast.error('下载失败，请重试');
+              }
+            }
+          },
+        ),
+      if (s.artist.isNotEmpty)
+        SongSheetAction(
+          icon: Icons.person_rounded,
+          title: '查看歌手',
+          onTap: () async {
+            final api = p == null ? null : _safeApi(p);
+            final artist = s.artists.firstWhere(
+              (item) => item.name.isNotEmpty,
+              orElse: () => ArtistRef(
+                id: '',
+                name: s.artist,
+              ),
+            );
+            if (api != null &&
+                a != null &&
+                p != null &&
+                artist.name.isNotEmpty) {
+              Navigator.of(buttonContext).push(
+                MaterialPageRoute(
+                  builder: (_) => ArtistDetailPage(
+                    api: api,
+                    auth: a,
+                    artist: artist,
+                    player: p,
+                  ),
+                ),
+              );
+            } else {
+              await Clipboard.setData(
+                ClipboardData(text: s.artist),
+              );
+              Toast.success('已复制歌手名：${s.artist}');
+            }
+          },
+        ),
+      SongSheetAction(
+        icon: Icons.copy_rounded,
+        title: '复制歌曲信息',
+        onTap: () async {
+          final text = '${s.title} - ${s.artist}';
+          await Clipboard.setData(ClipboardData(text: text));
+          Toast.success('已复制歌曲信息');
+        },
+      ),
+    ];
+
+    await showSongActionSheet(
+      context: buttonContext,
+      song: s,
+      actions: actions,
+      anchor: anchorAbove(buttonContext),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final iconColor = colorScheme.onSurfaceVariant;
-    final enabled = song != null;
+    final enabled = widget.song != null;
+    final defaultColor = colorScheme.onSurfaceVariant;
+    final activeColor = colorScheme.primary;
+    final currentColor = !enabled
+        ? defaultColor.withValues(alpha: 0.38)
+        : (_isOpen ? activeColor : defaultColor);
 
     return Builder(
       builder: (buttonContext) {
         return IconButton(
           key: const ValueKey('desktop_song_more_button'),
           tooltip: '更多操作',
-          iconSize: iconSize,
+          iconSize: widget.iconSize,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-          color: iconColor,
+          color: currentColor,
           onPressed: !enabled
               ? null
-              : () {
-                  final s = song!;
-                  final p = player;
-                  final a = auth;
-                  final ctrl = p == null ? null : _safeDownloadController(p);
-                  bool downloaded = false;
-                  if (ctrl != null) {
-                    try {
-                      downloaded = ctrl.isDownloaded(s);
-                    } catch (_) {
-                      downloaded = false;
+              : () async {
+                  setState(() => _isOpen = true);
+                  try {
+                    await _openMenu(buttonContext);
+                  } finally {
+                    if (mounted) {
+                      setState(() => _isOpen = false);
                     }
                   }
-
-                  final actions = <SongSheetAction>[
-                    if (p != null)
-                      SongSheetAction(
-                        icon: Icons.queue_music_rounded,
-                        title: '下一首播放',
-                        onTap: () async {
-                          try {
-                            await p.insertNext(s);
-                            Toast.show('已设为下一首播放');
-                          } catch (e) {
-                            Toast.error('添加失败：$e');
-                          }
-                        },
-                      ),
-                    if (a != null)
-                      SongSheetAction(
-                        icon: Icons.playlist_add_rounded,
-                        title: '添加到歌单',
-                        onTap: () => showAddToPlaylistSheet(
-                          context: buttonContext,
-                          auth: a,
-                          song: s,
-                        ),
-                      ),
-                    if (ctrl != null && p != null)
-                      SongSheetAction(
-                        icon: downloaded
-                            ? Icons.download_done_rounded
-                            : Icons.download_rounded,
-                        title: downloaded ? '已下载' : '下载',
-                        onTap: () {
-                          if (downloaded) {
-                            Toast.info('歌曲已下载');
-                          } else {
-                            try {
-                              ctrl.download(s, p.audioQuality);
-                              Toast.success('已加入下载队列');
-                            } catch (_) {
-                              Toast.error('下载失败，请重试');
-                            }
-                          }
-                        },
-                      ),
-                    if (s.artist.isNotEmpty)
-                      SongSheetAction(
-                        icon: Icons.person_rounded,
-                        title: '查看歌手',
-                        onTap: () async {
-                          final api = p == null ? null : _safeApi(p);
-                          final artist = s.artists.firstWhere(
-                            (item) => item.name.isNotEmpty,
-                            orElse: () => ArtistRef(
-                              id: '',
-                              name: s.artist,
-                            ),
-                          );
-                          if (api != null &&
-                              a != null &&
-                              p != null &&
-                              artist.name.isNotEmpty) {
-                            Navigator.of(buttonContext).push(
-                              MaterialPageRoute(
-                                builder: (_) => ArtistDetailPage(
-                                  api: api,
-                                  auth: a,
-                                  artist: artist,
-                                  player: p,
-                                ),
-                              ),
-                            );
-                          } else {
-                            await Clipboard.setData(
-                              ClipboardData(text: s.artist),
-                            );
-                            Toast.success('已复制歌手名：${s.artist}');
-                          }
-                        },
-                      ),
-                    SongSheetAction(
-                      icon: Icons.copy_rounded,
-                      title: '复制歌曲信息',
-                      onTap: () async {
-                        final text = '${s.title} - ${s.artist}';
-                        await Clipboard.setData(ClipboardData(text: text));
-                        Toast.success('已复制歌曲信息');
-                      },
-                    ),
-                  ];
-
-                  showSongActionSheet(
-                    context: buttonContext,
-                    song: s,
-                    actions: actions,
-                    anchor: anchorAbove(buttonContext),
-                  );
                 },
-          icon: const Icon(Icons.more_horiz_rounded),
+          icon: Container(
+            width: 19,
+            height: 19,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: currentColor,
+                width: 1.2,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.more_horiz_rounded,
+              size: 13,
+              color: currentColor,
+            ),
+          ),
         );
       },
     );

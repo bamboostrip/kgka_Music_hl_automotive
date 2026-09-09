@@ -155,15 +155,16 @@ class LandscapeHeader extends StatelessWidget {
               ],
             ),
           ),
-          Builder(
-            builder: (moreButtonContext) => LandscapeHeaderButton(
-              tooltip: '更多',
-              size: compact ? 38 : 44,
-              iconSize: compact ? 22 : 24,
-              onPressed: () => _showMoreSheet(moreButtonContext),
-              icon: Icons.more_horiz_rounded,
+          if (!isDesktopFormFactor)
+            Builder(
+              builder: (moreButtonContext) => LandscapeHeaderButton(
+                tooltip: '更多',
+                size: compact ? 38 : 44,
+                iconSize: compact ? 22 : 24,
+                onPressed: () => _showMoreSheet(moreButtonContext),
+                icon: Icons.more_horiz_rounded,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -715,11 +716,4 @@ class _LandscapeLyricPanelState extends State<LandscapeLyricPanel> {
       ),
     );
   }
-}
-
-String formatSleepRemaining(Duration? remaining) {
-  if (remaining == null || remaining <= Duration.zero) return '';
-  final minutes = remaining.inMinutes;
-  final seconds = remaining.inSeconds.remainder(60);
-  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 }

@@ -51,6 +51,31 @@ class _FakePlayerController extends ChangeNotifier implements PlayerController {
   @override
   DownloadController? downloadController;
 
+  @override
+  String get playbackSpeedLabel => '1.0x';
+
+  @override
+  double playbackSpeed = 1.0;
+
+  @override
+  bool get isSleepTimerActive => false;
+
+  @override
+  Duration? get sleepTimerRemaining => null;
+
+  @override
+  bool get isSleepFinishCurrentSong => false;
+
+  @override
+  bool get sleepFinishCurrentSongOption => false;
+
+  int playClimaxPreviewCalls = 0;
+  @override
+  Future<bool> playClimaxPreview() async {
+    playClimaxPreviewCalls++;
+    return true;
+  }
+
   int insertNextCalls = 0;
   Song? lastInsertedNextSong;
   @override
@@ -673,12 +698,51 @@ void main() {
       await tester.tap(moreBtn);
       await tester.pumpAndSettle();
 
-      // 弹出菜单中包含五项操作
+      // 弹出菜单中包含全部 QQ 音乐风格扩展操作
       expect(find.text('下一首播放'), findsOneWidget);
       expect(find.text('添加到歌单'), findsOneWidget);
+      expect(find.text('试听高潮'), findsOneWidget);
+      expect(find.text('倍速播放'), findsOneWidget);
+      expect(find.text('定时播放'), findsOneWidget);
       expect(find.text('下载'), findsOneWidget);
       expect(find.text('查看歌手'), findsOneWidget);
       expect(find.text('复制歌曲信息'), findsOneWidget);
+    });
+
+    testWidgets('点击更多菜单中的"试听高潮"调用 player.playClimaxPreview', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('试听高潮'));
+      await tester.pumpAndSettle();
+
+      expect(player.playClimaxPreviewCalls, 1);
+    });
+
+    testWidgets('更多操作按钮呈现圆形线框包裹视觉', (tester) async {
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      final moreBtn = find.byKey(const ValueKey('desktop_song_more_button'));
+      expect(moreBtn, findsOneWidget);
+
+      final circleContainer = find.descendant(
+        of: moreBtn,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).shape == BoxShape.circle,
+        ),
+      );
+      expect(circleContainer, findsOneWidget);
+      expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
     });
 
     testWidgets('点击更多菜单中的"下一首播放"调用 player.insertNext', (tester) async {

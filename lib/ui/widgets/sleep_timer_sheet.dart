@@ -237,3 +237,10 @@ class _TimerChip extends StatelessWidget {
     );
   }
 }
+
+String formatSleepRemaining(Duration? remaining) {
+  if (remaining == null || remaining <= Duration.zero) return '';
+  final minutes = remaining.inMinutes;
+  final seconds = remaining.inSeconds.remainder(60);
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}
