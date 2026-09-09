@@ -292,7 +292,7 @@ class _VolumePopoverButtonState extends State<VolumePopoverButton> {
 }
 
 /// 垂直音量弹出卡片（顶层垂直滑块、中层百分比、底层静音按钮、底部三角下指示箭头）。
-class _VolumePopoverCard extends StatelessWidget {
+class _VolumePopoverCard extends StatefulWidget {
   const _VolumePopoverCard({
     required this.player,
     required this.onMuteToggle,
@@ -304,6 +304,21 @@ class _VolumePopoverCard extends StatelessWidget {
   final ValueChanged<PointerSignalEvent> onPointerSignal;
 
   @override
+  State<_VolumePopoverCard> createState() => _VolumePopoverCardState();
+}
+
+class _VolumePopoverCardState extends State<_VolumePopoverCard> {
+  double? _dragValue;
+
+  @override
+  void didUpdateWidget(covariant _VolumePopoverCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.player != oldWidget.player) {
+      _dragValue = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -313,13 +328,14 @@ class _VolumePopoverCard extends StatelessWidget {
         colorScheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.5);
 
     return AnimatedBuilder(
-      animation: player,
+      animation: widget.player,
       builder: (context, _) {
-        final volume = player.volume.clamp(0.0, 1.0);
+        final volume =
+            (_dragValue ?? widget.player.volume).clamp(0.0, 1.0);
         final percent = (volume * 100).round();
 
         return Listener(
-          onPointerSignal: onPointerSignal,
+          onPointerSignal: widget.onPointerSignal,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -367,7 +383,14 @@ class _VolumePopoverCard extends StatelessWidget {
                           child: Slider(
                             value: volume,
                             onChanged: (val) {
-                              player.setVolume(val);
+                              setState(() => _dragValue = val);
+                              widget.player.setVolume(val);
+                            },
+                            onChangeEnd: (val) {
+                              widget.player.setVolume(val);
+                              if (mounted) {
+                                setState(() => _dragValue = null);
+                              }
                             },
                           ),
                         ),
@@ -387,7 +410,7 @@ class _VolumePopoverCard extends StatelessWidget {
                     IconButton(
                       key: const ValueKey('volume_popover_mute_button'),
                       tooltip: volume <= 0 ? '取消静音' : '静音',
-                      onPressed: onMuteToggle,
+                      onPressed: widget.onMuteToggle,
                       icon: Icon(
                         volumeIconFor(volume),
                         size: 20,

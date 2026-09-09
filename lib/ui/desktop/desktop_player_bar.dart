@@ -23,7 +23,7 @@ String formatDuration(Duration d) {
   return h > 0 ? '$h:$m:$s' : '$m:$s';
 }
 
-/// 窄窗断点：<1100 收起次要按钮 + 音量条只留图标（滚轮/点击仍可调）。
+/// 窄窗断点：<1100 收起左区次要按钮（只保留喜欢）。
 const double kPlayerBarCompactBreakpoint = 1100;
 
 /// 左区固定宽度（封面 + 曲名 + 操作入口）。
@@ -33,8 +33,8 @@ const double kPlayerBarLeftWidthCompact = 232;
 /// 桌面底部播放栏：QQ 音乐 PC 式左/中/右三段布局，视觉沿用本项目主题。
 ///
 /// - 左：封面/曲目信息（悬停浮出放大图标，点击进播放页）+ 喜欢/评论/下载/更多（窄窗只留喜欢）。
-/// - 中：上层播放控制（居中）+ 下层进度条（Expanded 吃满剩余宽度）。
-/// - 右：音质 + 音效(?) + 音量 + 桌面词(?) + 队列。
+/// - 中：上层播放控制（居中，含播放模式、上一首、播放/暂停、下一首、音量气泡）+ 下层进度条（Expanded 吃满剩余宽度）。
+/// - 右：音质 + 音效(?) + 桌面词(?) + 队列。
 ///
 /// 无歌曲时保持占位布局（高度稳定，不随播放状态跳变）。
 class DesktopPlayerBar extends StatelessWidget {

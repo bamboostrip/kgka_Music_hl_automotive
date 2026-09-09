@@ -276,6 +276,35 @@ void main() {
       expect(player.volume, greaterThan(0.2));
     });
 
+    testWidgets('音量条拖拽过程中实时更新百分比并在松手后恢复同步', (tester) async {
+      final player = _FakePlayerController()..volume = 0.2;
+      await _pumpBar(tester, player);
+
+      final popoverButton =
+          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      await tester.tap(popoverButton);
+      await tester.pump();
+
+      expect(find.text('20%'), findsOneWidget);
+
+      final slider = find.byType(Slider);
+      final gesture = await tester.startGesture(tester.getCenter(slider));
+      await gesture.moveBy(const Offset(0, -30));
+      await tester.pump();
+
+      // 拖拽中百分比已实时变动（不再是 20%）
+      expect(find.text('20%'), findsNothing);
+      expect(player.volumeChanges, isNotEmpty);
+
+      // 松手结束拖拽
+      await gesture.up();
+      await tester.pump();
+
+      // 弹层仍然显示当前最终音量百分比
+      final currentPercent = '${(player.volume * 100).round()}%';
+      expect(find.text(currentPercent), findsOneWidget);
+    });
+
     testWidgets('滚轮在音量入口按钮或弹层卡片上微调音量', (tester) async {
       final player = _FakePlayerController()..volume = 0.8;
       await _pumpBar(tester, player);
