@@ -38,6 +38,11 @@ class AppConfig {
   static const downloadDirName = 'shiyin_downloads';
   static const playCacheDirName = 'shiyin_play_cache';
 
+  /// 下载/播放缓存目录的改名前旧名（legacy_migration 与 DownloadService 的
+  /// 历史目录对账共用，单点维护）。
+  static const legacyDownloadDirName = 'ka_music_downloads';
+  static const legacyPlayCacheDirName = 'ka_music_play_cache';
+
   /// 数据缓存 TTL（分级）
   static const homeCacheTtl = Duration(minutes: 30); // 首页推荐
   static const rankCacheTtl = Duration(minutes: 30); // 排行榜（与推荐页对齐）

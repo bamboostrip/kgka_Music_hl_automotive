@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, ValueListenable, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,6 +15,7 @@ import '../form_factor.dart';
 import '../widgets/artwork.dart';
 import '../widgets/desktop_song_table_row.dart';
 import '../widgets/song_action_sheets.dart';
+import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
 import '../player/song_tap_handler.dart';
 import 'artist_detail_page.dart';
@@ -26,12 +28,25 @@ class DownloadedSongsPage extends StatefulWidget {
     required this.auth,
     required this.player,
     required this.downloads,
+    this.activationRevision,
+    this.isActive,
   });
 
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
   final DownloadController downloads;
+
+  /// 桌面保活栈（LazyIndexedStack）专用：分区切换的修订号通知。
+  /// 保活下本页 [State.initState] 只在首次可见时执行一次，用户切走
+  /// 再切回不会重建——外部删除同步需要靠本通知在"重新成为当前分区"
+  /// 时再触发对账。移动端按路由 push 每次全新构建，两个参数为 null，
+  /// 行为与之前完全一致。
+  final ValueListenable<int>? activationRevision;
+
+  /// 配合 [activationRevision]：修订号变化时本回调返回 true 表示本页
+  /// 正成为当前分区。由宿主（desktop_shell）以 contentIndex 判定。
+  final bool Function()? isActive;
 
   @override
   State<DownloadedSongsPage> createState() => _DownloadedSongsPageState();
@@ -40,17 +55,44 @@ class DownloadedSongsPage extends StatefulWidget {
 class _DownloadedSongsPageState extends State<DownloadedSongsPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  bool _reconciling = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // 打开即对账：运行期间在文件管理器里删除/移动的文件，进入本页时
+    // 同步移除条目并提示（启动时 initialize 已静默对账过一次，此处
+    // 覆盖会话期间的变动；无变动时零感知）。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reconcileOnOpen());
+    // 桌面保活栈：切回本分区时再次对账（见 widget.activationRevision 注释）
+    widget.activationRevision?.addListener(_onActivationRevision);
   }
 
   @override
   void dispose() {
+    widget.activationRevision?.removeListener(_onActivationRevision);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _onActivationRevision() {
+    if (widget.isActive?.call() ?? false) {
+      _reconcileOnOpen();
+    }
+  }
+
+  Future<void> _reconcileOnOpen() async {
+    if (_reconciling) return; // 快速反复切换分区时跳过重叠对账
+    _reconciling = true;
+    try {
+      final removed = await widget.downloads.reconcileDownloads();
+      if (removed > 0 && mounted) {
+        Toast.show('检测到 $removed 首下载文件已被移动或删除，已从下载列表移除');
+      }
+    } finally {
+      _reconciling = false;
+    }
   }
 
   @override
@@ -336,7 +378,12 @@ class _DownloadedList extends StatelessWidget {
           SongSheetAction(
             icon: Icons.folder_open_rounded,
             title: '打开文件夹',
-            onTap: () => _openContainingFolder(filePath, context),
+            onTap: () => _openContainingFolder(
+              filePath,
+              context,
+              downloads: downloads,
+              song: song,
+            ),
           ),
           SongSheetAction(
             icon: Icons.info_outline_rounded,
@@ -498,7 +545,12 @@ class _DownloadedSongRow extends StatelessWidget {
                 title: const Text('打开文件夹'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _openContainingFolder(filePath, ctx);
+                  _openContainingFolder(
+                    filePath,
+                    context,
+                    downloads: downloads,
+                    song: song,
+                  );
                 },
               ),
               ListTile(
@@ -530,17 +582,44 @@ class _DownloadedSongRow extends StatelessWidget {
 
 /// 用系统文件管理器打开歌曲文件所在目录（移动端弹层与桌面菜单共用）。
 ///
-/// 任何一步失败（精简发行版没有 xdg-open、explorer 拉起失败等）都以
-/// SnackBar 反馈，不产生未捕获异步异常。
-Future<void> _openContainingFolder(String filePath, BuildContext context) async {
-  final file = File(filePath);
+/// - 打开前校验文件仍在：已被外部移动/删除时先对账（条目可能被移除或
+///   在当前下载目录找回），找回则打开新位置，仍缺失则提示——绝不盲开，
+///   否则 explorer 对无效路径会静默回落到默认视图（文档），看起来像
+///   "打开了错误的位置"；
+/// - Windows 用 `explorer /select,` 打开目录并选中歌曲文件（与浏览器
+///   "在文件夹中显示"一致的现代口径），macOS 用 `open -R` 在 Finder
+///   中定位；
+/// - 任何一步失败（精简发行版没有 xdg-open、explorer 拉起失败等）都以
+///   Toast/SnackBar 反馈，不产生未捕获异步异常。
+Future<void> _openContainingFolder(
+  String filePath,
+  BuildContext context, {
+  required DownloadController downloads,
+  required Song song,
+}) async {
+  var path = filePath;
+  if (!File(path).existsSync()) {
+    await downloads.reconcileDownloads();
+    final refreshed = downloads.entryFor(song)?.filePath;
+    if (refreshed != null && File(refreshed).existsSync()) {
+      path = refreshed;
+    } else {
+      Toast.show('文件已被移动或删除，已同步下载列表');
+      return;
+    }
+  }
+  final file = File(path);
   final dir = file.parent.path;
   try {
     final platform = defaultTargetPlatform;
     if (platform == TargetPlatform.windows) {
-      await Process.run('explorer', [dir]);
+      // 路径统一为 `\` 分隔（下载服务拼接用 `/`，explorer /select 对
+      // 混合分隔符的解析不可靠）；/select 打开父目录并选中文件。
+      await Process.run('explorer', [
+        '/select,${path.replaceAll('/', '\\')}',
+      ]);
     } else if (platform == TargetPlatform.macOS) {
-      await Process.run('open', [dir]);
+      await Process.run('open', ['-R', path]);
     } else if (platform == TargetPlatform.linux) {
       await Process.run('xdg-open', [dir]);
     } else if (platform == TargetPlatform.android) {
@@ -556,7 +635,9 @@ Future<void> _openContainingFolder(String filePath, BuildContext context) async 
       }
     } else {
       // iOS 无文件管理器直达能力：明确反馈而非静默无响应。
-      _showOpenFolderError(context, '当前平台暂不支持打开所在目录');
+      if (context.mounted) {
+        _showOpenFolderError(context, '当前平台暂不支持打开所在目录');
+      }
     }
   } catch (e) {
     debugPrint('[已下载] 打开所在目录失败: $e');

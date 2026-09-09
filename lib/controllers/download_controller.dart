@@ -162,6 +162,8 @@ class DownloadController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _playCacheLimit = prefs.getInt(_playCacheLimitKey) ?? (300 * 1024 * 1024);
     await _loadDownloads();
+    // 磁盘对账：历史目录迁移（桌面）+ 外部删除同步，随加载一次完成
+    await reconcileDownloads();
     await _loadPlayCache();
     // 启动时 LRU 清理播放缓存
     await _prunePlayCache(excludePaths: const {});
@@ -178,7 +180,11 @@ class DownloadController extends ChangeNotifier {
       return;
     }
     // 逐条容错：单条损坏只跳过该条，避免一条坏数据吃掉全表；
-    // 有裁剪则回写，把坏条/失联文件一次性清理，下次启动不再重复 IO
+    // 有裁剪则回写，把坏条一次性清理，下次启动不再重复解析。
+    // 不做常规的文件存在性校验——外部删除/目录布局变迁的找回与裁剪
+    // 统一交给 [reconcileDownloads]（加载即裁会误删"改名迁移只重写了
+    // 索引、文件仍在旧目录"的错位条目）；仅同 hash 重复条目在加载时
+    // 择优（见循环内注释），避免丢失条目顶掉好条目。
     var dropped = 0;
     for (final item in decoded) {
       if (item is! Map<String, dynamic>) {
@@ -192,10 +198,17 @@ class DownloadController extends ChangeNotifier {
         final quality = AudioQuality.fromApiValue(item['quality'] as String?);
         final filePath = item['filePath'] as String?;
         if (filePath == null) throw const FormatException('no path');
-        // 校验文件存在性
-        if (!await _service.fileSize(filePath).then((s) => s > 0)) {
-          dropped++;
-          continue;
+        // 同 hash 重复条目（历史索引里同一首歌以不同音质记了两条）：
+        // 优先保留文件仍在磁盘上的那条——"后条覆盖前条"会让丢失条目
+        // 顶掉好条目，随后被对账清掉，下载凭空消失。
+        final existing = _downloads[song.hash];
+        if (existing?.filePath != null) {
+          final newPathExists = await File(filePath).exists();
+          final oldPathExists = await File(existing!.filePath!).exists();
+          if (!newPathExists && oldPathExists) {
+            dropped++;
+            continue;
+          }
         }
         final downloadedAtStr = item['downloadedAt'] as String?;
         _downloads[song.hash] = DownloadEntry(
@@ -733,6 +746,160 @@ class DownloadController extends ChangeNotifier {
     _downloads.clear();
     notifyListeners();
     await _persistDownloads();
+  }
+
+  // ===== 索引与磁盘对账 =====
+
+  /// 下载索引对账：让列表回到与磁盘一致的真实状态。
+  ///
+  /// 两个来源会造成索引与磁盘脱节：
+  /// 1. 桌面端下载落点两次变迁（ka_music 改名、Windows 从文档目录对齐
+  ///    系统 Downloads），旧条目的绝对路径可能指向历史目录；
+  /// 2. 用户在文件管理器里手动删除/移动歌曲文件，索引无从感知。
+  ///
+  /// 对每个已下载条目（现代桌面软件"以文件为准、列表随磁盘"的口径）：
+  /// - 文件仍在历史目录 → 搬入当前下载目录并重写路径（仅桌面，
+  ///   [DownloadService.legacyDownloadDirs] 在移动端返回空列表）；
+  /// - 索引路径已失效，但同名文件在当前/历史目录 → 采用（覆盖改名
+  ///   迁移只重写了索引字符串、文件仍在旧目录的错位）；
+  /// - 到处不存在 → 移除条目（外部删除同步）。
+  ///
+  /// 启动时（[initialize]）静默执行；「已下载」页打开时再次执行并按
+  /// 返回值提示。搬移/采用不提示（一次性迁移，不打扰）。在播文件不
+  /// 参与搬移（rename 会中断播放，留待下次对账）。返回移除的条目数。
+  Future<int> reconcileDownloads() async {
+    if (_disposed) return 0;
+    Directory? currentDir;
+    List<Directory> legacyDirs = const [];
+    try {
+      currentDir = await _service.downloadDir();
+    } catch (_) {}
+    try {
+      legacyDirs = await _service.legacyDownloadDirs();
+    } catch (_) {}
+    // 下载根都解析/创建失败（下载卷未挂载、共享盘断开等）时 exists()
+    // 会全员 false，此时裁剪等于把整张索引清空，存储恢复后"下载全丢"。
+    // 只在下载根可用时才判定"外部删除"；根不可用时本轮保留所有条目。
+    final canPrune = currentDir != null;
+
+    var changed = false;
+    var removed = 0;
+    // 快照遍历：搬移/移除结果先记账，循环后统一写回表
+    final snapshot = List.of(_downloads.values);
+    final rewrites = <String, String>{}; // hash -> 磁盘上的真实路径
+    final drops = <String>{};
+    for (final entry in snapshot) {
+      if (entry.status != DownloadStatus.downloaded) continue;
+      final path = entry.filePath;
+      if (path == null || path.isEmpty) continue;
+      final file = File(path);
+      final name = _basenameOf(path);
+
+      if (await file.exists()) {
+        // 文件在历史目录中 → 搬入当前目录（同目录体系的条目不动）。
+        // 目录比较为字符串精确匹配：候选与索引路径同源于 downloadDir 的
+        // '<原生分隔符目录>/<名字>' 拼接口径，构造上必然一致（Windows
+        // 大小写漂移只会退化为"不搬移"，安全无害）。
+        if (currentDir != null &&
+            legacyDirs.any((d) => d.path == file.parent.path) &&
+            !_isPlayingFile(path)) {
+          final moved = await _moveIntoDownloadDir(file, currentDir);
+          if (moved != null) {
+            rewrites[entry.song.hash] = moved;
+            changed = true;
+          }
+        }
+        continue;
+      }
+
+      // 索引路径失效：同名文件找回——当前目录优先，其次历史目录（搬入）
+      if (currentDir != null && name != null) {
+        final candidate = File('${currentDir.path}/$name');
+        if (await candidate.exists()) {
+          rewrites[entry.song.hash] = candidate.path;
+          changed = true;
+          continue;
+        }
+      }
+      String? legacyHit;
+      if (name != null) {
+        for (final dir in legacyDirs) {
+          final candidate = File('${dir.path}/$name');
+          if (await candidate.exists()) {
+            legacyHit = candidate.path;
+            break;
+          }
+        }
+      }
+      if (legacyHit != null) {
+        var resolved = legacyHit;
+        if (currentDir != null && !_isPlayingFile(legacyHit)) {
+          final moved = await _moveIntoDownloadDir(File(legacyHit), currentDir);
+          if (moved != null) resolved = moved;
+          // 搬移失败（文件被占用等）：索引指向历史路径原地采用，仍可播
+        }
+        rewrites[entry.song.hash] = resolved;
+        changed = true;
+        continue;
+      }
+
+      // 到处不存在：外部已删除，移除条目（存储不可用时见 canPrune 注释）
+      if (!canPrune) continue;
+      drops.add(entry.song.hash);
+      removed++;
+      changed = true;
+    }
+
+    if (!changed) return 0;
+    for (final entry in snapshot) {
+      final hash = entry.song.hash;
+      // 对账期间用户已对该条目发起删除/重下（表内对象已换）：以最新
+      // 状态为准，不回写过期结论（如删掉刚重下的条目、复活刚删的）。
+      if (!identical(_downloads[hash], entry)) continue;
+      if (drops.contains(hash)) {
+        _downloads.remove(hash);
+      } else if (rewrites.containsKey(hash)) {
+        _downloads[hash] = entry.copyWith(filePath: rewrites[hash]);
+      }
+    }
+    debugPrint(
+      '[时音][download] 对账完成：搬移/采用 ${rewrites.length} 条，'
+      '移除 $removed 条',
+    );
+    notifyListeners();
+    await _persistDownloads();
+    return removed;
+  }
+
+  /// 把历史目录中的文件搬入当前下载目录，返回新路径；失败返回 null
+  /// （条目保持旧路径继续可播）。同名冲突沿用下载完成时的口径
+  /// （[DownloadService.resolveNonCollidingPath]）：目标已存在且同大小
+  /// 视为同一内容，索引直接指向现有文件、源文件留在原地（绝不自动
+  /// 删除用户数据）；不同大小换 "(n)" 名保留两份。
+  Future<String?> _moveIntoDownloadDir(File source, Directory dir) async {
+    try {
+      final name = _basenameOf(source.path);
+      if (name == null) return null;
+      final target = '${dir.path}/$name';
+      final finalPath = _service.resolveNonCollidingPath(target, source.path);
+      if (finalPath == target && File(target).existsSync()) {
+        // resolve 判定为同内容重复：采用现有文件，不动源文件
+        return target;
+      }
+      await source.rename(finalPath);
+      return finalPath;
+    } catch (error) {
+      debugPrint('[时音][download] 历史目录文件搬移失败（保留原路径）: $error');
+      return null;
+    }
+  }
+
+  /// 路径最后一段文件名（兼容 `\` 与 `/` 分隔）；空路径返回 null。
+  String? _basenameOf(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final index = normalized.lastIndexOf('/');
+    final name = index >= 0 ? normalized.substring(index + 1) : normalized;
+    return name.isEmpty ? null : name;
   }
 
   // ===== 播放缓存 =====

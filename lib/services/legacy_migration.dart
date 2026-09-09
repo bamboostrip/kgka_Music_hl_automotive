@@ -43,9 +43,9 @@ class LegacyMigration {
   const LegacyMigration._();
 
   /// 旧下载目录名（AppConfig.downloadDirName 改名前的值）。
-  static const _oldDownloadsDirName = 'ka_music_downloads';
+  static const _oldDownloadsDirName = AppConfig.legacyDownloadDirName;
   /// 旧播放缓存目录名（AppConfig.playCacheDirName 改名前的值）。
-  static const _oldPlayCacheDirName = 'ka_music_play_cache';
+  static const _oldPlayCacheDirName = AppConfig.legacyPlayCacheDirName;
 
   /// 精确键映射（旧 → 新）。
   static const _exactKeys = <String, String>{

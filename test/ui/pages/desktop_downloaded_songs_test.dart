@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,9 +61,18 @@ class _FakeDownloadController extends ChangeNotifier
   final List<DownloadEntry> _entries;
 
   final List<String> deletedHashes = [];
+  int reconcileCalls = 0;
 
   @override
   List<DownloadEntry> get downloadEntries => _entries;
+
+  @override
+  DownloadEntry? entryFor(Song song) {
+    for (final entry in _entries) {
+      if (entry.song.hash == song.hash) return entry;
+    }
+    return null;
+  }
 
   @override
   Future<void> deleteDownload(Song song) async {
@@ -70,6 +80,9 @@ class _FakeDownloadController extends ChangeNotifier
     _entries.removeWhere((e) => e.song.hash == song.hash);
     notifyListeners();
   }
+
+  @override
+  Future<int> reconcileDownloads() async => ++reconcileCalls;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -105,6 +118,8 @@ void main() {
   Widget buildPage(
     _FakeDownloadController downloads, {
     _FakePlayerController? player,
+    ValueListenable<int>? activationRevision,
+    bool Function()? isActive,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -115,6 +130,8 @@ void main() {
             auth: _FakeAuthController(),
             player: player ?? _FakePlayerController(),
             downloads: downloads,
+            activationRevision: activationRevision,
+            isActive: isActive,
           ),
         ),
       ),
@@ -202,6 +219,71 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(downloads.deletedHashes, [_downloadedSong.hash]);
+    });
+
+    testWidgets('打开页面即触发一次下载索引对账', (tester) async {
+      final downloads = _FakeDownloadController([
+        _entry(song: _downloadedSong, filePath: r'C:\music\a.mp3'),
+      ]);
+
+      await tester.pumpWidget(buildPage(downloads));
+      await tester.pumpAndSettle();
+
+      expect(downloads.reconcileCalls, 1);
+    });
+
+    testWidgets('桌面保活栈：切回本分区（revision）再次对账，切走不触发', (tester) async {
+      final downloads = _FakeDownloadController([
+        _entry(song: _downloadedSong, filePath: r'C:\music\a.mp3'),
+      ]);
+      final revision = ValueNotifier<int>(0);
+      var active = false;
+
+      await tester.pumpWidget(
+        buildPage(
+          downloads,
+          activationRevision: revision,
+          isActive: () => active,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(downloads.reconcileCalls, 1); // 首次可见（initState）
+
+      // 切回本分区：revision 自增且本页为当前分区 → 再次对账
+      active = true;
+      revision.value++;
+      await tester.pumpAndSettle();
+      expect(downloads.reconcileCalls, 2);
+
+      // 切到其他分区：revision 自增但本页非当前 → 不对账
+      active = false;
+      revision.value++;
+      await tester.pumpAndSettle();
+      expect(downloads.reconcileCalls, 2);
+    });
+
+    testWidgets('文件已被外部删除时点打开文件夹：再次对账并提示，不盲开目录', (tester) async {
+      // 路径不存在：打开文件夹应走对账+提示分支，绝不 Process.run explorer
+      final downloads = _FakeDownloadController([
+        _entry(song: _downloadedSong, filePath: r'C:\music\not_exists\a.mp3'),
+      ]);
+
+      await tester.pumpWidget(buildPage(downloads));
+      await tester.pumpAndSettle();
+      expect(downloads.reconcileCalls, 1); // 页面打开对账
+
+      final rowTopLeft = tester.getTopLeft(find.byType(DesktopSongTableRow));
+      await tester.tapAt(
+        rowTopLeft + const Offset(100, 22),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('打开文件夹'));
+      await tester.pumpAndSettle();
+
+      // 菜单分支又对账一次；无崩溃、无资源管理器进程
+      expect(downloads.reconcileCalls, 2);
     });
   });
 

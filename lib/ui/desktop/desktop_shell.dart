@@ -341,6 +341,11 @@ class _DesktopContent extends StatelessWidget {
     required this.onHomeTabSwitch,
   });
 
+  /// 「已下载」页在 LazyIndexedStack.children 中的下标（与下方 children
+  /// 列表顺序绑定，插拔分区时需同步）。保活栈里该页靠本下标 + revision
+  /// 感知"重新成为当前分区"，触发下载索引对账（外部删除同步）。
+  static const int downloadsContentIndex = 2;
+
   final ValueNotifier<int> revision;
   final _DesktopSection Function() sectionProvider;
   final int Function() homeTabProvider;
@@ -381,7 +386,16 @@ class _DesktopContent extends StatelessWidget {
               theme: theme,
               localMusic: localMusic,
             ),
-            DownloadedSongsPage(api: api, auth: auth, player: player, downloads: downloads),
+            DownloadedSongsPage(
+              api: api,
+              auth: auth,
+              player: player,
+              downloads: downloads,
+              // 保活栈不重建页面：切回本分区时靠 revision 重新对账下载索引
+              activationRevision: revision,
+              isActive: () =>
+                  contentIndexProvider() == downloadsContentIndex,
+            ),
             SettingsPage(
               api: api,
               auth: auth,

@@ -11,6 +11,13 @@ import '../models/music_models.dart';
 /// 下载任务类型。
 enum DownloadTaskKind { download, playCache }
 
+/// 历史下载目录名全集（当前名 + 改名前旧名）：配合文档/下载两个父目录
+/// 组合出全部历史落点，供 [DownloadService.legacyDownloadDirs] 对账。
+const Set<String> _legacyDownloadDirNameCandidates = {
+  AppConfig.downloadDirName,
+  AppConfig.legacyDownloadDirName,
+};
+
 /// 内部待执行任务。
 class _PendingTask {
   _PendingTask({
@@ -134,6 +141,47 @@ class DownloadService {
       await dir.create(recursive: true);
     }
     return dir;
+  }
+
+  /// 桌面端历史下载目录候选（不含当前目录），供索引与磁盘对账：
+  /// 目录布局历经过两次变更——改名（ka_music_* → shiyin_*）与 Windows
+  /// 下载目录对齐系统 Downloads（此前落在文档目录）——旧索引条目里的
+  /// 绝对路径可能指向以下任一历史位置：
+  /// - `<文档目录>/shiyin_downloads`、`<文档目录>/ka_music_downloads`
+  ///   （415b76a 前 Windows/macOS 的下载落点；改名迁移只重写了索引
+  ///   字符串时文件仍留在 ka_music 目录）
+  /// - `<系统下载目录>/ka_music_downloads`（改名前的 Linux 落点）
+  /// 移动端返回空列表：Android 的存量旧路径（公共 Download）按既有
+  /// 决策保持原地可用，不参与搬移。
+  Future<List<Directory>> legacyDownloadDirs() async {
+    if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
+      return const [];
+    }
+    final dirs = <Directory>[];
+    Directory? docs;
+    Directory? downloads;
+    try {
+      docs = await getApplicationDocumentsDirectory();
+    } catch (_) {}
+    try {
+      downloads = await getDownloadsDirectory();
+    } catch (_) {}
+    for (final base in [docs, downloads]) {
+      if (base == null) continue;
+      for (final name in _legacyDownloadDirNameCandidates) {
+        dirs.add(Directory('${base.path}/$name'));
+      }
+    }
+    // 排除当前下载目录（macOS/Linux 下文档目录兜底路径可能与历史路径重合）
+    Directory? current;
+    try {
+      current = await downloadDir();
+    } catch (_) {}
+    final resolved = current;
+    if (resolved != null) {
+      dirs.removeWhere((d) => d.path == resolved.path);
+    }
+    return dirs;
   }
 
   /// 临时播放缓存目录。
@@ -346,8 +394,11 @@ class DownloadService {
     }
   }
 
-  /// 目标已存在且与 .part 大小不一致时，返回带序号的备选路径（供单测）。
-  @visibleForTesting
+  /// 目标已存在且与 .part 大小不一致时，返回带序号的备选路径。
+  ///
+  /// 下载完成落盘与历史目录搬移（DownloadController.reconcileDownloads）
+  /// 共用的同名冲突决策：目标不存在或大小相同（几乎必为同一内容）→
+  /// 原路径；大小不同（"同名不同歌"）→ "(n)" 备选名，绝不静默覆盖。
   String resolveNonCollidingPath(String targetPath, String partPath) {
     final partFile = File(partPath);
     if (!partFile.existsSync()) return targetPath;
