@@ -69,6 +69,18 @@ class _FakePlayerController extends ChangeNotifier
   int cyclePlaybackModeCalls = 0;
   List<double> volumeChanges = [];
 
+  int previousCalls = 0;
+  @override
+  Future<void> previous() async {
+    previousCalls++;
+  }
+
+  int nextCalls = 0;
+  @override
+  Future<void> next() async {
+    nextCalls++;
+  }
+
   @override
   PlaybackMode cyclePlaybackMode() {
     cyclePlaybackModeCalls++;
@@ -165,37 +177,116 @@ void main() {
     });
   });
 
-  group('音量图标', () {
-    testWidgets('点击静音并记忆音量，再次点击恢复', (tester) async {
-      final player = _FakePlayerController()..volume = 0.8;
+  group('音量弹层 VolumePopoverButton', () {
+    testWidgets('下一首右侧渲染音量入口，点击弹出音量卡片，再次点击收起', (tester) async {
+      final player = _FakePlayerController()..volume = 0.7;
       await _pumpBar(tester, player);
 
-      expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
-      expect(find.byTooltip('静音'), findsOneWidget);
+      final nextButton = find.byTooltip('下一首');
+      final popoverButton =
+          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      expect(nextButton, findsOneWidget);
+      expect(popoverButton, findsOneWidget);
+      expect(
+        tester.getTopLeft(popoverButton).dx,
+        greaterThan(tester.getTopRight(nextButton).dx),
+      );
 
-      await tester.tap(find.byTooltip('静音'));
+      // 初始未弹出
+      expect(find.text('70%'), findsNothing);
+
+      // 点击打开
+      await tester.tap(popoverButton);
+      await tester.pump();
+
+      expect(find.text('70%'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('volume_popover_mute_button')),
+        findsOneWidget,
+      );
+
+      // 再次点击收起
+      await tester.tap(popoverButton);
+      await tester.pump();
+      expect(find.text('70%'), findsNothing);
+    });
+
+    testWidgets('弹层中点击静音按钮静音并记忆音量，再次点击恢复', (tester) async {
+      final player = _FakePlayerController()..volume = 0.7;
+      await _pumpBar(tester, player);
+
+      final popoverButton =
+          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      await tester.tap(popoverButton);
+      await tester.pump();
+
+      final muteBtn =
+          find.byKey(const ValueKey('volume_popover_mute_button'));
+      await tester.tap(muteBtn);
       await tester.pump();
 
       expect(player.volume, 0.0);
-      expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
-      expect(find.byTooltip('取消静音'), findsOneWidget);
+      expect(find.text('0%'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('取消静音'));
+      // 再次点击恢复 70%
+      await tester.tap(muteBtn);
       await tester.pump();
 
-      expect(player.volume, 0.8);
-      expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
+      expect(player.volume, 0.7);
+      expect(find.text('70%'), findsOneWidget);
     });
 
-    testWidgets('滚轮在图标区 ±5% 微调并钳制边界', (tester) async {
+    testWidgets('非阻塞关闭：弹层打开时点击上一首，上一首正常触发且弹层收起', (tester) async {
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..volume = 0.7;
+      await _pumpBar(tester, player);
+
+      final popoverButton =
+          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      await tester.tap(popoverButton);
+      await tester.pump();
+      expect(find.text('70%'), findsOneWidget);
+
+      // 点击外部的“上一首”按钮
+      final prevBtn = find.byTooltip('上一首');
+      await tester.tap(prevBtn);
+      await tester.pump();
+
+      // 弹层已收起且上一首触发
+      expect(player.previousCalls, 1);
+      expect(find.text('70%'), findsNothing);
+    });
+
+    testWidgets('音量条拖拽仍然生效', (tester) async {
+      final player = _FakePlayerController()..volume = 0.2;
+      await _pumpBar(tester, player);
+
+      final popoverButton =
+          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      await tester.tap(popoverButton);
+      await tester.pump();
+
+      final slider = find.byType(Slider);
+      expect(slider, findsOneWidget);
+      await tester.drag(slider, const Offset(0, -40));
+      await tester.pump();
+
+      expect(player.volumeChanges, isNotEmpty);
+      expect(player.volume, greaterThan(0.2));
+    });
+
+    testWidgets('滚轮在音量入口按钮或弹层卡片上微调音量', (tester) async {
       final player = _FakePlayerController()..volume = 0.8;
       await _pumpBar(tester, player);
 
-      final iconCenter = tester.getCenter(find.byTooltip('静音'));
+      final popoverButton =
+          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final buttonCenter = tester.getCenter(popoverButton);
       final pointer = TestPointer(7, PointerDeviceKind.mouse);
-      pointer.hover(iconCenter);
+      pointer.hover(buttonCenter);
 
-      // 向上滚 +5%
+      // 在入口按钮上向上滚 +5%
       await tester.sendEventToBinding(pointer.scroll(const Offset(0, -120)));
       await tester.pump();
       expect(player.volume, closeTo(0.85, 0.0001));
@@ -205,26 +296,17 @@ void main() {
       await tester.pump();
       expect(player.volume, closeTo(0.8, 0.0001));
 
-      // 连续向下滚钳制到 0
-      for (var i = 0; i < 25; i++) {
-        await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
-      }
+      // 打开弹层并在弹层卡片上向下滚
+      await tester.tap(popoverButton);
       await tester.pump();
-      expect(player.volume, 0.0);
-    });
+      expect(find.text('80%'), findsOneWidget);
 
-    testWidgets('音量条拖拽仍然生效（既有行为保持）', (tester) async {
-      final player = _FakePlayerController()..volume = 0.2;
-      await _pumpBar(tester, player);
-
-      // 无歌曲时进度区不渲染，页面上唯一的 Slider 就是音量条。
-      final sliders = find.byType(Slider);
-      expect(sliders, findsOneWidget);
-      await tester.drag(sliders, const Offset(80, 0));
+      final cardCenter = tester.getCenter(find.text('80%'));
+      pointer.hover(cardCenter);
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
       await tester.pump();
-
-      expect(player.volumeChanges, isNotEmpty);
-      expect(player.volume, greaterThan(0.2));
+      expect(player.volume, closeTo(0.75, 0.0001));
+      expect(find.text('75%'), findsOneWidget);
     });
   });
 

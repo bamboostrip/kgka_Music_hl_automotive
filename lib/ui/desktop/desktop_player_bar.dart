@@ -160,6 +160,13 @@ class DesktopPlayerBar extends StatelessWidget {
                                   ),
                                   color: colorScheme.onSurface,
                                 ),
+                                const SizedBox(width: 20),
+                                VolumePopoverButton(
+                                  key: const ValueKey(
+                                    'desktop_volume_popover_button',
+                                  ),
+                                  player: player,
+                                ),
                               ],
                             ),
                             // 进度区（拖拽中显示拖拽位置，松手 seek）。
@@ -192,12 +199,6 @@ class DesktopPlayerBar extends StatelessWidget {
                       const SizedBox(width: 8),
                       // 音效（仅受支持平台渲染，不支持时不占位）
                       _EffectsButton(player: player),
-                      // 音量（窄窗只留图标，宽窗带滑杆）
-                      _VolumeControl(
-                        player: player,
-                        showSlider: !compact,
-                      ),
-                      const SizedBox(width: 8),
                       // 桌面歌词开关（仅支持桌面歌词的平台渲染）
                       if (player.isDesktopLyricsSupported) ...[
                         _DesktopLyricsButton(player: player, song: song),
@@ -774,63 +775,6 @@ class _ProgressBarState extends State<_ProgressBar> {
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _VolumeControl extends StatefulWidget {
-  const _VolumeControl({required this.player, this.showSlider = true});
-
-  final PlayerController player;
-  final bool showSlider;
-
-  @override
-  State<_VolumeControl> createState() => _VolumeControlState();
-}
-
-class _VolumeControlState extends State<_VolumeControl> {
-  double? _dragValue;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.player,
-      builder: (context, _) {
-        // 拖拽中显示拖拽值，其余时刻跟随 player（快捷键/其他入口改动即时同步）。
-        final volume =
-            (_dragValue ?? widget.player.volume).clamp(0.0, 1.0);
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 点击静音/取消静音（记忆静音前音量），图标区滚轮 ±5%。
-            VolumeIconButton(player: widget.player),
-            if (widget.showSlider)
-              SizedBox(
-                width: 96,
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 12),
-                  ),
-                  child: Slider(
-                    value: volume,
-                    onChanged: (value) {
-                      setState(() => _dragValue = value);
-                      widget.player.setVolume(value);
-                    },
-                    onChangeEnd: (value) {
-                      widget.player.setVolume(value);
-                      setState(() => _dragValue = null);
-                    },
-                  ),
-                ),
-              ),
           ],
         );
       },

@@ -144,6 +144,320 @@ class _VolumeIconButtonState extends State<VolumeIconButton> {
   }
 }
 
+/// 垂直音量气泡弹层入口按钮：
+/// - 点击展开/收起垂直音量卡片（包含垂直滑块、百分比、静音切换按钮、向下箭头）
+/// - 支持滚轮微调 ±5%
+/// - 外部点击非阻塞关闭（通过 TapRegion(groupId: 'desktop_volume_popover')）
+/// - 展开时高亮主题色
+class VolumePopoverButton extends StatefulWidget {
+  const VolumePopoverButton({
+    super.key,
+    required this.player,
+    this.iconSize = 22,
+  });
+
+  final PlayerController player;
+  final double iconSize;
+
+  @override
+  State<VolumePopoverButton> createState() => _VolumePopoverButtonState();
+}
+
+class _VolumePopoverButtonState extends State<VolumePopoverButton> {
+  final OverlayPortalController _overlayController = OverlayPortalController();
+  final LayerLink _link = LayerLink();
+  double? _volumeBeforeMute;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.player.addListener(_onPlayerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant VolumePopoverButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.player != widget.player) {
+      oldWidget.player.removeListener(_onPlayerChanged);
+      widget.player.addListener(_onPlayerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.player.removeListener(_onPlayerChanged);
+    super.dispose();
+  }
+
+  void _onPlayerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _toggle() {
+    if (_overlayController.isShowing) {
+      _hide();
+    } else {
+      _show();
+    }
+  }
+
+  void _show() {
+    _overlayController.show();
+    if (mounted) setState(() {});
+  }
+
+  void _hide() {
+    if (_overlayController.isShowing) {
+      _overlayController.hide();
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    widget.player.setVolume(
+      applyVolumeWheel(widget.player.volume, event.scrollDelta.dy < 0),
+    );
+  }
+
+  void _handleMuteToggle() {
+    final (newVol, mem) = toggleMute(widget.player.volume, _volumeBeforeMute);
+    setState(() => _volumeBeforeMute = mem);
+    widget.player.setVolume(newVol);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isOpen = _overlayController.isShowing;
+    final volume = widget.player.volume.clamp(0.0, 1.0);
+
+    return TapRegion(
+      groupId: 'desktop_volume_popover',
+      child: CompositedTransformTarget(
+        link: _link,
+        child: OverlayPortal(
+          controller: _overlayController,
+          overlayChildBuilder: (context) {
+            return Stack(
+              children: [
+                CompositedTransformFollower(
+                  link: _link,
+                  targetAnchor: Alignment.topCenter,
+                  followerAnchor: Alignment.bottomCenter,
+                  offset: const Offset(0, -8),
+                  child: TapRegion(
+                    groupId: 'desktop_volume_popover',
+                    onTapOutside: (_) => _hide(),
+                    child: _VolumePopoverCard(
+                      player: widget.player,
+                      onMuteToggle: _handleMuteToggle,
+                      onPointerSignal: _handlePointerSignal,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          child: Tooltip(
+            message: '音量',
+            child: Listener(
+              onPointerSignal: _handlePointerSignal,
+              child: Container(
+                decoration: isOpen
+                    ? BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.6),
+                          width: 1.5,
+                        ),
+                        color: colorScheme.primary.withValues(alpha: 0.08),
+                      )
+                    : null,
+                child: IconButton(
+                  onPressed: _toggle,
+                  icon: Icon(
+                    volumeIconFor(volume),
+                    size: widget.iconSize,
+                  ),
+                  color: isOpen ? colorScheme.primary : colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 垂直音量弹出卡片（顶层垂直滑块、中层百分比、底层静音按钮、底部三角下指示箭头）。
+class _VolumePopoverCard extends StatelessWidget {
+  const _VolumePopoverCard({
+    required this.player,
+    required this.onMuteToggle,
+    required this.onPointerSignal,
+  });
+
+  final PlayerController player;
+  final VoidCallback onMuteToggle;
+  final ValueChanged<PointerSignalEvent> onPointerSignal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF262D3D) : Colors.white;
+    final borderColor =
+        colorScheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.5);
+
+    return AnimatedBuilder(
+      animation: player,
+      builder: (context, _) {
+        final volume = player.volume.clamp(0.0, 1.0);
+        final percent = (volume * 100).round();
+
+        return Listener(
+          onPointerSignal: onPointerSignal,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 52,
+                height: 178,
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderColor, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 8),
+                    // 顶部垂直滑块（quarterTurns: 3，下端为 0，上端为 1）
+                    SizedBox(
+                      height: 100,
+                      width: 32,
+                      child: RotatedBox(
+                        quarterTurns: 3,
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 3,
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 5,
+                            ),
+                            overlayShape: const RoundSliderOverlayShape(
+                              overlayRadius: 10,
+                            ),
+                            activeTrackColor: colorScheme.primary,
+                            thumbColor: colorScheme.primary,
+                            inactiveTrackColor: colorScheme.outlineVariant
+                                .withValues(alpha: 0.3),
+                          ),
+                          child: Slider(
+                            value: volume,
+                            onChanged: (val) {
+                              player.setVolume(val);
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    // 中间音量百分比
+                    Text(
+                      '$percent%',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    // 底部静音/取消静音按钮
+                    IconButton(
+                      key: const ValueKey('volume_popover_mute_button'),
+                      tooltip: volume <= 0 ? '取消静音' : '静音',
+                      onPressed: onMuteToggle,
+                      icon: Icon(
+                        volumeIconFor(volume),
+                        size: 20,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 32,
+                        height: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                ),
+              ),
+              Transform.translate(
+                offset: const Offset(0, -1),
+                child: CustomPaint(
+                  size: const Size(12, 6),
+                  painter: _BeakPainter(
+                    color: bg,
+                    borderColor: borderColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 底部三角下箭头指示器（指向底部的音量入口按钮）
+class _BeakPainter extends CustomPainter {
+  const _BeakPainter({required this.color, required this.borderColor});
+
+  final Color color;
+  final Color borderColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fillPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final strokePaint = Paint()
+      ..color = borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+
+    canvas.drawPath(path, fillPaint);
+
+    final borderPath = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0);
+    canvas.drawPath(borderPath, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BeakPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.borderColor != borderColor;
+}
+
 /// 进度条悬停时间气泡：鼠标在 [child]（进度条）上移动时，上方跟随显示
 /// 悬停位置对应的时间；离开即消失。
 ///
