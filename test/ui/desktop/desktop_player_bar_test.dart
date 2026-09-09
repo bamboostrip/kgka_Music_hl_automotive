@@ -6,8 +6,7 @@ import 'package:shiyin_music/controllers/player_controller.dart';
 import 'package:shiyin_music/models/music_models.dart' hide formatDuration;
 import 'package:shiyin_music/ui/desktop/desktop_player_bar.dart';
 
-class _FakePlayerController extends ChangeNotifier
-    implements PlayerController {
+class _FakePlayerController extends ChangeNotifier implements PlayerController {
   @override
   Song? currentSong;
   @override
@@ -48,6 +47,7 @@ class _FakePlayerController extends ChangeNotifier
     audioQuality = quality;
     notifyListeners();
   }
+
   @override
   Future<void> unlockDesktopLyrics() async {
     unlockDesktopLyricsCalls++;
@@ -63,8 +63,9 @@ class _FakePlayerController extends ChangeNotifier
   }
 
   @override
-  final ValueNotifier<Duration> positionListenable =
-      ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> positionListenable = ValueNotifier<Duration>(
+    Duration.zero,
+  );
 
   int cyclePlaybackModeCalls = 0;
   List<double> volumeChanges = [];
@@ -124,10 +125,7 @@ Future<void> _pumpBar(WidgetTester tester, _FakePlayerController player) async {
       home: Scaffold(
         body: Align(
           alignment: Alignment.bottomCenter,
-          child: DesktopPlayerBar(
-            player: player,
-            auth: _FakeAuthController(),
-          ),
+          child: DesktopPlayerBar(player: player, auth: _FakeAuthController()),
         ),
       ),
     ),
@@ -183,8 +181,9 @@ void main() {
       await _pumpBar(tester, player);
 
       final nextButton = find.byTooltip('下一首');
-      final popoverButton =
-          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final popoverButton = find.byKey(
+        const ValueKey('desktop_volume_popover_button'),
+      );
       expect(nextButton, findsOneWidget);
       expect(popoverButton, findsOneWidget);
       expect(
@@ -215,13 +214,13 @@ void main() {
       final player = _FakePlayerController()..volume = 0.7;
       await _pumpBar(tester, player);
 
-      final popoverButton =
-          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final popoverButton = find.byKey(
+        const ValueKey('desktop_volume_popover_button'),
+      );
       await tester.tap(popoverButton);
       await tester.pump();
 
-      final muteBtn =
-          find.byKey(const ValueKey('volume_popover_mute_button'));
+      final muteBtn = find.byKey(const ValueKey('volume_popover_mute_button'));
       await tester.tap(muteBtn);
       await tester.pump();
 
@@ -242,8 +241,9 @@ void main() {
         ..volume = 0.7;
       await _pumpBar(tester, player);
 
-      final popoverButton =
-          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final popoverButton = find.byKey(
+        const ValueKey('desktop_volume_popover_button'),
+      );
       await tester.tap(popoverButton);
       await tester.pump();
       expect(find.text('70%'), findsOneWidget);
@@ -262,8 +262,9 @@ void main() {
       final player = _FakePlayerController()..volume = 0.2;
       await _pumpBar(tester, player);
 
-      final popoverButton =
-          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final popoverButton = find.byKey(
+        const ValueKey('desktop_volume_popover_button'),
+      );
       await tester.tap(popoverButton);
       await tester.pump();
 
@@ -280,8 +281,9 @@ void main() {
       final player = _FakePlayerController()..volume = 0.2;
       await _pumpBar(tester, player);
 
-      final popoverButton =
-          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final popoverButton = find.byKey(
+        const ValueKey('desktop_volume_popover_button'),
+      );
       await tester.tap(popoverButton);
       await tester.pump();
 
@@ -309,8 +311,9 @@ void main() {
       final player = _FakePlayerController()..volume = 0.8;
       await _pumpBar(tester, player);
 
-      final popoverButton =
-          find.byKey(const ValueKey('desktop_volume_popover_button'));
+      final popoverButton = find.byKey(
+        const ValueKey('desktop_volume_popover_button'),
+      );
       final buttonCenter = tester.getCenter(popoverButton);
       final pointer = TestPointer(7, PointerDeviceKind.mouse);
       pointer.hover(buttonCenter);
@@ -373,10 +376,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(bubble, findsOneWidget);
-      expect(tester.widget<Text>(find.descendant(
-        of: bubble,
-        matching: find.byType(Text),
-      )).data, '01:00');
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(of: bubble, matching: find.byType(Text)),
+            )
+            .data,
+        '01:00',
+      );
 
       // 拖拽中：气泡隐藏。
       final drag = await tester.startGesture(trackCenter);
@@ -478,35 +485,35 @@ void main() {
   });
 
   group('音质切换按钮', () {
-    testWidgets(
-      '有歌曲时渲染音质按钮，tooltip 包含音质切换提示且显示当前音质短标签',
-      (tester) async {
-        final player = _FakePlayerController()
-          ..currentSong = _song
-          ..audioQuality = AudioQuality.standard;
-        await _pumpBar(tester, player);
+    testWidgets('有歌曲时渲染音质按钮，tooltip 包含音质切换提示且显示当前音质短标签', (tester) async {
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..audioQuality = AudioQuality.standard;
+      await _pumpBar(tester, player);
 
-        // 默认标准音质：短标签展示“标准”，tooltip 包含“音质”
-        expect(find.text('标准'), findsOneWidget);
-        final tooltipFinder = find.byWidgetPredicate(
-          (w) => w is Tooltip && ((w.message?.contains('音质') ?? false) || (w.message?.contains('切换音质') ?? false)),
-        );
-        expect(tooltipFinder, findsOneWidget);
+      // 默认标准音质：短标签展示“标准”，tooltip 包含“音质”
+      expect(find.text('标准'), findsOneWidget);
+      final tooltipFinder = find.byWidgetPredicate(
+        (w) =>
+            w is Tooltip &&
+            ((w.message?.contains('音质') ?? false) ||
+                (w.message?.contains('切换音质') ?? false)),
+      );
+      expect(tooltipFinder, findsOneWidget);
 
-        // 高品音质
-        player.audioQuality = AudioQuality.high;
-        player.notifyListeners();
-        await tester.pump();
-        expect(find.text('高品'), findsOneWidget);
+      // 高品音质
+      player.audioQuality = AudioQuality.high;
+      player.notifyListeners();
+      await tester.pump();
+      expect(find.text('高品'), findsOneWidget);
 
-        // 无损音质，显示无损与 SQ 标识
-        player.audioQuality = AudioQuality.lossless;
-        player.notifyListeners();
-        await tester.pump();
-        expect(find.text('无损'), findsOneWidget);
-        expect(find.text('SQ'), findsOneWidget);
-      },
-    );
+      // 无损音质，显示无损与 SQ 标识
+      player.audioQuality = AudioQuality.lossless;
+      player.notifyListeners();
+      await tester.pump();
+      expect(find.text('无损'), findsOneWidget);
+      expect(find.text('SQ'), findsOneWidget);
+    });
 
     testWidgets('无歌曲时音质按钮禁用', (tester) async {
       final player = _FakePlayerController()
@@ -557,5 +564,3 @@ void main() {
     });
   });
 }
-
-

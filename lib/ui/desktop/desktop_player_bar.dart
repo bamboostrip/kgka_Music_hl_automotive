@@ -38,11 +38,7 @@ const double kPlayerBarLeftWidthCompact = 232;
 ///
 /// 无歌曲时保持占位布局（高度稳定，不随播放状态跳变）。
 class DesktopPlayerBar extends StatelessWidget {
-  const DesktopPlayerBar({
-    super.key,
-    required this.player,
-    required this.auth,
-  });
+  const DesktopPlayerBar({super.key, required this.player, required this.auth});
 
   final PlayerController player;
   final AuthController auth;
@@ -76,8 +72,9 @@ class DesktopPlayerBar extends StatelessWidget {
             builder: (context, constraints) {
               final compact =
                   constraints.maxWidth < kPlayerBarCompactBreakpoint;
-              final leftWidth =
-                  compact ? kPlayerBarLeftWidthCompact : kPlayerBarLeftWidth;
+              final leftWidth = compact
+                  ? kPlayerBarLeftWidthCompact
+                  : kPlayerBarLeftWidth;
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -128,8 +125,9 @@ class DesktopPlayerBar extends StatelessWidget {
                                 const SizedBox(width: 20),
                                 IconButton(
                                   tooltip: '上一首',
-                                  onPressed:
-                                      song == null ? null : player.previous,
+                                  onPressed: song == null
+                                      ? null
+                                      : player.previous,
                                   icon: const Icon(
                                     Icons.skip_previous_rounded,
                                     size: 28,
@@ -174,8 +172,9 @@ class DesktopPlayerBar extends StatelessWidget {
                             if (song != null) ...[
                               Center(
                                 child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 440),
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 440,
+                                  ),
                                   child: _ProgressBar(player: player),
                                 ),
                               ),
@@ -191,9 +190,7 @@ class DesktopPlayerBar extends StatelessWidget {
                     children: [
                       // 音质切换
                       _AudioQualityButton(
-                        key: const ValueKey(
-                          'desktop_audio_quality_button',
-                        ),
+                        key: const ValueKey('desktop_audio_quality_button'),
                         player: player,
                       ),
                       const SizedBox(width: 8),
@@ -214,10 +211,7 @@ class DesktopPlayerBar extends StatelessWidget {
                                   buttonContext,
                                   player,
                                 ),
-                          icon: const Icon(
-                            Icons.queue_music_rounded,
-                            size: 26,
-                          ),
+                          icon: const Icon(Icons.queue_music_rounded, size: 26),
                           color: colorScheme.onSurface,
                         ),
                       ),
@@ -263,80 +257,80 @@ class _SongInfoState extends State<SongInfo> {
     final song = widget.song;
     return Flexible(
       child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
+        onEnter: (_) {
+          if (mounted) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (mounted) setState(() => _hovered = false);
+        },
         child: Tooltip(
           message: song == null ? '' : '展开歌曲详情页',
           child: InkWell(
             onTap: song == null ? null : widget.onTap,
             borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Stack(
-                    children: [
-                      Artwork(
-                        url: song?.coverUrl,
-                        size: 48,
-                        borderRadius: 8,
-                      ),
-                      if (_hovered && song != null)
-                        Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: .45),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Center(
-                              child: ExpandDetailIcon(size: 20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Stack(
+                      children: [
+                        Artwork(url: song?.coverUrl, size: 48, borderRadius: 8),
+                        if (_hovered && song != null)
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: .45),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Center(
+                                child: ExpandDetailIcon(size: 20),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        song?.title ?? '尚未播放',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: song == null
-                              ? widget.colorScheme.onSurfaceVariant
-                              : widget.colorScheme.onSurface,
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          song?.title ?? '尚未播放',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: song == null
+                                ? widget.colorScheme.onSurfaceVariant
+                                : widget.colorScheme.onSurface,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        song?.artist ?? '去挑一首喜欢的歌吧',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: widget.colorScheme.onSurfaceVariant,
+                        const SizedBox(height: 2),
+                        Text(
+                          song?.artist ?? '去挑一首喜欢的歌吧',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: widget.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -426,10 +420,7 @@ class _SongActionRail extends StatelessWidget {
               ),
               color: isLiked ? colorScheme.secondary : iconColor,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(
-                width: 30,
-                height: 30,
-              ),
+              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
             ),
             if (!compact) ...[
               _CommentButton(
@@ -453,10 +444,7 @@ class _SongActionRail extends StatelessWidget {
                         auth: auth,
                         song: song!,
                       ),
-                icon: const Icon(
-                  Icons.playlist_add_rounded,
-                  size: iconSize,
-                ),
+                icon: const Icon(Icons.playlist_add_rounded, size: iconSize),
                 color: iconColor,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(
@@ -489,7 +477,8 @@ class _CommentButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final api = _safeApi(player);
     // 与播放页统一：仅酷狗源有评论。
-    final enabled = song != null &&
+    final enabled =
+        song != null &&
         song!.source == SongSource.kugou &&
         api != null &&
         (song!.albumAudioId ?? song!.id).isNotEmpty;
@@ -502,10 +491,7 @@ class _CommentButton extends StatelessWidget {
               if (mixsongid.isEmpty) return;
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => CommentPage(
-                    api: api,
-                    mixsongid: mixsongid,
-                  ),
+                  builder: (_) => CommentPage(api: api, mixsongid: mixsongid),
                 ),
               );
             },
@@ -571,14 +557,10 @@ class _DownloadButton extends StatelessWidget {
                   }
                 },
           icon: Icon(
-            downloaded
-                ? Icons.download_done_rounded
-                : Icons.download_rounded,
+            downloaded ? Icons.download_done_rounded : Icons.download_rounded,
           ),
           iconSize: iconSize,
-          color: downloaded
-              ? Theme.of(context).colorScheme.primary
-              : iconColor,
+          color: downloaded ? Theme.of(context).colorScheme.primary : iconColor,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 30, height: 30),
         );
@@ -606,10 +588,8 @@ class _EffectsButton extends StatelessWidget {
           children: [
             IconButton(
               tooltip: '音效',
-              onPressed: () => showAudioEffectsSheet(
-                context: context,
-                player: player,
-              ),
+              onPressed: () =>
+                  showAudioEffectsSheet(context: context, player: player),
               icon: const Icon(Icons.graphic_eq_rounded, size: 22),
               color: Theme.of(context).colorScheme.onSurface,
             ),
@@ -645,8 +625,7 @@ class _DesktopLyricsButton extends StatelessWidget {
           tooltip = '桌面歌词已锁定，点击一键解锁';
           iconData = Icons.lock_rounded;
           color = colorScheme.primary;
-          onPressed =
-              song == null ? null : () => player.unlockDesktopLyrics();
+          onPressed = song == null ? null : () => player.unlockDesktopLyrics();
         } else if (enabled) {
           tooltip = '关闭桌面歌词';
           iconData = Icons.lyrics_rounded;
@@ -693,7 +672,8 @@ class _ProgressBarState extends State<_ProgressBar> {
       valueListenable: widget.player.positionListenable,
       builder: (context, position, _) {
         final durationMs = widget.player.duration.inMilliseconds;
-        final progress = _dragValue ??
+        final progress =
+            _dragValue ??
             (durationMs > 0
                 ? (position.inMilliseconds / durationMs).clamp(0.0, 1.0)
                 : 0.0);
@@ -725,18 +705,19 @@ class _ProgressBarState extends State<_ProgressBar> {
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
                       trackHeight: 3,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 8),
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                      ),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 8,
+                      ),
                       // 高潮起始标记（与播放页同一套轨道，多端数据同源）。
                       trackShape: ClimaxSliderTrackShape(
                         climaxStart: climaxStartFraction(
                           climax: widget.player.climax,
                           durationMs: durationMs,
                         ),
-                        markerColor:
-                            colorScheme.primary.withValues(alpha: .45),
+                        markerColor: colorScheme.primary.withValues(alpha: .45),
                       ),
                     ),
                     child: Slider(
@@ -749,8 +730,7 @@ class _ProgressBarState extends State<_ProgressBar> {
                               try {
                                 await widget.player.seek(
                                   Duration(
-                                    milliseconds:
-                                        (durationMs * value).round(),
+                                    milliseconds: (durationMs * value).round(),
                                   ),
                                 );
                               } catch (_) {
@@ -853,10 +833,7 @@ class _AudioQualityButton extends StatelessWidget {
                     }
                   : null,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

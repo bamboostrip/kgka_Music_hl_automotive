@@ -10,10 +10,7 @@ import 'package:shiyin_music/ui/widgets/artwork.dart';
 void main() {
   group('playbackModeIcon', () {
     test('三种模式各对应一个图标', () {
-      expect(
-        playbackModeIcon(PlaybackMode.playlistLoop),
-        Icons.repeat_rounded,
-      );
+      expect(playbackModeIcon(PlaybackMode.playlistLoop), Icons.repeat_rounded);
       expect(playbackModeIcon(PlaybackMode.shuffle), Icons.shuffle_rounded);
       expect(
         playbackModeIcon(PlaybackMode.singleLoop),
@@ -24,10 +21,7 @@ void main() {
 
   group('playbackModeTooltip', () {
     test('包含当前模式名与切换提示', () {
-      expect(
-        playbackModeTooltip(PlaybackMode.playlistLoop),
-        '列表循环（点击切换）',
-      );
+      expect(playbackModeTooltip(PlaybackMode.playlistLoop), '列表循环（点击切换）');
       expect(playbackModeTooltip(PlaybackMode.shuffle), '随机播放（点击切换）');
       expect(playbackModeTooltip(PlaybackMode.singleLoop), '单曲循环（点击切换）');
     });
@@ -92,7 +86,10 @@ void main() {
     const twoMinutes = Duration(minutes: 2);
     test('两端与中点', () {
       expect(positionForHover(0, 280, twoMinutes), Duration.zero);
-      expect(positionForHover(140, 280, twoMinutes), const Duration(minutes: 1));
+      expect(
+        positionForHover(140, 280, twoMinutes),
+        const Duration(minutes: 1),
+      );
       expect(positionForHover(280, 280, twoMinutes), twoMinutes);
     });
     test('越界坐标按端点钳制', () {
@@ -110,12 +107,12 @@ void main() {
   });
 
   group('ExpandDetailIcon', () {
-    testWidgets('renders CustomPaint with corner bracket painter', (tester) async {
+    testWidgets('renders CustomPaint with corner bracket painter', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Center(
-            child: ExpandDetailIcon(size: 20, color: Colors.white),
-          ),
+          home: Center(child: ExpandDetailIcon(size: 20, color: Colors.white)),
         ),
       );
       expect(find.byType(ExpandDetailIcon), findsOneWidget);
@@ -131,13 +128,11 @@ void main() {
 
     testWidgets('respects default size and custom properties', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Center(
-            child: ExpandDetailIcon(),
-          ),
-        ),
+        const MaterialApp(home: Center(child: ExpandDetailIcon())),
       );
-      final defaultIcon = tester.widget<ExpandDetailIcon>(find.byType(ExpandDetailIcon));
+      final defaultIcon = tester.widget<ExpandDetailIcon>(
+        find.byType(ExpandDetailIcon),
+      );
       expect(defaultIcon.size, 18);
       expect(defaultIcon.color, Colors.white);
       expect(defaultIcon.strokeWidth, 2.0);
@@ -152,7 +147,9 @@ void main() {
       hash: 'hash123',
     );
 
-    testWidgets('悬停封面展示 ExpandDetailIcon 与"展开歌曲详情页" Tooltip，点击触发 onTap 回调', (tester) async {
+    testWidgets('悬停封面展示 ExpandDetailIcon 与"展开歌曲详情页" Tooltip，点击触发 onTap 回调', (
+      tester,
+    ) async {
       bool tapped = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -235,7 +232,3 @@ void main() {
     });
   });
 }
-
-
-
-

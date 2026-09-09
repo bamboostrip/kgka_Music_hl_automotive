@@ -91,11 +91,7 @@ class PlayModeButton extends StatelessWidget {
 ///
 /// 音量条拖拽仍由播放条里音量区的 Slider 负责，二者写同一音量字段。
 class VolumeIconButton extends StatefulWidget {
-  const VolumeIconButton({
-    super.key,
-    required this.player,
-    this.iconSize = 20,
-  });
+  const VolumeIconButton({super.key, required this.player, this.iconSize = 20});
 
   final PlayerController player;
   final double iconSize;
@@ -110,12 +106,16 @@ class _VolumeIconButtonState extends State<VolumeIconButton> {
   void _handlePointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     // 滚轮向上（scrollDelta.dy < 0）增大音量，向下减小。
-    widget.player
-        .setVolume(applyVolumeWheel(widget.player.volume, event.scrollDelta.dy < 0));
+    widget.player.setVolume(
+      applyVolumeWheel(widget.player.volume, event.scrollDelta.dy < 0),
+    );
   }
 
   void _handleTap() {
-    final (volume, memory) = toggleMute(widget.player.volume, _volumeBeforeMute);
+    final (volume, memory) = toggleMute(
+      widget.player.volume,
+      _volumeBeforeMute,
+    );
     setState(() => _volumeBeforeMute = memory);
     widget.player.setVolume(volume);
   }
@@ -276,10 +276,7 @@ class _VolumePopoverButtonState extends State<VolumePopoverButton> {
                     : null,
                 child: IconButton(
                   onPressed: _toggle,
-                  icon: Icon(
-                    volumeIconFor(volume),
-                    size: widget.iconSize,
-                  ),
+                  icon: Icon(volumeIconFor(volume), size: widget.iconSize),
                   color: isOpen ? colorScheme.primary : colorScheme.onSurface,
                 ),
               ),
@@ -324,14 +321,14 @@ class _VolumePopoverCardState extends State<_VolumePopoverCard> {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF262D3D) : Colors.white;
-    final borderColor =
-        colorScheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.5);
+    final borderColor = colorScheme.outlineVariant.withValues(
+      alpha: isDark ? 0.3 : 0.5,
+    );
 
     return AnimatedBuilder(
       animation: widget.player,
       builder: (context, _) {
-        final volume =
-            (_dragValue ?? widget.player.volume).clamp(0.0, 1.0);
+        final volume = (_dragValue ?? widget.player.volume).clamp(0.0, 1.0);
         final percent = (volume * 100).round();
 
         return Listener(
@@ -349,7 +346,9 @@ class _VolumePopoverCardState extends State<_VolumePopoverCard> {
                   border: Border.all(color: borderColor, width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.4 : 0.12,
+                      ),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -430,10 +429,7 @@ class _VolumePopoverCardState extends State<_VolumePopoverCard> {
                 offset: const Offset(0, -1),
                 child: CustomPaint(
                   size: const Size(12, 6),
-                  painter: _BeakPainter(
-                    color: bg,
-                    borderColor: borderColor,
-                  ),
+                  painter: _BeakPainter(color: bg, borderColor: borderColor),
                 ),
               ),
             ],
@@ -518,9 +514,7 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
   double _trackWidth = 0;
 
   bool get _visible =>
-      widget.showBubble &&
-      widget.duration > Duration.zero &&
-      _hoverX != null;
+      widget.showBubble && widget.duration > Duration.zero && _hoverX != null;
 
   void _onHover(PointerEvent event) {
     final box = context.findRenderObject();
@@ -554,29 +548,29 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
                   child: Container(
                     // 供 widget 测试定位气泡。
                     key: const ValueKey('hover_time_bubble'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colorScheme.inverseSurface,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    widget.formatDuration(
-                      positionForHover(
-                        _hoverX!,
-                        _trackWidth,
-                        widget.duration,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.inverseSurface,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      widget.formatDuration(
+                        positionForHover(
+                          _hoverX!,
+                          _trackWidth,
+                          widget.duration,
+                        ),
+                      ),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onInverseSurface,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onInverseSurface,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
                   ),
                 ),
               ),
@@ -604,19 +598,13 @@ class ExpandDetailIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size(size, size),
-      painter: _ExpandDetailPainter(
-        color: color,
-        strokeWidth: strokeWidth,
-      ),
+      painter: _ExpandDetailPainter(color: color, strokeWidth: strokeWidth),
     );
   }
 }
 
 class _ExpandDetailPainter extends CustomPainter {
-  const _ExpandDetailPainter({
-    required this.color,
-    required this.strokeWidth,
-  });
+  const _ExpandDetailPainter({required this.color, required this.strokeWidth});
 
   final Color color;
   final double strokeWidth;
@@ -654,4 +642,3 @@ class _ExpandDetailPainter extends CustomPainter {
   bool shouldRepaint(covariant _ExpandDetailPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
 }
-
