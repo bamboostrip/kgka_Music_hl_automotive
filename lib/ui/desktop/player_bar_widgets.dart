@@ -211,9 +211,12 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
               left: _hoverX!.clamp(0.0, _trackWidth),
               child: FractionalTranslation(
                 translation: const Offset(-0.5, 0),
-                child: Container(
-                  // 供 widget 测试定位气泡。
-                  key: const ValueKey('hover_time_bubble'),
+                // 纯视觉反馈，不拦截进度条的手势：进度条收窄后气泡会盖住
+                // 按下点，不加则拖拽手势落到气泡上导致 Slider 收不到 onChanged。
+                child: IgnorePointer(
+                  child: Container(
+                    // 供 widget 测试定位气泡。
+                    key: const ValueKey('hover_time_bubble'),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 7,
                     vertical: 3,
@@ -236,6 +239,7 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
                       color: colorScheme.onInverseSurface,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
+                  ),
                   ),
                 ),
               ),
