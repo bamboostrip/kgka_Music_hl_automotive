@@ -153,10 +153,12 @@ class DesktopLyricsService {
             defaultTargetPlatform == TargetPlatform.linux);
   }
 
-  /// 应用退出收口：主窗侧直接关闭悬浮子窗（不翻转持久化的开关状态）。
+  /// 主窗侧直接关闭悬浮子窗（不翻转持久化的开关状态）。
   ///
-  /// 必须在 windowManager.destroy() 之前调用——destroy 的原生实现是
-  /// PostQuitMessage，进程直接退出，子窗否则被硬杀（拖动位置防抖丢失）。
+  /// 注意：应用退出不再走本方法——quitGracefully 直接终止进程，子窗引擎
+  /// 随进程被内核回收（其 teardown 在 IME/UIA 环境下会崩溃，见
+  /// DesktopWindow.quitGracefully 注释）。本方法保留给需要单独关闭
+  /// 子窗的非退出场景。
   static Future<void> shutdown() async {
     await _windowsBridge?.hide();
   }

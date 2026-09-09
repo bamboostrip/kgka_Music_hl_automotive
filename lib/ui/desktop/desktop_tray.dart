@@ -242,9 +242,8 @@ class DesktopTray {
   }
 
   static Future<void> _exit() async {
-    // 统一退出路径：清理钩子（关歌词子窗、销毁托盘）→ 落盘几何 → 销毁。
-    // 不直接 destroy——PostQuitMessage 会硬杀进程，托盘图标与子窗来不及
-    // 清理（托盘"退出"来自菜单回调，此时 _tray 仍存活，正好在钩子里销毁）。
+    // 统一退出路径：隐藏主窗 → 落盘几何 → ExitProcess（详见
+    // DesktopWindow.quitGracefully）。托盘图标由 Shell 随进程死亡清理。
     await DesktopWindow.quitGracefully();
   }
 }

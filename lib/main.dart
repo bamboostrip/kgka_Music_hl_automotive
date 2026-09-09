@@ -18,7 +18,6 @@ import 'controllers/theme_controller.dart';
 import 'core/api_client_interface.dart';
 import 'core/rust_api_client.dart';
 import 'services/cache_service.dart';
-import 'services/desktop_lyrics_service.dart';
 import 'services/desktop_system_integration.dart';
 import 'services/desktop_system_media.dart';
 import 'services/device_info_service.dart';
@@ -236,14 +235,10 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
     });
     // Windows 桌面：托盘常驻（左键切换窗口、右键菜单、退出）。
     if (isDesktopFormFactor) {
-      // 退出收口（托盘"退出"/关闭按钮 destroy 分支都会经过）：
-      // destroy 的原生实现是 PostQuitMessage，进程直接退出、Dart 侧没有
-      // 优雅关闭机会——桌面歌词子窗与托盘图标必须在 destroy 之前清理，
-      // 否则子窗被硬杀（拖动位置防抖丢失）、托盘残留幽灵图标。
-      DesktopWindow.onBeforeQuit = () async {
-        await DesktopLyricsService.shutdown();
-        await DesktopTray.dispose();
-      };
+      // 退出统一走 DesktopWindow.quitGracefully（落盘几何 → ExitProcess）：
+      // 引擎 teardown 在 IME/UIA 环境下必崩，托盘图标与桌面歌词子窗由
+      // Shell/内核随进程死亡一并清理，不在 Dart 侧逐个拆除（详见
+      // DesktopWindow.quitGracefully 注释）。
       unawaited(DesktopTray.init(player: _player));
       // 桌面系统集成：下载完成通知 + 主窗标题随播放。
       // local_notifier 初始化失败时降级为无通知，不影响其余功能。

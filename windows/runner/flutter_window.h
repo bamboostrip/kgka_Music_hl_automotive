@@ -28,6 +28,12 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // OnDestroy 起置位：controller 析构（无障碍桥拆除）会同步派发嵌套窗口
+  // 消息重入 MessageHandler，此时 view 正在析构，进 Flutter 消息分发会
+  // 访问已释放对象（GetEngine）导致退出崩溃（崩溃后 WER 收集转储拖
+  // ~12s 才退出，表现为"退出卡住"）。
+  bool is_shutting_down_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
