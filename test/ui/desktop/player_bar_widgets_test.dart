@@ -105,4 +105,42 @@ void main() {
       expect(formatDuration(t), '00:30');
     });
   });
+
+  group('ExpandDetailIcon', () {
+    testWidgets('renders CustomPaint with corner bracket painter', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: ExpandDetailIcon(size: 20, color: Colors.white),
+          ),
+        ),
+      );
+      expect(find.byType(ExpandDetailIcon), findsOneWidget);
+      final customPaintFinder = find.descendant(
+        of: find.byType(ExpandDetailIcon),
+        matching: find.byType(CustomPaint),
+      );
+      expect(customPaintFinder, findsOneWidget);
+      final customPaint = tester.widget<CustomPaint>(customPaintFinder);
+      expect(customPaint.size, const Size(20, 20));
+      expect(customPaint.painter, isNotNull);
+    });
+
+    testWidgets('respects default size and custom properties', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: ExpandDetailIcon(),
+          ),
+        ),
+      );
+      final defaultIcon = tester.widget<ExpandDetailIcon>(find.byType(ExpandDetailIcon));
+      expect(defaultIcon.size, 18);
+      expect(defaultIcon.color, Colors.white);
+      expect(defaultIcon.strokeWidth, 2.0);
+    });
+  });
 }
+
+
+

@@ -249,3 +249,71 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
     );
   }
 }
+
+/// 封面悬停时展示的对角直角展开图标（截图 3 风格：右上角 ┐ + 左下角 └）。
+class ExpandDetailIcon extends StatelessWidget {
+  const ExpandDetailIcon({
+    super.key,
+    this.size = 18,
+    this.color = Colors.white,
+    this.strokeWidth = 2.0,
+  });
+
+  final double size;
+  final Color color;
+  final double strokeWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _ExpandDetailPainter(
+        color: color,
+        strokeWidth: strokeWidth,
+      ),
+    );
+  }
+}
+
+class _ExpandDetailPainter extends CustomPainter {
+  const _ExpandDetailPainter({
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  final Color color;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final w = size.width;
+    final h = size.height;
+    final arm = w * 0.42;
+
+    // 左下角 └
+    final pathBottomLeft = Path()
+      ..moveTo(0, h - arm)
+      ..lineTo(0, h)
+      ..lineTo(arm, h);
+    canvas.drawPath(pathBottomLeft, paint);
+
+    // 右上角 ┐
+    final pathTopRight = Path()
+      ..moveTo(w - arm, 0)
+      ..lineTo(w, 0)
+      ..lineTo(w, arm);
+    canvas.drawPath(pathTopRight, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ExpandDetailPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
+}
+

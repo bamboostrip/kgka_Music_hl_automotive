@@ -32,9 +32,9 @@ const double kPlayerBarLeftWidthCompact = 232;
 
 /// 桌面底部播放栏：QQ 音乐 PC 式左/中/右三段布局，视觉沿用本项目主题。
 ///
-/// - 左：封面/曲目信息 + 喜欢/评论/下载/更多（窄窗只留喜欢）。
+/// - 左：封面/曲目信息（悬停浮出放大图标，点击进播放页）+ 喜欢/评论/下载/更多（窄窗只留喜欢）。
 /// - 中：上层播放控制（居中）+ 下层进度条（Expanded 吃满剩余宽度）。
-/// - 右：音质 + 音效(?) + 音量 + 桌面词(?) + 队列 + 展开。
+/// - 右：音质 + 音效(?) + 音量 + 桌面词(?) + 队列。
 ///
 /// 无歌曲时保持占位布局（高度稳定，不随播放状态跳变）。
 class DesktopPlayerBar extends StatelessWidget {
@@ -125,7 +125,7 @@ class DesktopPlayerBar extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 PlayModeButton(player: player),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 20),
                                 IconButton(
                                   tooltip: '上一首',
                                   onPressed:
@@ -136,7 +136,7 @@ class DesktopPlayerBar extends StatelessWidget {
                                   ),
                                   color: colorScheme.onSurface,
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 20),
                                 IconButton(
                                   tooltip: player.isPlaying ? '暂停' : '播放',
                                   onPressed: player.isPreparing || song == null
@@ -150,7 +150,7 @@ class DesktopPlayerBar extends StatelessWidget {
                                   ),
                                   color: colorScheme.primary,
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 20),
                                 IconButton(
                                   tooltip: '下一首',
                                   onPressed: song == null ? null : player.next,
@@ -214,19 +214,6 @@ class DesktopPlayerBar extends StatelessWidget {
                           color: colorScheme.onSurface,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      // 展开全屏播放页
-                      IconButton(
-                        tooltip: '展开播放页',
-                        onPressed: song == null
-                            ? null
-                            : () => _openPlayerPage(context),
-                        icon: const Icon(
-                          Icons.open_in_full_rounded,
-                          size: 22,
-                        ),
-                        color: colorScheme.onSurface,
-                      ),
                       const SizedBox(width: 12),
                     ],
                   ),
@@ -240,8 +227,9 @@ class DesktopPlayerBar extends StatelessWidget {
   }
 }
 
-/// 左区：封面 + 曲名/歌手。点击进入播放页。
-class _SongInfo extends StatelessWidget {
+/// 左区：封面 + 曲名/歌手。悬停封面或歌名时，封面上浮出半透明蒙层 +
+/// 放大图标提示可进入播放页，点击整个区域进入。
+class _SongInfo extends StatefulWidget {
   const _SongInfo({
     required this.song,
     required this.colorScheme,
@@ -253,54 +241,86 @@ class _SongInfo extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_SongInfo> createState() => _SongInfoState();
+}
+
+class _SongInfoState extends State<_SongInfo> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final song = widget.song;
     return Flexible(
-      child: InkWell(
-        onTap: song == null ? null : onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Artwork(
-                url: song?.coverUrl,
-                size: 48,
-                borderRadius: 8,
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      song?.title ?? '尚未播放',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: song == null
-                            ? colorScheme.onSurfaceVariant
-                            : colorScheme.onSurface,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: InkWell(
+          onTap: song == null ? null : widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Stack(
+                    children: [
+                      Artwork(
+                        url: song?.coverUrl,
+                        size: 48,
+                        borderRadius: 8,
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      song?.artist ?? '去挑一首喜欢的歌吧',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                      if (_hovered && song != null)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: .45),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Center(
+                              child: ExpandDetailIcon(size: 20),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song?.title ?? '尚未播放',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: song == null
+                              ? widget.colorScheme.onSurfaceVariant
+                              : widget.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        song?.artist ?? '去挑一首喜欢的歌吧',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: widget.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
