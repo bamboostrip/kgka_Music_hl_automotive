@@ -80,6 +80,15 @@ class AuthController extends ChangeNotifier {
     return _likedHashes.length;
   }
 
+  /// 点赞切换（乐观更新）：
+  ///
+  /// 点下瞬间即翻转本地收藏状态并 [notifyListeners]，红心当帧变色；
+  /// 服务端确认仍走 [_likedMutationLock] 互斥链串行，失败则回滚本地
+  /// 状态并重新通知、原样 rethrow（调用方的 toast 逻辑不变）。
+  ///
+  /// 乐观翻转与动作快照都在同步段执行（首个 await 之前）：快速连点时
+  /// 第二次读到的是已翻转后的状态，方向判定天然正确；链内只执行本次
+  /// 点按快照到的动作（增 / 删），不再重新判定方向。
   Future<void> toggleLike(Song song) async {
     final playlist = likedPlaylist;
     if (playlist == null) return;
@@ -87,30 +96,46 @@ class AuthController extends ChangeNotifier {
     final targetListId = playlist.listId?.isNotEmpty == true
         ? playlist.listId!
         : playlist.id;
-    // 服务端增删 + 本地集合变更整体入互斥链，避免被并发的全量同步覆盖。
-    // 方向判定（liked）必须在链内执行：锁外快照时快速连点两次会读到同一旧值，
-    // 串行执行后第二次方向算错、终态反转。
+    // 本次点按的动作快照 + 回滚所需的前态（同步段，无 await）。
+    final wasLiked = _likedHashes.contains(song.hash);
+    final prevFileId = _hashToFileId[song.hash];
+    if (wasLiked) {
+      _likedHashes.remove(song.hash);
+      _hashToFileId.remove(song.hash);
+    } else {
+      _likedHashes.add(song.hash);
+    }
+    notifyListeners();
+
+    // 服务端增删入互斥链，避免被并发的全量同步覆盖。
     final task = _likedMutationLock.then((_) async {
-      final liked = _likedHashes.contains(song.hash);
       try {
         Map<String, dynamic>? resp;
-        if (liked) {
+        if (wasLiked) {
           var fileId = _resolvePlaylistFileId(song);
           if (fileId == null) {
             // 已持有互斥锁，直接跑同步执行体；再入队会等待自身，死锁。
             await _syncLikedSongsLocked();
             fileId = _hashToFileId[song.hash];
           }
-          if (fileId == null) return;
+          if (fileId == null) {
+            // fileId 仍定位不到：服务端删不掉，回滚乐观状态。
+            _likedHashes.add(song.hash);
+            if (prevFileId != null) _hashToFileId[song.hash] = prevFileId;
+            notifyListeners();
+            return;
+          }
           resp = await _api.removeSongsFromPlaylist(
             targetListId,
             [song],
             fileIds: [fileId],
           );
+          // 幂等确认（同步段已做乐观移除；期间若被全量同步重建则清掉）。
           _likedHashes.remove(song.hash);
           _hashToFileId.remove(song.hash);
         } else {
           resp = await _api.addToPlaylist(targetListId, song);
+          // 幂等确认（期间若被全量同步清空则补回）。
           _likedHashes.add(song.hash);
           if (resp != null) {
             final info = resp['info'];
@@ -121,15 +146,19 @@ class AuthController extends ChangeNotifier {
           }
         }
         _updateLikedCountFromResponse(resp);
-        await _persistLikedHashes();
+        // 先通知再落盘：红心不经过磁盘写等待；await 的仍是完整任务。
         notifyListeners();
+        await _persistLikedHashes();
       } catch (error) {
-        if (liked) {
+        // 服务端失败：回滚到点按前状态并通知，调用方感知原错误。
+        if (wasLiked) {
           _likedHashes.add(song.hash);
+          if (prevFileId != null) _hashToFileId[song.hash] = prevFileId;
         } else {
           _likedHashes.remove(song.hash);
           _hashToFileId.remove(song.hash);
         }
+        notifyListeners();
         rethrow;
       }
     });
