@@ -1,0 +1,46 @@
+# 桌面端底栏歌曲信息紧凑化与全局空白点击设计
+
+本文档定义桌面端播放栏（`DesktopPlayerBar`）的两项进一步精细化改进：
+1. 歌曲信息与操作区重构为 QQ 音乐风格（单行跑马灯 `歌名 - 歌手` + 下方 `[喜欢] [评论] [更多···]` 操作行）；
+2. 播放栏除功能按钮以外的任意空白区域点击均可唤起全屏播放页。
+
+---
+
+## 1. 歌曲信息与操作区布局重构
+
+### 视觉排版（对齐截图 1）
+- **左侧封面**：保持 48x48 规格，悬停保留暗色半透明遮罩与对角直角展开图标（`ExpandDetailIcon`）。
+- **封面右侧**：采用纵向 `Column` 紧凑排布：
+  - **第 1 行：`歌名 - 歌手` 单行文本**：
+    - 结构：歌名（`FontWeight.w600`, 13px, `onSurface`） + `" - "` + 歌手（`FontWeight.w400`, 12px, `onSurfaceVariant`）。
+    - **跑马灯组件（`MarqueeText`）**：
+      - 通过 `LayoutBuilder` 与 `TextPainter` 测量实际宽度与约束宽度；
+      - 若文本未溢出：渲染静态 `RichText`，无动画和定时器开销；
+      - 若文本溢出：平滑水平滚动，滚动至末尾暂停后回到起始，或无缝双副本轮播，保证长歌名清晰可读。
+  - **第 2 行：操作行**：
+    - 排列在歌名正下方，高度 28px，小尺寸图标（18px）：
+      1. `IconButton`（喜欢）：红心/线框心，调用 `auth.toggleLike`；
+      2. `_CommentButton`（评论）：仅支持评论的歌曲可点，点击打开评论页；
+      3. `_SongMoreButton`（更多操作 `···`，截图 2 样式）：
+         - 使用 `anchorAbove(context)` 锚定在按钮正上方弹出操作菜单（`showSongActionSheet` / `showDesktopAnchoredMenu`）；
+         - 包含：`下一首播放`、`添加到歌单`、`下载 / 已下载`、`查看歌手`、`复制歌曲信息`。
+
+---
+
+## 2. 底栏全域空白点击进入全屏播放页
+
+### 交互机制
+- `DesktopPlayerBar` 容器底层包裹 `GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => _openPlayerPage(context))`。
+- 当有正在播放的歌曲（`song != null`）时，非交互空白区域鼠标光标设为 `SystemMouseCursors.click`。
+- **事件隔离**：
+  - 所有的播放控制按钮（播放/暂停、上一首、下一首、模式、音量面板）、进度条滑块（Slider）、左侧操作（喜欢、评论、更多）、右侧按钮（音质、音效、歌词、队列）均具备独立的事件响应与 `opaque` 点击拦截，绝不触发底层的 `_openPlayerPage`。
+  - 用户只要点击底栏的留白、缝隙、封面或歌名区域，均能顺畅进入全屏播放页。
+
+---
+
+## 3. 自动化测试与验证
+- `test/ui/desktop/desktop_player_bar_test.dart`：
+  - 验证点击底栏空白处触发进入播放页；
+  - 验证点击控制按钮（如播放/暂停、切歌）不触发进入播放页；
+  - 验证左侧操作行 `[喜欢] [评论] [更多]` 正常渲染与菜单弹出；
+  - 验证 `MarqueeText` 在超长与非超长时的正确渲染。
