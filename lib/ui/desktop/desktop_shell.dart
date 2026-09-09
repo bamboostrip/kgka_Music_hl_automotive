@@ -210,7 +210,7 @@ class _DesktopShellState extends State<DesktopShell> {
         child: Scaffold(
           body: Column(
             children: [
-              DesktopTitleBar(player: widget.player),
+              DesktopTitleBar(onSearch: () => _openSearch(context)),
               const Divider(height: 1, thickness: 1),
               Expanded(
                 child: Row(
@@ -251,7 +251,6 @@ class _DesktopShellState extends State<DesktopShell> {
                       ],
                       selectedIndex: _sidebarIndex,
                       onSelect: _selectSection,
-                      onSearch: () => _openSearch(context),
                     ),
                     const VerticalDivider(width: 1, thickness: 1),
                     Expanded(

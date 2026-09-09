@@ -23,47 +23,36 @@ void main() {
       items: items,
       selectedIndex: 0,
       onSelect: selected.add,
-      onSearch: () {},
     )));
 
     await tester.tap(find.text('排行榜'));
     expect(selected, [1]);
   });
 
-  testWidgets('选中项与悬停样式渲染且搜索可点', (tester) async {
-    var searched = false;
-    await tester.pumpWidget(wrap(DesktopSidebar(
+  testWidgets('侧栏无搜索入口（搜索已上移顶栏），导航项正常渲染', (tester) async {
+    await tester.pumpWidget(wrap(const DesktopSidebar(
       items: items,
       selectedIndex: 2,
-      onSelect: (_) {},
-      onSearch: () => searched = true,
+      onSelect: _noop,
     )));
 
-    expect(find.text('搜索音乐'), findsOneWidget);
-    await tester.tap(find.text('搜索音乐'));
-    expect(searched, isTrue);
+    // QQ 音乐 PC 式：搜索不在侧栏。
+    expect(find.text('搜索音乐'), findsNothing);
+    expect(find.text('推荐'), findsOneWidget);
+    expect(find.text('排行榜'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
   });
 
   group('键盘可达性', () {
-    testWidgets('Tab 自上而下可达：搜索胶囊 → 导航项，Enter 激活', (tester) async {
+    testWidgets('Tab 自上而下可达导航项，Enter 激活', (tester) async {
       final selected = <int>[];
-      var searched = false;
       await tester.pumpWidget(wrap(DesktopSidebar(
         items: items,
         selectedIndex: -1,
         onSelect: selected.add,
-        onSearch: () => searched = true,
       )));
 
-      // 第 1 次 Tab → 搜索胶囊；Enter 激活搜索。
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pump();
-      expect(searched, isTrue);
-      expect(selected, isEmpty);
-
-      // 第 2 次 Tab → 第一个导航项（推荐）；Enter 激活。
+      // 第 1 次 Tab → 第一个导航项（推荐）；Enter 激活。
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -84,12 +73,9 @@ void main() {
         items: items,
         selectedIndex: -1,
         onSelect: selected.add,
-        onSearch: () {},
       )));
 
-      // Tab ×2：搜索胶囊 → 推荐。
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
+      // Tab ×1：第一个导航项（推荐）。
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
@@ -97,12 +83,11 @@ void main() {
       expect(selected, [0]);
     });
 
-    testWidgets('聚焦的导航项与搜索胶囊显示焦点环', (tester) async {
-      await tester.pumpWidget(wrap(DesktopSidebar(
+    testWidgets('聚焦的导航项显示焦点环', (tester) async {
+      await tester.pumpWidget(wrap(const DesktopSidebar(
         items: items,
         selectedIndex: -1,
-        onSelect: (_) {},
-        onSearch: () {},
+        onSelect: _noop,
       )));
 
       BoxDecoration ringOf(String label) {
@@ -118,9 +103,7 @@ void main() {
       // 未聚焦：焦点环不可见（透明）。
       expect(ringOf('排行榜').border!.top.color.a, 0);
 
-      // Tab 遍历顺序自上而下：搜索胶囊 → 推荐 → 排行榜。
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
+      // Tab 遍历顺序自上而下：推荐 → 排行榜。
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
@@ -139,3 +122,5 @@ void main() {
     });
   });
 }
+
+void _noop(int _) {}

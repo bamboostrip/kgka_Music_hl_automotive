@@ -16,7 +16,7 @@ class DesktopNavItem {
   final bool showDividerAbove;
 }
 
-/// 桌面侧栏：搜索胶囊 + 导航条目。
+/// 桌面侧栏：纯导航条目（QQ 音乐 PC 式，搜索已上移至顶栏）。
 ///
 /// 纯展示组件：选中态与回调全部由父级（DesktopShell）持有。
 class DesktopSidebar extends StatelessWidget {
@@ -25,35 +25,24 @@ class DesktopSidebar extends StatelessWidget {
     required this.items,
     required this.selectedIndex,
     required this.onSelect,
-    required this.onSearch,
   });
 
   final List<DesktopNavItem> items;
   final int selectedIndex;
   final ValueChanged<int> onSelect;
-  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SizedBox(
       width: 208,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-            child: _SearchPill(
-              isDark: isDark,
-              colorScheme: colorScheme,
-              onTap: onSearch,
-            ),
-          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               children: [
                 for (final (index, item) in items.indexed) ...[
                   if (item.showDividerAbove)
@@ -76,76 +65,6 @@ class DesktopSidebar extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SearchPill extends StatefulWidget {
-  const _SearchPill({
-    required this.isDark,
-    required this.colorScheme,
-    required this.onTap,
-  });
-
-  final bool isDark;
-  final ColorScheme colorScheme;
-  final VoidCallback onTap;
-
-  @override
-  State<_SearchPill> createState() => _SearchPillState();
-}
-
-class _SearchPillState extends State<_SearchPill> {
-  var _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: widget.onTap,
-      borderRadius: BorderRadius.circular(21),
-      onFocusChange: (focused) => setState(() => _focused = focused),
-      child: Container(
-        height: 42,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: widget.colorScheme.surfaceContainerHighest
-              .withValues(alpha: widget.isDark ? 1 : .54),
-          borderRadius: BorderRadius.circular(21),
-          border: Border.all(
-            color: widget.colorScheme.outlineVariant
-                .withValues(alpha: widget.isDark ? .85 : .45),
-            width: 1,
-          ),
-        ),
-        // 键盘焦点环：画在内容之上，不影响布局与既有 hover 样式。
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(21),
-          border: Border.all(
-            color: _focused
-                ? widget.colorScheme.primary.withValues(alpha: .75)
-                : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.search_rounded,
-              size: 20,
-              color: widget.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '搜索音乐',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: widget.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

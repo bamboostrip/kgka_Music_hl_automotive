@@ -157,12 +157,14 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   void didUpdateWidget(HomePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionIndex != widget.sectionIndex) {
-      // 外部切换 tab（如侧栏/底部导航）：同样先对齐目标页头部，保持
-      // 顶栏三 tab 统一行动主体。
-      _alignTabToShrink(
-        widget.sectionIndex,
-        _headerShrink.value.clamp(0.0, _headerCollapseRange),
-      );
+      // 外部切换 tab（如侧栏/底部导航）：移动端保持顶栏三 tab 统一行动主体，
+      // 先对齐目标页头部；桌面端无吸顶头，跳过对齐避免引入偏移。
+      if (!isDesktopFormFactor) {
+        _alignTabToShrink(
+          widget.sectionIndex,
+          _headerShrink.value.clamp(0.0, _headerCollapseRange),
+        );
+      }
       _sectionIndex = widget.sectionIndex;
       if (_pageController.hasClients &&
           _pageController.page?.round() != widget.sectionIndex) {
@@ -258,6 +260,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   /// 防重入；[_prevTabOffsets] 记录各 tab 上一帧 offset 用于求增量）。
   void _updateHeaderShrink() {
     if (!mounted || _syncingHeaderOffsets) return;
+    // 桌面端无移动端吸顶头（搜索+胶囊 tab 已上移顶栏/侧栏）：收折进度恒为 0，
+    // 且不再做跨 tab 的地板对齐，避免把内容推到 48px 偏移。
+    if (isDesktopFormFactor) {
+      if (_headerShrink.value != 0.0) _headerShrink.value = 0.0;
+      return;
+    }
     var page = _sectionIndex.toDouble();
     if (_pageController.hasClients &&
         _pageController.position.haveDimensions) {
@@ -658,14 +666,16 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       unawaited(scrollToTopAndRefresh());
       return;
     }
-    // 切页前先把目标页头部对齐到当前顶栏收折态：顶栏是三 tab 共用的
+    // 切页前先把目标页头部对齐到当前顶栏收折态（仅移动端）：顶栏是三 tab 共用的
     // 同一个行动主体，收起/展开切页不重置。深滚的目标页不动。
-    // 未懒加载的目标页此处对齐不上（无挂载），靠 _switchTarget 在
-    // 飞行途中/落定帧继续对齐（顶栏只收不展）。
-    _alignTabToShrink(
-      value,
-      _headerShrink.value.clamp(0.0, _headerCollapseRange),
-    );
+    // 桌面端无吸顶头，跳过对齐。未懒加载的目标页此处对齐不上（无挂载），
+    // 靠 _switchTarget 在飞行途中/落定帧继续对齐（顶栏只收不展）。
+    if (!isDesktopFormFactor) {
+      _alignTabToShrink(
+        value,
+        _headerShrink.value.clamp(0.0, _headerCollapseRange),
+      );
+    }
     setState(() => _sectionIndex = value);
     widget.onTabSwitch?.call(value + 1);
     if (animatePage && _pageController.hasClients) {
@@ -1066,8 +1076,11 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
             );
           }
         } else if (!isCarMode) {
-          // 顶栏（搜索栏 + 标签栏）是页面层固定组件：Stack 覆盖在 PageView
+          // 非车机：三 tab PageView 横向切换，只有下方内容区随页面切换。
+          // 移动端顶栏（搜索栏 + 标签栏）是页面层固定组件：Stack 覆盖在 PageView
           // 之上，横向切页时顶栏纹丝不动，只有下方内容区随页面切换。
+          // 桌面端无移动端吸顶头（搜索上移顶栏、切换走左侧栏），内容区顶部只放
+          // slim 工具条（标题 + 刷新），见下方的 isDesktop 分支。
           // 各 tab 内容列表顶部留白 headerMaxExtent，滚动时内容从顶栏底下
           // 穿过；顶栏收折进度由当前 tab 的内容 offset 派生（切页动画中按
           // 页面位置在相邻 tab 间插值，见 _updateHeaderShrink）。
@@ -1219,8 +1232,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                 physics: tabPhysics,
                 slivers: [
                   // 顶部留白 = 顶栏完全展开的高度：内容从顶栏底下穿过。
+                  // 桌面端无移动端吸顶头（搜索+tab 已上移），不留白。
                   SliverPadding(
-                    padding: EdgeInsets.only(top: headerMaxExtent),
+                    padding: EdgeInsets.only(top: isDesktop ? 0 : headerMaxExtent),
                   ),
                   if (_availableUpdate != null && !_updateBannerDismissed)
                     SliverToBoxAdapter(
@@ -1242,9 +1256,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
             );
           }
 
-          content = Stack(
-            children: [
-              PageView(
+          final pageView = PageView(
                 key: const Key('home_tabs_page_view'),
                 controller: _pageController,
                 onPageChanged: (index) {
@@ -1254,7 +1266,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                   widget.onTabSwitch?.call(index + 1);
                   // 飞行结束：等目标页懒加载挂载后对齐（带重试），成功后
                   // 才清点按标记回到静止镜像逻辑，见 _alignTargetPostFrame。
-                  _alignTargetPostFrame(index, 60);
+                  // 桌面端无吸顶头，对齐目标恒为 0，直接清标记即可。
+                  if (isDesktopFormFactor) {
+                    _switchTarget = null;
+                  } else {
+                    _alignTargetPostFrame(index, 60);
+                  }
                 },
                 children: [
               // Tab 0: 推荐
@@ -1380,25 +1397,62 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                 ),
               ),
                 ],
-              ),
-              // 页面层固定顶栏：覆盖在 PageView 之上，横向切页时固定不动；
-              // 收折进度由 _headerShrink 驱动（当前 tab 内容滚动增量跟手，
-              // 上滑即现、下滑即隐，见 _updateHeaderShrink）。
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: ValueListenableBuilder<double>(
-                  valueListenable: _headerShrink,
-                  builder: (context, shrink, _) =>
-                      HomeCollapsibleHeaderView(
-                        delegate: headerDelegate,
-                        shrinkOffset: shrink,
+              );
+              if (isDesktop) {
+                // 桌面端（QQ 音乐 PC 式）：无移动端吸顶搜索+胶囊 tab，
+                // 切换只走左侧栏；内容区顶部放 slim 工具条保留刷新入口。
+                const sectionTitles = ['推荐', '排行榜', '电台'];
+                content = Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 12, 12, 4),
+                      child: Row(
+                        children: [
+                          Text(
+                            sectionTitles[_sectionIndex.clamp(0, 2).toInt()],
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            tooltip: '刷新',
+                            icon: const Icon(Icons.refresh_rounded),
+                            iconSize: 20,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            visualDensity: VisualDensity.compact,
+                            onPressed: _refreshCurrentSection,
+                          ),
+                        ],
                       ),
-                ),
-              ),
-            ],
-          );
+                    ),
+                    Expanded(child: pageView),
+                  ],
+                );
+              } else {
+                content = Stack(
+                  children: [
+                    pageView,
+                    // 页面层固定顶栏：覆盖在 PageView 之上，横向切页时固定不动；
+                    // 收折进度由 _headerShrink 驱动（当前 tab 内容滚动增量跟手，
+                    // 上滑即现、下滑即隐，见 _updateHeaderShrink）。
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _headerShrink,
+                        builder: (context, shrink, _) =>
+                            HomeCollapsibleHeaderView(
+                          delegate: headerDelegate,
+                          shrinkOffset: shrink,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
         } else {
           // 车机模式：保留原有车机定制滚动与卡片布局
           content = CustomScrollView(

@@ -1,18 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shiyin_music/controllers/player_controller.dart';
-import 'package:shiyin_music/models/music_models.dart';
 import 'package:shiyin_music/ui/desktop/desktop_title_bar.dart';
-
-class _FakePlayerController extends ChangeNotifier
-    implements PlayerController {
-  @override
-  Song? currentSong;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +12,10 @@ void main() {
   });
 
   testWidgets('renders logo and title 时音', (tester) async {
-    final player = _FakePlayerController();
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
-          body: DesktopTitleBar(player: player),
+          body: DesktopTitleBar(),
         ),
       ),
     );
@@ -44,38 +32,60 @@ void main() {
     );
   });
 
-  testWidgets('displays current song title and artist when currentSong is not null',
-      (tester) async {
-    final player = _FakePlayerController();
+  testWidgets('无 onSearch 时不展示搜索框（旧调用兼容）', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
-          body: DesktopTitleBar(player: player),
+          body: DesktopTitleBar(),
         ),
       ),
     );
 
-    expect(find.text('夜曲 - 周杰伦'), findsNothing);
+    expect(find.byKey(const ValueKey('desktop_title_bar_search')), findsNothing);
+  });
 
-    player.currentSong = const Song(
-      id: '1',
-      title: '夜曲',
-      artist: '周杰伦',
-      hash: 'hash-1',
+  testWidgets('有 onSearch 时居中展示搜索胶囊，点击回调', (tester) async {
+    var searched = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DesktopTitleBar(onSearch: () => searched = true),
+        ),
+      ),
     );
-    player.notifyListeners();
-    await tester.pump();
 
-    expect(find.text('夜曲 - 周杰伦'), findsOneWidget);
+    final search = find.byKey(const ValueKey('desktop_title_bar_search'));
+    expect(search, findsOneWidget);
+    expect(find.text('搜索音乐'), findsOneWidget);
+
+    await tester.tap(search);
+    await tester.pump();
+    expect(searched, isTrue);
+  });
+
+  testWidgets('搜索胶囊 Tab 可达、Enter 激活', (tester) async {
+    var searched = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DesktopTitleBar(onSearch: () => searched = true),
+        ),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(searched, isTrue);
   });
 
   testWidgets('renders minimize, maximize/restore, and close buttons',
       (tester) async {
-    final player = _FakePlayerController();
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
-          body: DesktopTitleBar(player: player),
+          body: DesktopTitleBar(),
         ),
       ),
     );
@@ -97,11 +107,10 @@ void main() {
       },
     );
 
-    final player = _FakePlayerController();
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
-          body: DesktopTitleBar(player: player),
+          body: DesktopTitleBar(),
         ),
       ),
     );
@@ -119,7 +128,7 @@ void main() {
     expect(calls, contains('close'));
   });
 
-  testWidgets('double clicking middle area toggles maximize/unmaximize',
+  testWidgets('double clicking drag spacer toggles maximize/unmaximize',
       (tester) async {
     final calls = <String>[];
     bool isMax = false;
@@ -141,22 +150,21 @@ void main() {
       },
     );
 
-    final player = _FakePlayerController();
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
-          body: DesktopTitleBar(player: player),
+          body: DesktopTitleBar(),
         ),
       ),
     );
 
-    // Double tap the middle area
-    final middle = find.byKey(const ValueKey('desktop_title_bar_middle'));
-    expect(middle, findsOneWidget);
+    // Double tap the left drag spacer
+    final spacer = find.byKey(const ValueKey('desktop_title_bar_drag_left'));
+    expect(spacer, findsOneWidget);
 
-    await tester.tap(middle);
+    await tester.tap(spacer);
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(middle);
+    await tester.tap(spacer);
     await tester.pumpAndSettle();
 
     expect(calls, contains('maximize'));
