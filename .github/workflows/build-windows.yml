@@ -79,14 +79,15 @@ jobs:
             }
           }
 
-      # portable.zip 与 setup.exe 共用同一份暂存负载（exe 改名为 ShiYinMusic.exe）。
+      # portable.zip 与 setup.exe 共用同一份暂存负载（CMake BINARY_NAME 即
+      # ShiYinMusic，构建产物无需改名）。
       # 产物统一放 build/dist/（Flutter 约定，build/ 已在 .gitignore 且 flutter clean 会清理）。
       - name: Stage portable directory
         shell: pwsh
         run: |
           $src = 'build\windows\x64\runner\Release'
-          if (-not (Test-Path "$src\kgka_music_hl.exe")) {
-            throw "未找到构建产物：$src\kgka_music_hl.exe"
+          if (-not (Test-Path "$src\ShiYinMusic.exe")) {
+            throw "未找到构建产物：$src\ShiYinMusic.exe"
           }
           # Rust 引擎库是应用运行硬依赖（frb 运行时按 kugou_engine.dll 加载），
           # 缺失时 exe 能启动但所有曲库/搜索功能不可用，必须在暂存前拦截
@@ -96,7 +97,6 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path build\dist\portable | Out-Null
           Copy-Item "$src\*" build\dist\portable -Recurse -Force
-          Rename-Item build\dist\portable\kgka_music_hl.exe ShiYinMusic.exe
           Get-ChildItem build\dist\portable | Select-Object Name, Length
 
       # 附件在 zip 根目录（解压即可覆盖旧目录）。

@@ -80,22 +80,22 @@ jobs:
       - name: Verify bundle
         run: |
           bundle=build/linux/x64/release/bundle
-          test -x "$bundle/kgka_music_hl" || { echo "缺主程序"; exit 1; }
+          test -x "$bundle/ShiYinMusic" || { echo "缺主程序"; exit 1; }
           test -f "$bundle/lib/libkugou_engine.so" || { echo "缺 libkugou_engine.so"; exit 1; }
-          if find "$bundle" -maxdepth 2 \( -name '*.so*' -o -name kgka_music_hl \) \
+          if find "$bundle" -maxdepth 2 \( -name '*.so*' -o -name ShiYinMusic \) \
               -exec ldd {} \; 2>/dev/null | grep -q 'not found'; then
             echo "::error::bundle 存在未解析的动态依赖"
-            find "$bundle" -maxdepth 2 \( -name '*.so*' -o -name kgka_music_hl \) \
+            find "$bundle" -maxdepth 2 \( -name '*.so*' -o -name ShiYinMusic \) \
               -exec ldd {} \; 2>/dev/null | grep 'not found'
             exit 1
           fi
 
-      # 便携包：bundle 原样 + 使用说明（解压即可运行，主程序改名与 Windows 形态一致）。
+      # 便携包：bundle 原样 + 使用说明（解压即可运行，主程序名 ShiYinMusic
+      # 由 linux/CMakeLists.txt BINARY_NAME 直接产出，与 Windows 形态一致）。
       - name: Stage portable directory
         run: |
           mkdir -p build/dist/portable
           cp -a build/linux/x64/release/bundle/. build/dist/portable/
-          mv build/dist/portable/kgka_music_hl build/dist/portable/ShiYinMusic
           cat > build/dist/portable/README-LINUX.txt <<'EOF'
           视听（ShiYin Music）Linux x64 便携版
           ====================================

@@ -2,7 +2,7 @@
 # 在 Windows 侧的 WSL2 Ubuntu 内构建 Linux 桌面产物（开发验证用，CI 不走此脚本）。
 #
 # 用法（Git Bash / PowerShell 均可）：
-#   wsl -d Ubuntu -e bash -lc "bash /mnt/d/AllCode/flutter/kgka_Music_hl_automotive/scripts/build_linux_wsl.sh"
+#   wsl -d Ubuntu -e bash -lc "bash /mnt/d/AllCode/flutter/shiyin-music/scripts/build_linux_wsl.sh"
 #   可选参数：
 #     --no-sync   跳过仓库重新拷贝（仅重跑构建）
 #     --debug     构建 Debug 而非 Release
@@ -10,7 +10,7 @@
 # 脚本内部动作：
 #   1. 引导缺失工具链：ninja(静态二进制)、rustup(minimal stable)、
 #      Flutter SDK(与仓库 CI 同版本的 Linux tarball)，全部装入 $HOME，无需 sudo；
-#   2. 将仓库拷贝到 WSL 原生文件系统（~/build/kgka）再构建——
+#   2. 将仓库拷贝到 WSL 原生文件系统（~/build/shiyin）再构建——
 #      /mnt/* (DrvFS) 上跑 cargo LTO 极慢，勿直接在挂载盘内构建；
 #   3. flutter build linux 并校验 bundle（libkugou_engine.so 是否入库等）。
 #
@@ -33,7 +33,7 @@
 # （install 报 native_assets 目录缺失），需要干净构建时用 flutter clean。
 set -euo pipefail
 
-REPO_WIN_PATH="${REPO_WIN_PATH:-/mnt/d/AllCode/flutter/kgka_Music_hl_automotive}"
+REPO_WIN_PATH="${REPO_WIN_PATH:-/mnt/d/AllCode/flutter/shiyin-music}"
 FLUTTER_VERSION="${FLUTTER_VERSION:-3.44.8}"
 BUILD_TYPE="release"
 DO_SYNC=1
@@ -47,7 +47,7 @@ for arg in "$@"; do
 done
 
 DEV_DIR="$HOME/dev"
-BUILD_DIR="$HOME/build/kgka"
+BUILD_DIR="$HOME/build/shiyin"
 NINJA_DIR="$DEV_DIR/ninja"
 FLUTTER_DIR="$DEV_DIR/flutter-$FLUTTER_VERSION"
 mkdir -p "$DEV_DIR"
@@ -226,11 +226,11 @@ log "构建完成，校验 bundle: $BUNDLE"
 ls -la "$BUNDLE"
 echo "--- bundle/lib ---"
 ls -la "$BUNDLE/lib"
-for f in "$BUNDLE/kgka_music_hl" "$BUNDLE/lib/libkugou_engine.so" "$BUNDLE/lib/libflutter_linux_gtk.so"; do
+for f in "$BUNDLE/ShiYinMusic" "$BUNDLE/lib/libkugou_engine.so" "$BUNDLE/lib/libflutter_linux_gtk.so"; do
   [ -f "$f" ] || { echo "缺少关键产物: $f" >&2; exit 1; }
 done
 echo "--- ldd 未解析依赖检查 ---"
-LDD_MISS=$(find "$BUNDLE" -maxdepth 2 -type f \( -name '*.so' -o -name 'kgka_music_hl' \) \
+LDD_MISS=$(find "$BUNDLE" -maxdepth 2 -type f \( -name '*.so' -o -name 'ShiYinMusic' \) \
   -exec ldd {} \; 2>/dev/null | grep "not found" || true)
 if [ -n "$LDD_MISS" ]; then
   echo "警告：存在未解析的动态依赖（libmpv 等运行期依赖属预期，其余不应出现）："

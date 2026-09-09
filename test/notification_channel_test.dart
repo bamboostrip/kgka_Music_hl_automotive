@@ -9,7 +9,7 @@ void main() {
         isAutomotiveDevice: false,
       );
 
-      expect(config.channelId, 'kgka_music_hl.playback_phone');
+      expect(config.channelId, 'shiyin_music.playback_phone');
       expect(config.channelName, '时音 播放控制');
     });
 
@@ -19,7 +19,7 @@ void main() {
         isAutomotiveDevice: true,
       );
 
-      expect(config.channelId, 'kgka_music_hl.playback_car');
+      expect(config.channelId, 'shiyin_music.playback_car');
       expect(config.channelName, '时音 车机播放控制');
     });
 
@@ -29,7 +29,7 @@ void main() {
         isAutomotiveDevice: false,
       );
 
-      expect(config.channelId, 'kgka_music_hl.playback_car');
+      expect(config.channelId, 'shiyin_music.playback_car');
       expect(config.channelName, '时音 车机播放控制');
     });
 
@@ -39,7 +39,7 @@ void main() {
         isAutomotiveDevice: true,
       );
 
-      expect(config.channelId, 'kgka_music_hl.playback_car');
+      expect(config.channelId, 'shiyin_music.playback_car');
       expect(config.channelName, '时音 车机播放控制');
     });
   });

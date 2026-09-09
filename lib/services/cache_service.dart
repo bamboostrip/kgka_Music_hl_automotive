@@ -117,7 +117,7 @@ class CacheService {
     var total = 0;
     for (final key in prefs.getKeys()) {
       if (key.startsWith('cache_') ||
-          key.startsWith('ka_music_cached_playlists')) {
+          key.startsWith('shiyin_cached_playlists')) {
         final value = prefs.getString(key);
         if (value != null) {
           total += value.length * 2; // UTF-16 每字符约 2 字节

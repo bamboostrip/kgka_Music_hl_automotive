@@ -18,8 +18,10 @@ class MusicApplication : Application() {
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // 清理旧版本未分流渠道（避免老车机缓存了旧配置）
-        notificationManager.deleteNotificationChannel(OLD_PLAYBACK_CHANNEL_ID)
+        // 清理旧版本渠道：未分流的单一播放渠道 + kgka 改名前的手机/车机
+        // 渠道（避免老车机缓存旧配置、通知设置里新旧并存）。
+        // 新渠道 ID 与 Dart 侧 resolvePlaybackNotificationChannel 一一对应。
+        LEGACY_CHANNEL_IDS.forEach(notificationManager::deleteNotificationChannel)
 
         // 手机端标准媒体渠道：IMPORTANCE_LOW，无提示音无震动，支持下拉通知中心、
         // 锁屏卡片与状态栏胶囊（灵动岛/流体云）。
@@ -68,8 +70,14 @@ class MusicApplication : Application() {
     companion object {
         // 渠道 ID 与 Dart 侧 resolvePlaybackNotificationChannel
         // （lib/services/music_audio_handler.dart）一一对应，改动需双端同步
-        const val OLD_PLAYBACK_CHANNEL_ID = "kgka_music_hl.playback"
-        const val PHONE_PLAYBACK_CHANNEL_ID = "kgka_music_hl.playback_phone"
-        const val CAR_PLAYBACK_CHANNEL_ID = "kgka_music_hl.playback_car"
+        const val PHONE_PLAYBACK_CHANNEL_ID = "shiyin_music.playback_phone"
+        const val CAR_PLAYBACK_CHANNEL_ID = "shiyin_music.playback_car"
+
+        // kgka 时代的旧渠道 ID，启动时统一删除（delete 不存在的渠道为空操作）
+        private val LEGACY_CHANNEL_IDS = listOf(
+            "kgka_music_hl.playback",
+            "kgka_music_hl.playback_phone",
+            "kgka_music_hl.playback_car",
+        )
     }
 }

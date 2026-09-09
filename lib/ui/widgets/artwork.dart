@@ -154,7 +154,7 @@ class _ContentUriImage extends StatefulWidget {
 }
 
 class _ContentUriImageState extends State<_ContentUriImage> {
-  static const _channel = MethodChannel('kgka_music_hl/local_music');
+  static const _channel = MethodChannel('shiyin_music/local_music');
   Uint8List? _bytes;
   bool _loading = true;
 

@@ -27,7 +27,7 @@ enum LoudnessChannel {
 
     static func register(with messenger: FlutterBinaryMessenger) {
         let channel = FlutterMethodChannel(
-            name: "kgka_music_hl/audio_effects",
+            name: "shiyin_music/audio_effects",
             binaryMessenger: messenger
         )
         channel.setMethodCallHandler { call, result in

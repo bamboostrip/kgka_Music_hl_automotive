@@ -154,16 +154,16 @@ Linux（顺序不限）：
 | 形态 | 来源 | 应用内更新方式 |
 |---|---|---|
 | 便携版 | `portable.zip` 解压任意目录 | 弹窗提示 → 跳浏览器下载新 zip → 用户解压覆盖旧目录 |
-| 安装版 | `setup.exe`（装到 `%LocalAppData%\ShiyinMusic`，免 UAC） | 弹窗 → 应用内下载 setup.exe（进度+取消，另保留"浏览器下载"入口）→ 退出并拉起安装向导 |
+| 安装版 | `setup.exe`（装到 `%LocalAppData%\ShiYinMusic`，免 UAC） | 弹窗 → 应用内下载 setup.exe（进度+取消，另保留"浏览器下载"入口）→ 退出并拉起安装向导 |
 
 - **形态判定**：Inno 安装时把 `installer/installed_by_inno.flag` 写进安装目录；
   应用检查 exe 同目录有无该文件（`AppUpdateService.isWindowsInstalledBuild`）。
   该文件**绝不能**打进 portable.zip（否则便携版被误判为安装版）。
 - **安装包要点**（`installer/shiyin.iss`）：固定 `AppId`、
-  `DefaultDirName={localappdata}\ShiyinMusic` + `PrivilegesRequired=lowest`（免 UAC）、
+  `DefaultDirName={localappdata}\ShiYinMusic` + `PrivilegesRequired=lowest`（免 UAC）、
   `CloseApplications=yes`（安装时提示关闭运行中的时音）、卸载不清理用户数据。
-- CI 中 zip 与 setup.exe 共用同一份暂存负载，分发 exe 名统一为
-  `ShiyinMusic.exe`（构建产物 `kgka_music_hl.exe` 在打包阶段改名）。
+- CI 中 zip 与 setup.exe 共用同一份暂存负载；分发 exe 名 `ShiYinMusic.exe`
+  由 `windows/CMakeLists.txt` 的 `BINARY_NAME` 直接产出（无需打包阶段改名）。
 
 ## 九、检查更新的多级容灾（403 规避）
 
@@ -189,7 +189,7 @@ Android：
 Windows：
 - 便携包：解压运行，关于页能查出新版；点「去下载」正确打开 zip 直链；
   手动把新版 zip 解压覆盖旧目录后版本号更新
-- 安装版：setup.exe 安装到 `%LocalAppData%\ShiyinMusic` 全程无 UAC；
+- 安装版：setup.exe 安装到 `%LocalAppData%\ShiYinMusic` 全程无 UAC；
   应用内下载 setup.exe 显示进度；「退出并安装」后旧进程退出、向导拉起，
   装完版本号更新且安装目录存在 `installed_by_inno.flag`
 - 断网/限流：手动检查有 Toast 提示，启动自动检查不打扰

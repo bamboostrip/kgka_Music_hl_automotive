@@ -29,13 +29,13 @@ class AuthController extends ChangeNotifier {
     );
   }
 
-  static const _tokenKey = 'ka_music_token';
-  static const _t1Key = 'ka_music_t1';
-  static const _sessionIdKey = 'ka_music_session_id';
-  static const _userIdKey = 'ka_music_user_id';
-  static const _playlistCachePrefix = 'ka_music_cached_playlists';
-  static const _playlistEmptyCountPrefix = 'ka_music_playlist_empty_count';
-  static const _likedHashesKey = 'ka_music_liked_hashes';
+  static const _tokenKey = 'shiyin_token';
+  static const _t1Key = 'shiyin_t1';
+  static const _sessionIdKey = 'shiyin_session_id';
+  static const _userIdKey = 'shiyin_user_id';
+  static const _playlistCachePrefix = 'shiyin_cached_playlists';
+  static const _playlistEmptyCountPrefix = 'shiyin_playlist_empty_count';
+  static const _likedHashesKey = 'shiyin_liked_hashes';
   final MusicApi _api;
   final CacheService _cacheService;
   late final VipBackgroundTask _vipBackgroundTask = VipBackgroundTask(_api);

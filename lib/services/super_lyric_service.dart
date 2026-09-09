@@ -29,7 +29,7 @@ class SuperLyricWordData {
 ///
 /// 仅在 Android 平台生效，非 Android 平台的所有操作均为安全的 no-op。
 class SuperLyricService {
-  static const _channel = MethodChannel('kgka_music_hl/super_lyric');
+  static const _channel = MethodChannel('shiyin_music/super_lyric');
 
   bool _registered = false;
 

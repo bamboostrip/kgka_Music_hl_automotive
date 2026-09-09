@@ -82,7 +82,7 @@ void main() {
   });
 
   group('DesktopLyricsService PlaybackAction', () {
-    const channel = MethodChannel('kgka_music_hl/desktop_lyrics');
+    const channel = MethodChannel('shiyin_music/desktop_lyrics');
 
     test('支持注册与触发 controlPlayback 播控指令', () async {
       final service = DesktopLyricsService();

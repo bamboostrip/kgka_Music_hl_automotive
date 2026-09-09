@@ -32,7 +32,7 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
-  static const _screenChannel = MethodChannel('kgka_music_hl/screen');
+  static const _screenChannel = MethodChannel('shiyin_music/screen');
 
   @override
   void initState() {

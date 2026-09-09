@@ -223,7 +223,7 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-        'ka_music_downloads_index',
+        'shiyin_downloads_index',
         jsonEncode([
           {
             'song': testSong.toCache(),
@@ -253,7 +253,7 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
-          'ka_music_downloads_index',
+          'shiyin_downloads_index',
           jsonEncode([
             {
               'song': testSong.toCache(),
@@ -285,7 +285,7 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
-          'ka_music_play_cache_index',
+          'shiyin_play_cache_index',
           jsonEncode([
             {
               'cacheKey': fakeService.cacheKeyFor(testSong, AudioQuality.standard),
@@ -318,7 +318,7 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
-          'ka_music_play_cache_index',
+          'shiyin_play_cache_index',
           jsonEncode([
             {
               'cacheKey': fakeService.cacheKeyFor(testSong, AudioQuality.high),
@@ -352,7 +352,7 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
-          'ka_music_downloads_index',
+          'shiyin_downloads_index',
           jsonEncode([
             {
               'song': testSong.toCache(),
@@ -363,7 +363,7 @@ void main() {
           ]),
         );
         await prefs.setString(
-          'ka_music_play_cache_index',
+          'shiyin_play_cache_index',
           jsonEncode([
             {
               'cacheKey': fakeService.cacheKeyFor(testSong, AudioQuality.high),
@@ -396,7 +396,7 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
-          'ka_music_play_cache_index',
+          'shiyin_play_cache_index',
           jsonEncode([
             {
               'cacheKey': fakeService.cacheKeyFor(testSong, AudioQuality.standard),
@@ -424,7 +424,7 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-        'ka_music_downloads_index',
+        'shiyin_downloads_index',
         jsonEncode([
           {
             'song': testSong.toCache(),
@@ -471,7 +471,7 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-        'ka_music_downloads_index',
+        'shiyin_downloads_index',
         jsonEncode([
           {
             'song': testSong.toCache(),
@@ -510,7 +510,7 @@ void main() {
       );
 
       // 回写后坏条消失，下次启动不再重复 IO
-      final rewritten = prefs.getString('ka_music_downloads_index');
+      final rewritten = prefs.getString('shiyin_downloads_index');
       final list = jsonDecode(rewritten!) as List;
       expect(list.length, 1);
     });

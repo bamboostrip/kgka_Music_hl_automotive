@@ -96,7 +96,7 @@ class MainActivity : AudioServiceActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/screen")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "shiyin_music/screen")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setKeepScreenOn" -> {
@@ -113,7 +113,7 @@ class MainActivity : AudioServiceActivity() {
             }
 
         // 车机检测：isAutomotive 判别车机。
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/device")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "shiyin_music/device")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "isAutomotive" -> result.success(isAutomotiveDevice())
@@ -121,7 +121,7 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/update")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "shiyin_music/update")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "downloadAndInstallApk" -> {
@@ -144,7 +144,7 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/audio_effects")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "shiyin_music/audio_effects")
             .also { audioEffectsChannel = it }
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -276,7 +276,7 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/local_music")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "shiyin_music/local_music")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "hasPermission" -> {
@@ -337,7 +337,7 @@ class MainActivity : AudioServiceActivity() {
 
         desktopLyricsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "kgka_music_hl/desktop_lyrics"
+            "shiyin_music/desktop_lyrics"
         )
         registerLyricsStateReceiver()
         desktopLyricsChannel?.setMethodCallHandler { call, result ->
@@ -449,7 +449,7 @@ class MainActivity : AudioServiceActivity() {
         // SuperLyric 系统歌词发布（Xposed）
         superLyricChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "kgka_music_hl/super_lyric"
+            "shiyin_music/super_lyric"
         )
         superLyricChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -583,7 +583,7 @@ class MainActivity : AudioServiceActivity() {
         // 车载蓝牙歌词广播（标准 + 厂商兼容）
         val btLyricChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "kgka_music_hl/bluetooth_lyrics"
+            "shiyin_music/bluetooth_lyrics"
         )
         btLyricChannel.setMethodCallHandler { call, result ->
             when (call.method) {

@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 ///
 /// 仅在 Android 平台生效，非 Android 平台所有方法均为安全的 no-op。
 class BluetoothLyricsService {
-  static const _channel = MethodChannel('kgka_music_hl/bluetooth_lyrics');
+  static const _channel = MethodChannel('shiyin_music/bluetooth_lyrics');
 
   static bool get isSupportedPlatform {
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;

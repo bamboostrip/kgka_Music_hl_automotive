@@ -60,7 +60,7 @@ class EqualizerConfig {
 }
 
 class AudioEffectsService {
-  static const _channel = MethodChannel('kgka_music_hl/audio_effects');
+  static const _channel = MethodChannel('shiyin_music/audio_effects');
 
   bool get isAudioEffectsSupported {
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;

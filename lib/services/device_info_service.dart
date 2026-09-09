@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 class DeviceInfoService {
   const DeviceInfoService();
 
-  static const MethodChannel _channel = MethodChannel('kgka_music_hl/device');
+  static const MethodChannel _channel = MethodChannel('shiyin_music/device');
 
   static bool get isSupportedPlatform {
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;

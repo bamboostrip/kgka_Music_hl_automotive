@@ -380,7 +380,7 @@ class AppUpdateService {
         .trim();
     final destPath =
         '${downloadsDir.path}${Platform.pathSeparator}'
-        'ShiyinMusic-Setup-v${safeVersion.isEmpty ? 'unknown' : safeVersion}.exe';
+        'ShiYinMusic-Setup-v${safeVersion.isEmpty ? 'unknown' : safeVersion}.exe';
 
     try {
       await _dio.download(

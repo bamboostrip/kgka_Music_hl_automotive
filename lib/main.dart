@@ -22,6 +22,7 @@ import 'services/desktop_system_integration.dart';
 import 'services/desktop_system_media.dart';
 import 'services/device_info_service.dart';
 import 'services/download_service.dart';
+import 'services/legacy_migration.dart';
 import 'services/music_audio_handler.dart';
 import 'services/music_api.dart';
 import 'services/network_monitor.dart';
@@ -65,6 +66,12 @@ Future<void> main(List<String> args) async {
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 200;
   cache.maximumSizeBytes = 64 << 20;
+  // 旧标识（ka_music_* 键与目录、Windows com.example 数据目录）→ 时音
+  // 命名的一次性迁移。必须先于 RustApiClient.getInstance()：Windows 上
+  // 它解析的支持目录路径取决于 VERSIONINFO CompanyName，迁移晚跑会把
+  // 登录会话（kg_session.json）留在旧目录。迁移内部全量 try/catch，
+  // 失败不阻断启动。
+  await LegacyMigration.run();
   try {
     final client = await RustApiClient.getInstance();
     final api = MusicApi(client);

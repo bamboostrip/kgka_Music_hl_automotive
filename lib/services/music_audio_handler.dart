@@ -47,7 +47,7 @@ class _ProxyRoute {
   final isCar = isCarMode || isAutomotiveDevice;
   return (
     channelId:
-        isCar ? 'kgka_music_hl.playback_car' : 'kgka_music_hl.playback_phone',
+        isCar ? 'shiyin_music.playback_car' : 'shiyin_music.playback_phone',
     channelName: isCar ? '时音 车机播放控制' : '时音 播放控制',
   );
 }

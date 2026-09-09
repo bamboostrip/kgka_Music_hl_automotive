@@ -27,7 +27,9 @@ import kotlin.math.abs
 class LyricsOverlayService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "kgka_music_hl.lyrics_overlay"
+        const val CHANNEL_ID = "shiyin_music.lyrics_overlay"
+        // 改名前的旧渠道 ID，onCreate 建渠道前删除（避免通知设置里新旧并存）
+        private const val OLD_CHANNEL_ID = "kgka_music_hl.lyrics_overlay"
         const val NOTIFICATION_ID = 9001
 
         const val ACTION_UPDATE_LYRICS = "shiyin.famlife.top.UPDATE_LYRICS"
@@ -566,6 +568,9 @@ class LyricsOverlayService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java)
+            // 渠道改名迁移：删除旧 ID 渠道（不存在时为空操作）
+            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "桌面歌词",
@@ -574,7 +579,6 @@ class LyricsOverlayService : Service() {
                 description = "桌面歌词服务通知"
                 setShowBadge(false)
             }
-            val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
     }

@@ -29,7 +29,7 @@ class LoudnessService {
     _registerProgressHandler();
   }
 
-  static const _channel = MethodChannel('kgka_music_hl/audio_effects');
+  static const _channel = MethodChannel('shiyin_music/audio_effects');
   static const _cacheKey = 'loudness_cache';
   static const _enabledKey = 'loudness_enabled';
 

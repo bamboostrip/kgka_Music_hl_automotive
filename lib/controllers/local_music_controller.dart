@@ -24,7 +24,7 @@ class LocalMusicController extends ChangeNotifier {
     super.dispose();
   }
 
-  static const _channel = MethodChannel('kgka_music_hl/local_music');
+  static const _channel = MethodChannel('shiyin_music/local_music');
   static const _excludedFoldersKey = 'settings.local_music_excluded_folders';
 
   // ---- 桌面（Windows/Linux）扫描根目录 ----

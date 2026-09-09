@@ -287,7 +287,7 @@ void main() {
     test('同目录存在 flag 判为安装版', () async {
       final dir = await Directory.systemTemp.createTemp('shiyin_flag_test');
       addTearDown(() => dir.delete(recursive: true));
-      final exe = File('${dir.path}${Platform.pathSeparator}ShiyinMusic.exe');
+      final exe = File('${dir.path}${Platform.pathSeparator}ShiYinMusic.exe');
       await exe.writeAsBytes([0x4D, 0x5A]);
 
       expect(AppUpdateService.detectWindowsInstalledBuild(exe.path), isFalse);

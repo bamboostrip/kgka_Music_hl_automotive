@@ -1,4 +1,4 @@
-﻿; 时音 Windows 安装包脚本（Inno Setup 6，需 Unicode 版）。
+; 时音 Windows 安装包脚本（Inno Setup 6，需 Unicode 版）。
 ;
 ; CI / 本机用法（SourceDir 必须传绝对路径，Inno 相对路径以本 .iss 所在目录解析）：
 ;   ISCC.exe /DAppVersion=2.5.2 /DFileVersion=2.5.2.0 ^
@@ -6,7 +6,7 @@
 ;
 ; 设计要点（与 docs/release-process.md 保持一致）：
 ; - 伪便携：数据存 %APPDATA%，与安装目录无关；卸载不清理用户数据。
-; - per-user 安装到 {localappdata}\ShiyinMusic，免 UAC（PrivilegesRequired=lowest）。
+; - per-user 安装到 {localappdata}\ShiYinMusic，免 UAC（PrivilegesRequired=lowest）。
 ; - CloseApplications=yes：安装时通过 Restart Manager 提示关闭正在运行的时音。
 ; - 安装 installed_by_inno.flag 到 {app}：应用内更新靠它区分安装版/便携版，
 ;   绝不能打进 portable.zip（便携包由 CI 从 SourceDir 直接压缩，不含本文件）。
@@ -31,7 +31,7 @@ AppPublisher=bamboostrip
 AppPublisherURL=https://github.com/bamboostrip/shiyin-music
 AppUpdatesURL=https://github.com/bamboostrip/shiyin-music/releases/latest
 VersionInfoVersion={#FileVersion}
-DefaultDirName={localappdata}\ShiyinMusic
+DefaultDirName={localappdata}\ShiYinMusic
 DefaultGroupName=时音
 DisableProgramGroupPage=yes
 ; per-user 安装：不写 HKLM / Program Files，全程免 UAC。
@@ -47,7 +47,7 @@ WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 UninstallDisplayName=时音
-UninstallDisplayIcon={app}\ShiyinMusic.exe
+UninstallDisplayIcon={app}\ShiYinMusic.exe
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 
 [Languages]
@@ -68,9 +68,9 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Source: "installed_by_inno.flag"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\时音"; Filename: "{app}\ShiyinMusic.exe"
-Name: "{autodesktop}\时音"; Filename: "{app}\ShiyinMusic.exe"; Tasks: desktopicon
+Name: "{group}\时音"; Filename: "{app}\ShiYinMusic.exe"
+Name: "{autodesktop}\时音"; Filename: "{app}\ShiYinMusic.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ShiyinMusic.exe"; Description: "{cm:LaunchProgram,时音}"; \
+Filename: "{app}\ShiYinMusic.exe"; Description: "{cm:LaunchProgram,时音}"; \
   Flags: nowait postinstall skipifsilent

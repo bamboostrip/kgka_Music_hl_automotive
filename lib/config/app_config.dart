@@ -31,10 +31,12 @@ class AppConfig {
   );
 
   // ===== 缓存与下载配置 =====
-  /// 数据缓存目录名 / 下载目录名 / 播放缓存目录名
-  static const cacheDirName = 'ka_music_cache';
-  static const downloadDirName = 'ka_music_downloads';
-  static const playCacheDirName = 'ka_music_play_cache';
+  /// 数据缓存目录名 / 下载目录名 / 播放缓存目录名。
+  /// 旧名（ka_music_*）由 services/legacy_migration.dart 在启动时自动迁移，
+  /// 改动这里的值必须同步维护迁移映射，否则老用户下载/缓存"消失"。
+  static const cacheDirName = 'shiyin_cache';
+  static const downloadDirName = 'shiyin_downloads';
+  static const playCacheDirName = 'shiyin_play_cache';
 
   /// 数据缓存 TTL（分级）
   static const homeCacheTtl = Duration(minutes: 30); // 首页推荐

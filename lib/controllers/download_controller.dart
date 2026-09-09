@@ -104,8 +104,8 @@ class DownloadController extends ChangeNotifier {
   final DownloadService _service;
   final MusicApi _api;
 
-  static const _downloadsIndexKey = 'ka_music_downloads_index';
-  static const _playCacheIndexKey = 'ka_music_play_cache_index';
+  static const _downloadsIndexKey = 'shiyin_downloads_index';
+  static const _playCacheIndexKey = 'shiyin_play_cache_index';
   static const _playCacheLimitKey = 'settings.play_cache_limit';
 
   final Map<String, DownloadEntry> _downloads = {}; // key = hash

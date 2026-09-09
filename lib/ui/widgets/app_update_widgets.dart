@@ -333,7 +333,7 @@ class _WindowsUpdateDialogState extends State<_WindowsUpdateDialog> {
   }
 
   String get _fileName =>
-      'ShiyinMusic-Setup-v${widget.version.versionName}.exe';
+      'ShiYinMusic-Setup-v${widget.version.versionName}.exe';
 
   @override
   Widget build(BuildContext context) {

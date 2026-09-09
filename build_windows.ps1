@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   时音 Windows 构建与分发打包脚本（pwsh 版，与 build_windows.bat 同功能）。
 .DESCRIPTION
@@ -15,7 +15,7 @@
 
   产物（build/ 已在 .gitignore，flutter clean 会清理）:
     build\dist\shiyin-vX.Y.Z-windows-x64-portable.zip  # 便携版（zip 根即文件，解压即覆盖）
-    build\dist\shiyin-vX.Y.Z-windows-x64-setup.exe     # 安装版（Inno Setup，装到 %LocalAppData%\ShiyinMusic）
+    build\dist\shiyin-vX.Y.Z-windows-x64-setup.exe     # 安装版（Inno Setup，装到 %LocalAppData%\ShiYinMusic）
 
   要求:
     - Flutter 已在 PATH（或 E:\flutter\flutter\bin\flutter.bat）
@@ -142,13 +142,13 @@ if (-not $SkipBuild) {
 }
 
 $buildDir = Join-Path 'build\windows\x64\runner' (Get-Culture).TextInfo.ToTitleCase($BuildType)
-$exe = Join-Path $buildDir 'kgka_music_hl.exe'
+$exe = Join-Path $buildDir 'ShiYinMusic.exe'
 if (-not (Test-Path $exe)) {
     Write-Error "未找到构建产物：$exe（先运行不带 -SkipBuild 的构建）"
     exit 1
 }
 
-# ── 2. 暂存 portable 目录（与 CI 同款：exe 改名 ShiyinMusic.exe） ──
+# ── 2. 暂存 portable 目录（与 CI 同款；CMake BINARY_NAME 即 ShiYinMusic，无需改名） ──
 Write-Host ''
 Write-Host '[3/3] 分发打包...'
 $stage = Join-Path $PSScriptRoot 'build\dist\portable'
@@ -156,11 +156,9 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 # 清空旧暂存（避免残留旧 dll 漏进新包）
 Get-ChildItem $stage -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item "$buildDir\*" $stage -Recurse -Force
-$oldExe = Join-Path $stage 'kgka_music_hl.exe'
-$newExe = Join-Path $stage 'ShiyinMusic.exe'
-if (Test-Path $oldExe) { Move-Item $oldExe $newExe -Force }
+$newExe = Join-Path $stage 'ShiYinMusic.exe'
 if (-not (Test-Path $newExe)) {
-    Write-Error "暂存目录缺少 ShiyinMusic.exe：$newExe"
+    Write-Error "暂存目录缺少 ShiYinMusic.exe：$newExe"
     exit 1
 }
 
@@ -259,5 +257,5 @@ Write-Host ''
 Write-Host "  暂存目录：$stage"
 Write-Host '  分发说明：'
 Write-Host '    便携版：解压 portable.zip 覆盖旧目录即可'
-Write-Host '    安装版：运行 setup.exe，装到 %LocalAppData%\ShiyinMusic（免 UAC）'
+Write-Host '    安装版：运行 setup.exe，装到 %LocalAppData%\ShiYinMusic（免 UAC）'
 Write-Host '============================================'

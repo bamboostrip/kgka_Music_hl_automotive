@@ -91,7 +91,7 @@ class DesktopLyricsSettings {
 }
 
 class DesktopLyricsService {
-  static const _channel = MethodChannel('kgka_music_hl/desktop_lyrics');
+  static const _channel = MethodChannel('shiyin_music/desktop_lyrics');
   static bool _handlerAttached = false;
   static DesktopLyricsVisibilityChanged? _visibilityChanged;
   static DesktopLyricsPlaybackAction? _playbackAction;

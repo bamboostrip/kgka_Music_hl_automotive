@@ -239,7 +239,7 @@ flutter run -d linux
 
 | 变量 | 说明 | 状态 |
 |---|---|---|
-| `KA_MUSIC_DEBUG_LYRICS` | 启用歌词调试日志 | 通用 |
+| `SHIYIN_DEBUG_LYRICS` | 启用歌词调试日志 | 通用（旧名 `KA_MUSIC_DEBUG_LYRICS` 仍向后兼容） |
 | `KA_MUSIC_API_BASE_URL` | 自定义后端 API 地址 | **仅历史 `backend` 存档分支用过，现已废弃** |
 
 ```bash

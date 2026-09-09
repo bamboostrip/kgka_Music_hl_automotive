@@ -82,7 +82,7 @@ class DownloadService {
 
   /// 持久下载目录。
   ///
-  /// - Android：App 专属外部目录（`Android/data/<包名>/files/ka_music_downloads`），
+  /// - Android：App 专属外部目录（`Android/data/<包名>/files/shiyin_downloads`），
   ///   无需存储权限，卸载自动清理，不被系统相册/音乐扫描。
   ///   API29+ 分区存储下公共 Download 裸写必 EACCES，故不再使用公共目录。
   ///   存量用户旧索引仍是公共目录绝对路径，文件本身还在就继续可播可删；
