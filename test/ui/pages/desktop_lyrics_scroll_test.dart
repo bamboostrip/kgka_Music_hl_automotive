@@ -205,9 +205,11 @@ void main() {
 
       await pumpPlayerPage(tester, player: player, auth: auth);
 
-      // 验证顶栏包含返回和更多按钮
+      // 验证顶栏包含返回按钮
       expect(find.byIcon(Icons.keyboard_arrow_left_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
+      // 桌面形态下顶栏"更多"按钮已收敛到底部播放栏的更多菜单
+      // （57dbb02：播放页内不再冗余展示），此处应不可见。
+      expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
 
       // 关键验证：顶栏不出现突兀的音质 Pill
       expect(find.byType(PlayerAudioQualityPill), findsNothing);

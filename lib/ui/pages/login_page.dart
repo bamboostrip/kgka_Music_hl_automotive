@@ -291,6 +291,11 @@ class _LoginPageState extends State<LoginPage> {
           }
           return;
         }
+        // 换码竞态：请求在途时 30s 自动换码拉了新码，旧 key 的响应属于
+        // 已作废的码——过期态会误杀新码的轮询与自动换码（新码被标成
+        // 已过期），等待确认态会永久禁用新码的自动换码，直接丢弃。
+        // 成功态在上：旧码上真实完成的扫码登录不作废。
+        if (_qrCode?.key != key) return;
         if (result.isExpired) {
           _qrPollTimer?.cancel();
           _qrRotateTimer?.cancel();

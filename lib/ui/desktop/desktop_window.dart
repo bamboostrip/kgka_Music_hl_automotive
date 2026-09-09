@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ffi' as ffi;
+import 'dart:io' show Platform, exit;
 import 'dart:math' as math;
 // window_manager 未重新导出 dart:ui 类型，Size/Offset 需自行引入。
 import 'dart:ui' show Offset, Rect, Size;
@@ -118,13 +119,14 @@ class DesktopWindow {
   /// 用户显式开启的"关闭到托盘"不受一次性的环境故障影响。
   static bool? _closeToTraySessionOverride;
 
-  /// 统一退出路径：落盘几何 → 立即硬终止进程。
+  /// 统一退出路径：落盘几何 → 刷写注册的退出前持久化钩子 → 终止进程。
   ///
-  /// 不走 windowManager.destroy() / exit() 等任何优雅关闭：Flutter 引擎
-  /// teardown（主窗无障碍桥拆除、桌面歌词子窗引擎线程退出）会在
-  /// IME/UIA 等无障碍客户端活跃时，于 flutter_windows.dll 内触发多处
-  /// use-after-free 崩溃（0xC0000005，GetEngine/messenger 等均已实测），
-  /// 随后 WER 收集崩溃转储拖 ~12s 进程才退出，表现为"退出像卡住"。
+  /// Windows 上不走 windowManager.destroy() / exit() 等任何优雅关闭：
+  /// Flutter 引擎 teardown（主窗无障碍桥拆除、桌面歌词子窗引擎线程退出）
+  /// 会在 IME/UIA 等无障碍客户端活跃时，于 flutter_windows.dll 内触发
+  /// 多处 use-after-free 崩溃（0xC0000005，GetEngine/messenger 等均已
+  /// 实测），随后 WER 收集崩溃转储拖 ~12s 进程才退出，表现为"退出像
+  /// 卡住"。
   ///
   /// 也无法走 ExitProcess：其 DllMain detach 阶段仍会运行各插件 DLL 的
   /// CRT 静态析构（desktop_multi_window 的析构调用引擎 messenger，已
@@ -138,6 +140,11 @@ class DesktopWindow {
   /// 退出且无 WER。托盘图标由 Shell 在进程死亡时自动清除；主窗与悬浮
   /// 窗同帧消失。仅用于用户主动退出，几何等状态已在终止之前落盘。
   ///
+  /// Linux/macOS 上不存在上述 WER/UAF 问题（崩溃根源在 flutter_windows
+  /// .dll 的无障碍桥），走窗口管理器正常销毁即可；此前的 kernel32 硬
+  /// 终止在这两个平台会因 DynamicLibrary.open('kernel32.dll') 直接抛
+  /// 异常，导致托盘"退出"永远退不掉。
+  ///
   /// 托盘"退出"与关闭按钮的退出分支都必须走这里，禁止散落调用
   /// windowManager.destroy()。
   static Future<void> quitGracefully() async {
@@ -146,11 +153,43 @@ class DesktopWindow {
     } catch (error) {
       debugPrint('DesktopWindow: 退出时保存几何失败（不阻止退出）: $error');
     }
+    // 播放队列/当前曲目等防抖落盘的状态：硬终止前立即刷写。
+    await _runPreQuitFlushers();
+    if (!Platform.isWindows) {
+      try {
+        await windowManager.destroy();
+      } catch (error) {
+        debugPrint('DesktopWindow: destroy 失败，降级 exit(0): $error');
+        exit(0);
+      }
+      return;
+    }
     _terminateNow();
   }
 
+  /// 退出前持久化钩子：注册防抖落盘状态的立即刷写（如播放队列/当前
+  /// 曲目）。每个钩子独立容错并限时，任何单个失败/超时都不阻止退出。
+  static final List<Future<void> Function()> _preQuitFlushers = [];
+
+  static void registerPreQuitFlusher(Future<void> Function() flusher) {
+    if (!_preQuitFlushers.contains(flusher)) {
+      _preQuitFlushers.add(flusher);
+    }
+  }
+
+  static Future<void> _runPreQuitFlushers() async {
+    for (final flusher in List.of(_preQuitFlushers)) {
+      try {
+        await flusher().timeout(const Duration(milliseconds: 800));
+      } catch (error) {
+        debugPrint('DesktopWindow: 退出前刷写状态失败（忽略）: $error');
+      }
+    }
+  }
+
   /// TerminateProcess(本进程, 0) + TerminateThread(当前线程, 0)。
-  /// 仅用于 [quitGracefully] 末尾的用户主动退出（状态均已落盘）。
+  /// 仅 Windows、仅用于 [quitGracefully] 末尾的用户主动退出（状态均已
+  /// 落盘）；非 Windows 分支在 quitGracefully 内走 destroy()。
   static void _terminateNow() {
     final kernel32 = ffi.DynamicLibrary.open('kernel32.dll');
     final getCurrentProcess = kernel32

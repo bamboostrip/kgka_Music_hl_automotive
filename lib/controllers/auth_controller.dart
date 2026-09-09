@@ -115,15 +115,22 @@ class AuthController extends ChangeNotifier {
           var fileId = _resolvePlaylistFileId(song);
           if (fileId == null) {
             // 已持有互斥锁，直接跑同步执行体；再入队会等待自身，死锁。
-            await _syncLikedSongsLocked();
+            final synced = await _syncLikedSongsLocked();
             fileId = _hashToFileId[song.hash];
-          }
-          if (fileId == null) {
-            // fileId 仍定位不到：服务端删不掉，回滚乐观状态。
-            _likedHashes.add(song.hash);
-            if (prevFileId != null) _hashToFileId[song.hash] = prevFileId;
-            notifyListeners();
-            return;
+            if (fileId == null) {
+              if (synced) {
+                // 同步成功但服务端没有此歌：同步结果即真值（比如另一台
+                // 设备已取消、或前一次点赞请求失败），保持乐观移除，
+                // 不得回滚加回——否则本地与服务端永久分叉。
+                notifyListeners();
+                return;
+              }
+              // 同步失败无法定真值：回滚到点按前状态。
+              _likedHashes.add(song.hash);
+              if (prevFileId != null) _hashToFileId[song.hash] = prevFileId;
+              notifyListeners();
+              return;
+            }
           }
           resp = await _api.removeSongsFromPlaylist(
             targetListId,
@@ -577,7 +584,11 @@ class AuthController extends ChangeNotifier {
     await _run(() async {
       profile = await _api.userDetail();
       if (profile != null) {
-        await _cacheService.write(_userCacheKey, profile!.toCache());
+        // 缓存写失败（磁盘满/平台异常）不应把成功的接口结果变成登录
+        // 错误：吞掉即可，下次刷新重写。
+        try {
+          await _cacheService.write(_userCacheKey, profile!.toCache());
+        } catch (_) {}
       }
       try {
         vipInfo = await _api.userVipDetail();
@@ -631,10 +642,14 @@ class AuthController extends ChangeNotifier {
 
   /// 全量同步执行体：只在已持有 [_likedMutationLock] 时调用
   /// （toggleLike 任务体内与 [_syncLikedSongs] 入队后各一处）。
-  Future<void> _syncLikedSongsLocked() async {
+  ///
+  /// 返回是否成功应用了服务端真值：失败时内部回退到本地持久化集合并
+  /// 返回 false，调用方（toggleLike 的取消收藏分支）据此区分"服务端确无
+  /// 此歌"与"同步失败无法定真值"两种 fileId 缺失场景。
+  Future<bool> _syncLikedSongsLocked() async {
     try {
       final playlist = likedPlaylist;
-      if (playlist == null) return;
+      if (playlist == null) return false;
       final songs = await _api.playlistSongs(playlist.id, fetchAll: true);
       _likedHashes.clear();
       _hashToFileId.clear();
@@ -644,10 +659,12 @@ class AuthController extends ChangeNotifier {
         if (fid != null) _hashToFileId[song.hash] = fid;
       }
       await _persistLikedHashes();
+      return true;
     } catch (_) {
       try {
         await _loadLikedHashes();
       } catch (_) {}
+      return false;
     }
   }
 

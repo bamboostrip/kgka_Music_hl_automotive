@@ -572,11 +572,34 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
         _alignTargetPostFrame(index, attemptsLeft - 1);
       } else {
         // 一直没对上（内容本身就比头部区间矮，滚不上去）：清掉标记，
-        // 并按内容真实高度重算一次顶栏，避免顶栏卡在收起态留出空白。
+        // 并把顶栏收起量直接压到该页真实滚动偏移。不能只调
+        // _updateHeaderShrink 重算——其静态分支对静止页有 delta==0
+        // 早退，防空白钳制永远走不到，顶栏会卡在收起态留出空白带。
         if (_switchTarget == index) _switchTarget = null;
-        _updateHeaderShrink();
+        _clampHeaderShrinkToTab(index);
       }
     });
+  }
+
+  /// 把顶栏收起量下压到 [index] 页当前滚动偏移（防空白钳制的直接版）。
+  ///
+  /// 收起量不得超过该页已滚走的距离：目标页内容比头部区间矮、永远滚
+  /// 不到地板高度时（如空态/错误态的电台页），顶栏若停在收起态会和
+  /// 未滚到位的内容之间留出一条空白带。
+  void _clampHeaderShrinkToTab(int index) {
+    if (index < 0 || index >= _tabControllers.length) return;
+    final controller = _tabControllers[index];
+    if (!controller.hasClients) return;
+    double offset;
+    try {
+      offset = controller.offset;
+    } catch (_) {
+      return;
+    }
+    final ceiling = offset.clamp(0.0, _headerCollapseRange);
+    if (_headerShrink.value > ceiling + 0.1) {
+      _headerShrink.value = ceiling;
+    }
   }
 
   /// 尝试把目标 tab 的头部进度推高到 [shrink]，返回是否已落定无需重试。
@@ -694,6 +717,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   /// 推荐 tab 刷新推荐流，排行榜 / 电台 tab 刷新各自内容（标题栏刷新按钮已移除，
   /// 统一收敛到这里）。车机顶栏点中当前 tab 同样走这里（含均衡器动画）。
   Future<void> scrollToTopAndRefresh() async {
+    // 用户显式要求回顶：作废未完成的点按飞行对齐，避免落地帧把本页
+    // 又推回顶栏地板高度（飞行中重按目标 tab / 对齐重试未完时双击）。
+    _switchTarget = null;
     final size = MediaQuery.sizeOf(context);
     final isCarMode =
         size.width > size.height && ThemeController.instance.carModeEnabled;

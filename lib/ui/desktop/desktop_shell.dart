@@ -11,10 +11,10 @@ import '../../services/music_api.dart';
 import '../pages/downloaded_songs_page.dart';
 import '../pages/home_page.dart';
 import '../pages/library_page.dart';
-import '../pages/player_page.dart';
 import '../pages/search_page.dart';
 import '../pages/settings_page.dart';
 import '../keyboard_focus_guard.dart';
+import '../player/player_route.dart';
 import '../widgets/lazy_indexed_stack.dart';
 import 'desktop_player_bar.dart';
 import 'desktop_sidebar.dart';
@@ -130,10 +130,10 @@ class _DesktopShellState extends State<DesktopShell> {
 
   void _openPlayerPage(BuildContext context) {
     if (widget.player.currentSong == null) return;
-    _pushContent(
-      context,
-      PlayerPage(player: widget.player, auth: widget.auth),
-    );
+    // 播放页是整屏路由：盖住标题栏，页内自带窗口控制浮层（拖拽条+三键）。
+    // 必须推到根 Navigator——推入内层内容导航的话标题栏仍然可见，会出现
+    // 双份窗口按钮。与播放栏空白处点击同一条路径，保证入口行为一致。
+    PlayerPageRoute.open(context, player: widget.player, auth: widget.auth);
   }
 
   int get _sidebarIndex {
@@ -286,7 +286,11 @@ class _DesktopShellState extends State<DesktopShell> {
                               },
                             ),
                           ),
-                          DesktopPlayerBar(player: widget.player, auth: widget.auth),
+                          DesktopPlayerBar(
+                            player: widget.player,
+                            auth: widget.auth,
+                            onOpenPlayerPage: () => _openPlayerPage(context),
+                          ),
                         ],
                       ),
                     ),

@@ -201,6 +201,10 @@ class RankPageState extends SwrSectionState<RankPage, List<RankCategory>>
   ) async {
     if (startedWith.isEmpty) return;
     String keyOf(Song s) => s.hash.isNotEmpty ? s.hash : s.id;
+    // 拉全榜耗时数秒，期间用户可能"下一首播放"插入歌曲：记录起点队列
+    // 长度，完成时长度有变即放弃整队替换——replaceQueue 会吞掉用户的
+    // 插入，宁可这次不补全（下次播放会再试）。
+    final queueLengthAtStart = widget.player.queue.length;
     try {
       final fetched = await widget.api.rankAudioAll(rankId: rank.rankId);
       // 上游对越界页可能重复返回最后一页（replaceQueue 不去重）：
@@ -211,6 +215,7 @@ class RankPageState extends SwrSectionState<RankPage, List<RankCategory>>
           if (seen.add(keyOf(song))) song,
       ];
       if (!mounted || all.length <= startedWith.length) return;
+      if (widget.player.queue.length != queueLengthAtStart) return;
       final current = widget.player.currentSong;
       final startedKeys = startedWith.map(keyOf).toSet();
       final currentKey = current == null ? '' : keyOf(current);
@@ -1110,9 +1115,13 @@ class _RankDetailPageState extends State<RankDetailPage> {
     if (_allSongsLoaded || !_hasMore) return;
     final startedKey = startedWith.hash.isNotEmpty ? startedWith.hash : startedWith.id;
     if (startedKey.isEmpty) return;
+    // 加载期间用户可能"下一首播放"插入歌曲：记录起点队列长度，完成后
+    // 长度有变即放弃替换，避免吞掉用户插入。
+    final queueLengthAtStart = widget.player.queue.length;
     unawaited(() async {
       await _loadAllSongs();
       if (!mounted) return;
+      if (widget.player.queue.length != queueLengthAtStart) return;
       final current = widget.player.currentSong;
       if (current == null) return;
       final currentKey = current.hash.isNotEmpty ? current.hash : current.id;

@@ -285,6 +285,17 @@ mixin _PlayerSettings on _PlayerControllerBase {
     });
   }
 
+  /// 立即落盘播放状态（取消防抖）。
+  ///
+  /// 供桌面退出路径（DesktopWindow.quitGracefully 注册的退出前钩子）
+  /// 调用：硬终止进程不做任何异步收尾，防抖窗口内的切歌必须先刷写，
+  /// 否则下次启动恢复到上一首歌。
+  Future<void> flushPlaybackState() async {
+    _saveStateTimer?.cancel();
+    _saveStateTimer = null;
+    await _savePlaybackState();
+  }
+
   Future<void> _savePlaybackState() async {
     final prefs = await SharedPreferences.getInstance();
     final state = {

@@ -95,8 +95,6 @@ class _MarqueeTextState extends State<MarqueeText>
   Duration? _lastPauseDuration;
   double? _lastVelocity;
   Curve? _lastCurve;
-  InlineSpan? _lastTextSpan;
-  TextStyle? _lastStyle;
 
   @override
   void initState() {
@@ -187,13 +185,16 @@ class _MarqueeTextState extends State<MarqueeText>
         );
         final totalDuration = (pauseDuration * 2) + (moveDuration * 2);
 
+        // 触发条件只看"影响滚动几何/时序"的量。刻意不做 textSpan/style 的
+        // 实例比较：调用方（播放栏）每次重建都会 new 一个 TextSpan，身份
+        // 比较会让无关重建（音量调节、播放暂停、hover）把滚动打回起点；
+        // 文本/样式变化必然反映到 overflow（宽度变化）或实时渲染子树，
+        // 无需单独感知。
         final needsUpdate =
             _lastOverflow != overflow ||
             _lastPauseDuration != pauseDuration ||
             _lastVelocity != velocity ||
             _lastCurve != widget.curve ||
-            _lastTextSpan != widget.textSpan ||
-            _lastStyle != widget.style ||
             _animation == null;
 
         if (needsUpdate) {
@@ -201,8 +202,6 @@ class _MarqueeTextState extends State<MarqueeText>
           _lastPauseDuration = pauseDuration;
           _lastVelocity = velocity;
           _lastCurve = widget.curve;
-          _lastTextSpan = widget.textSpan;
-          _lastStyle = widget.style;
 
           _controller.duration = totalDuration;
 

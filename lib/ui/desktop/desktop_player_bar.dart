@@ -28,7 +28,7 @@ String formatDuration(Duration d) {
   return h > 0 ? '$h:$m:$s' : '$m:$s';
 }
 
-/// 窄窗断点：<1100 收起左区次要按钮（只保留喜欢）。
+/// 窄窗断点：<1100 左区收窄（按钮间距随之收紧，操作按钮不隐藏）。
 const double kPlayerBarCompactBreakpoint = 1100;
 
 /// 左区固定宽度（封面 + 曲名 + 操作入口）。

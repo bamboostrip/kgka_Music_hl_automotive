@@ -3,11 +3,28 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/player_controller.dart';
+import '../form_factor.dart';
 
 Future<void> showSleepTimerSheet({
   required BuildContext context,
   required PlayerController player,
 }) {
+  if (isDesktopFormFactor) {
+    // 桌面形态用居中小窗，替代全宽底部弹层（与倍速面板同一形态）。
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Theme.of(dialogContext).colorScheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: _SleepTimerSheet(player: player),
+          ),
+        );
+      },
+    );
+  }
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,

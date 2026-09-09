@@ -191,6 +191,11 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
   /// 后台静默刷新：成功更新 UI 与缓存，失败/空结果保持缓存不变。
   Future<void> _silentRefresh() async {
     if (_silentRefreshing) return;
+    // 冷启动仍在磁盘恢复窗口（无 future、无内存缓存）时让位给
+    // _initFromDiskOrNetwork：此时抢跑会自增代数作废 init 的恢复结果，
+    // 而 fetch 失败后 _future 仍是 null——页面停在无错误态、无重试的
+    // 骨架上，成为死胡同（只能等下一次网络事件/登录态变化解锁）。
+    if (_future == null && cachedData == null) return;
     final epoch = ++_loadEpoch;
     _silentRefreshing = true;
     // 触发一次重建，让顶部均衡器动画即时出现。
@@ -221,7 +226,11 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
   /// 对外入口：手动刷新（双击首页 / 桌面刷新按钮 / 下拉刷新 / 错误重试）。
   ///
   /// 双击刷新优先级最高：自增代数使在途的静默刷新/冷启动恢复响应作废。
+  /// 已在手动刷新中则忽略后续点按：否则首次完成会把 [_manualRefreshing]
+  /// 清掉，第二次仍在途时均衡器动画会提前收起（数据安全由代数保证，
+  /// 不受此影响）。
   Future<void> refresh() async {
+    if (_manualRefreshing) return;
     final epoch = ++_loadEpoch;
     _manualRefreshing = true;
     // 横轨回到最左侧：页面用 railResetEpoch 做 ValueKey 重建横轨。

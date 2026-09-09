@@ -66,11 +66,11 @@ Future<void> main(List<String> args) async {
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 200;
   cache.maximumSizeBytes = 64 << 20;
-  // 旧标识（ka_music_* 键与目录、Windows com.example 数据目录）→ 时音
-  // 命名的一次性迁移。必须先于 RustApiClient.getInstance()：Windows 上
-  // 它解析的支持目录路径取决于 VERSIONINFO CompanyName，迁移晚跑会把
-  // 登录会话（kg_session.json）留在旧目录。迁移内部全量 try/catch，
-  // 失败不阻断启动。
+  // 旧标识（ka_music_* 键与目录、Windows com.example / Linux 旧 app id
+  // 数据目录）→ 时音命名的一次性迁移。必须先于 RustApiClient.getInstance()
+  // 与首次 SharedPreferences 访问：支持目录路径取决于 CompanyName/app id，
+  // 迁移晚跑会把登录会话（kg_session.json）与旧键留在旧目录。
+  // 迁移内部各阶段独立 try/catch，失败不阻断启动。
   await LegacyMigration.run();
   try {
     final client = await RustApiClient.getInstance();
@@ -242,10 +242,13 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
     });
     // Windows 桌面：托盘常驻（左键切换窗口、右键菜单、退出）。
     if (isDesktopFormFactor) {
-      // 退出统一走 DesktopWindow.quitGracefully（落盘几何 → ExitProcess）：
-      // 引擎 teardown 在 IME/UIA 环境下必崩，托盘图标与桌面歌词子窗由
-      // Shell/内核随进程死亡一并清理，不在 Dart 侧逐个拆除（详见
-      // DesktopWindow.quitGracefully 注释）。
+      // 退出统一走 DesktopWindow.quitGracefully（落盘几何 → 刷写状态 →
+      // 终止进程）：引擎 teardown 在 IME/UIA 环境下必崩，托盘图标与桌面
+      // 歌词子窗由 Shell/内核随进程死亡一并清理，不在 Dart 侧逐个拆除
+      // （详见 DesktopWindow.quitGracefully 注释）。播放队列/当前曲目是
+      // 500ms 防抖落盘，硬终止前必须立即刷写，否则快速切歌后退出会回退
+      // 到上一首。
+      DesktopWindow.registerPreQuitFlusher(_player.flushPlaybackState);
       unawaited(DesktopTray.init(player: _player));
       // 桌面系统集成：下载完成通知 + 主窗标题随播放。
       // local_notifier 初始化失败时降级为无通知，不影响其余功能。

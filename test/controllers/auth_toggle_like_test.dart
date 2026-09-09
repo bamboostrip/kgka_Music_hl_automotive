@@ -205,4 +205,38 @@ void main() {
     expect(auth.isLiked(_songNoFileId), isFalse);
     expect(client.lastDelFileIds, '9', reason: '应经同步拿到 fileid 后删除');
   });
+
+  test('取消时同步成功但服务端无此歌：保持熄灭，不回滚成收藏', () async {
+    final client = _FakeLikeClient()
+      ..addRespOverride = {'count': 1}
+      // 同步成功但服务端喜欢的列表里没有 h2（如另一台设备已取消）。
+      ..trackAllResp = {
+        'songs': [
+          {'hash': 'other', 'fileid': 100, 'name': '别的歌'},
+        ],
+      };
+    final auth = _buildAuth(client);
+    await auth.toggleLike(_songNoFileId);
+    expect(auth.isLiked(_songNoFileId), isTrue);
+
+    await auth.toggleLike(_songNoFileId);
+
+    // 同步结果即真值：保持乐观移除，不得回滚加回（否则本地与服务端分叉）。
+    expect(auth.isLiked(_songNoFileId), isFalse);
+    expect(client.posts, isNot(contains('/playlist/tracks/del')));
+  });
+
+  test('取消时同步失败：无法定真值，回滚成收藏', () async {
+    final client = _FakeLikeClient()
+      ..addRespOverride = {'count': 1}
+      ..trackAllResp = null; // 同步链路抛错（模拟断网）
+    final auth = _buildAuth(client);
+    await auth.toggleLike(_songNoFileId);
+    expect(auth.isLiked(_songNoFileId), isTrue);
+
+    await auth.toggleLike(_songNoFileId);
+
+    // 拿不到服务端真值：恢复点按前状态，红心回弹。
+    expect(auth.isLiked(_songNoFileId), isTrue);
+  });
 }

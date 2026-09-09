@@ -245,6 +245,57 @@ void main() {
     });
 
     testWidgets(
+      '父级无关重建（新的 TextSpan 实例、文本不变）不打断滚动进度',
+      (tester) async {
+        Widget build() => const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 80,
+              child: MarqueeText(
+                // 每次调用 build() 都会 new 一个 TextSpan，模拟播放栏
+                // 因音量调节等无关状态重建。
+                textSpan: TextSpan(
+                  text: 'Very long text that will overflow the 80px constraint',
+                ),
+                pauseDuration: Duration.zero,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpWidget(build());
+        await tester.pump();
+        // 滚入前进段（默认 30px/s）：1.2s 后偏移约 -36px。
+        await tester.pump(const Duration(milliseconds: 1200));
+
+        Offset translateOffset() {
+          final transform = find
+              .descendant(
+                of: find.byType(MarqueeText),
+                matching: find.byType(Transform),
+              )
+              .evaluate()
+              .single
+              .widget as Transform;
+          final t = transform.transform.getTranslation();
+          return Offset(t.x, t.y);
+        }
+
+        final before = translateOffset();
+        expect(before.dx, lessThan(-30), reason: '应已滚动到中途而非停在起点');
+
+        // 无关重建：滚动应从当前位置继续，而不是 reset 到 0。
+        await tester.pumpWidget(build());
+        await tester.pump(const Duration(milliseconds: 16));
+        final after = translateOffset();
+        expect(
+          after.dx,
+          closeTo(before.dx - 30.0 * 0.016, 0.5),
+          reason: '重建后滚动进度应连续，不得回跳到起点',
+        );
+      },
+    );
+
+    testWidgets(
       'Renders static text without error when width is unbounded',
       (tester) async {
         await tester.pumpWidget(

@@ -129,6 +129,17 @@ class _DesktopWindowControlsOverlayState extends State<DesktopWindowControlsOver
     if (mounted) setState(() => _isMaximized = false);
   }
 
+  /// 与标题栏拖拽区一致的双击行为：双击切换最大化/还原。
+  Future<void> _toggleMaximize() async {
+    try {
+      if (await windowManager.isMaximized()) {
+        await windowManager.unmaximize();
+      } else {
+        await windowManager.maximize();
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -136,8 +147,11 @@ class _DesktopWindowControlsOverlayState extends State<DesktopWindowControlsOver
       left: 0,
       right: 0,
       height: 40,
-      child: DragToMoveArea(
-        child: Row(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onDoubleTap: _toggleMaximize,
+        child: DragToMoveArea(
+          child: Row(
           children: [
             const Spacer(),
             DesktopWindowCaptionButton(
@@ -178,6 +192,7 @@ class _DesktopWindowControlsOverlayState extends State<DesktopWindowControlsOver
               },
             ),
           ],
+        ),
         ),
       ),
     );
