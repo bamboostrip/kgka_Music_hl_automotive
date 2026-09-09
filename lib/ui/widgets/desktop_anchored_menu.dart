@@ -130,6 +130,18 @@ Rect placeAnchoredPanelAbove({
   );
 }
 
+/// 取 [context] 对应 RenderBox 顶边中点的全局（窗口）坐标，
+/// 供底栏按钮等触发点把菜单锚定在自己的上方。
+Offset anchorAbove(BuildContext context) {
+  final RenderObject? renderObject = context.findRenderObject();
+  if (renderObject is! RenderBox || !renderObject.hasSize) {
+    return Offset.zero;
+  }
+  return renderObject.localToGlobal(
+    Offset(renderObject.size.width / 2, 0),
+  );
+}
+
 /// 取 [context] 对应 RenderBox 底边中点的全局（窗口）坐标，
 /// 供 `...` 按钮等触发点把菜单锚定在自己的下方。
 Offset anchorBelow(BuildContext context) {

@@ -1,10 +1,28 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiyin_music/controllers/auth_controller.dart';
+import 'package:shiyin_music/controllers/download_controller.dart';
 import 'package:shiyin_music/controllers/player_controller.dart';
 import 'package:shiyin_music/models/music_models.dart' hide formatDuration;
 import 'package:shiyin_music/ui/desktop/desktop_player_bar.dart';
+import 'package:shiyin_music/ui/form_factor.dart';
+import 'package:shiyin_music/ui/widgets/artwork.dart';
+import 'package:shiyin_music/ui/widgets/marquee_text.dart';
+
+class _FakeDownloadController extends ChangeNotifier implements DownloadController {
+  bool downloaded = false;
+  int downloadCalls = 0;
+  @override
+  bool isDownloaded(Song song) => downloaded;
+  @override
+  Future<void> download(Song song, AudioQuality quality) async {
+    downloadCalls++;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _FakePlayerController extends ChangeNotifier implements PlayerController {
   @override
@@ -29,6 +47,18 @@ class _FakePlayerController extends ChangeNotifier implements PlayerController {
   bool desktopLyricsLocked = false;
   int unlockDesktopLyricsCalls = 0;
   int setDesktopLyricsEnabledCalls = 0;
+
+  @override
+  DownloadController? downloadController;
+
+  int insertNextCalls = 0;
+  Song? lastInsertedNextSong;
+  @override
+  Future<bool> insertNext(Song song) async {
+    insertNextCalls++;
+    lastInsertedNextSong = song;
+    return true;
+  }
 
   @override
   AudioQuality audioQuality = AudioQuality.standard;
@@ -111,12 +141,19 @@ class _FakePlayerController extends ChangeNotifier implements PlayerController {
 
 class _FakeAuthController extends ChangeNotifier implements AuthController {
   @override
+  List<PlaylistSummary> get createdPlaylists => [];
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 const _song = Song(id: '1', title: '测试歌曲', artist: '测试歌手', hash: 'hash-1');
 
-Future<void> _pumpBar(WidgetTester tester, _FakePlayerController player) async {
+Future<void> _pumpBar(
+  WidgetTester tester,
+  _FakePlayerController player, {
+  _FakeAuthController? auth,
+}) async {
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -125,7 +162,10 @@ Future<void> _pumpBar(WidgetTester tester, _FakePlayerController player) async {
       home: Scaffold(
         body: Align(
           alignment: Alignment.bottomCenter,
-          child: DesktopPlayerBar(player: player, auth: _FakeAuthController()),
+          child: DesktopPlayerBar(
+            player: player,
+            auth: auth ?? _FakeAuthController(),
+          ),
         ),
       ),
     ),
@@ -563,4 +603,119 @@ void main() {
       expect(player.lastReloadCurrent, isTrue);
     });
   });
+
+  group('左区歌曲信息与操作行', () {
+    testWidgets('展示 48x48 封面、单行跑马灯歌名-歌手及操作行按钮', (tester) async {
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      // 封面 48x48
+      final artworkFinder = find.byType(Artwork);
+      expect(artworkFinder, findsOneWidget);
+      final artworkWidget = tester.widget<Artwork>(artworkFinder);
+      expect(artworkWidget.size, 48);
+
+      // 单行跑马灯 MarqueeText
+      expect(find.byType(MarqueeText), findsOneWidget);
+      expect(find.text('测试歌曲 - 测试歌手', findRichText: true), findsOneWidget);
+
+      // 操作行包含喜欢、评论、更多操作按钮
+      expect(find.byTooltip('喜欢'), findsOneWidget);
+      expect(find.byTooltip('暂无评论'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('desktop_song_more_button')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('更多操作'), findsOneWidget);
+      expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
+    });
+
+    testWidgets('无歌曲时展示"尚未播放"，更多操作按钮禁用', (tester) async {
+      final player = _FakePlayerController()..currentSong = null;
+      await _pumpBar(tester, player);
+
+      expect(find.text('尚未播放', findRichText: true), findsOneWidget);
+
+      final moreBtn = tester.widget<IconButton>(
+        find.byKey(const ValueKey('desktop_song_more_button')),
+      );
+      expect(moreBtn.onPressed, isNull);
+    });
+
+    testWidgets('点击更多操作按钮（···）使用 anchorAbove 弹出菜单且包含各项操作', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      final downloadCtrl = _FakeDownloadController();
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..downloadController = downloadCtrl;
+      await _pumpBar(tester, player);
+
+      final moreBtn = find.byKey(const ValueKey('desktop_song_more_button'));
+      expect(moreBtn, findsOneWidget);
+
+      await tester.tap(moreBtn);
+      await tester.pumpAndSettle();
+
+      // 弹出菜单中包含五项操作
+      expect(find.text('下一首播放'), findsOneWidget);
+      expect(find.text('添加到歌单'), findsOneWidget);
+      expect(find.text('下载'), findsOneWidget);
+      expect(find.text('查看歌手'), findsOneWidget);
+      expect(find.text('复制歌曲信息'), findsOneWidget);
+    });
+
+    testWidgets('点击更多菜单中的"下一首播放"调用 player.insertNext', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('下一首播放'));
+      await tester.pumpAndSettle();
+
+      expect(player.insertNextCalls, 1);
+      expect(player.lastInsertedNextSong, _song);
+    });
+
+    testWidgets('点击更多菜单中的"复制歌曲信息"写入剪贴板', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      String? copiedText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (methodCall) async {
+          if (methodCall.method == 'Clipboard.setData') {
+            copiedText = (methodCall.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('复制歌曲信息'));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump();
+
+      expect(copiedText, '测试歌曲 - 测试歌手');
+    });
+  });
 }
+

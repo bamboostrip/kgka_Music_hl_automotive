@@ -29,6 +29,9 @@ mixin _PlayerQueue on _PlayerControllerBase {
     return added > 0;
   }
 
+  /// 将歌曲插入到「下一首」位置播放
+  Future<bool> insertNext(Song song) => addToQueue(song);
+
   /// 批量插入到「下一首」位置，只更新一次队列与系统媒体会话。
   /// 用新列表替换播放队列（不切歌），用于歌单分页后台补全。
   Future<void> replaceQueue(List<Song> songs) async {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
+import '../pages/artist_detail_page.dart';
 import '../pages/comment_page.dart';
 import '../player/player_route.dart';
 import '../widgets/artwork.dart';
@@ -11,6 +13,7 @@ import '../widgets/audio_quality_sheet.dart';
 import '../widgets/climax_slider_track.dart';
 import '../widgets/desktop_anchored_menu.dart';
 import '../widgets/desktop_queue_panel.dart';
+import '../widgets/marquee_text.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import 'player_bar_widgets.dart';
@@ -82,21 +85,12 @@ class DesktopPlayerBar extends StatelessWidget {
                   // —— 左：歌曲信息 + 操作入口 ——
                   SizedBox(
                     width: leftWidth,
-                    child: Row(
-                      children: [
-                        _SongInfo(
-                          song: song,
-                          colorScheme: colorScheme,
-                          onTap: () => _openPlayerPage(context),
-                        ),
-                        const SizedBox(width: 4),
-                        _SongActionRail(
-                          player: player,
-                          auth: auth,
-                          song: song,
-                          compact: compact,
-                        ),
-                      ],
+                    child: SongInfo(
+                      player: player,
+                      auth: auth,
+                      song: song,
+                      colorScheme: colorScheme,
+                      onTap: () => _openPlayerPage(context),
                     ),
                   ),
                   // —— 中：控制（上）+ 进度（下），Expanded 吃满剩余宽度 ——
@@ -228,8 +222,8 @@ class DesktopPlayerBar extends StatelessWidget {
   }
 }
 
-/// 左区：封面 + 曲名/歌手。悬停封面或歌名时，封面上浮出半透明蒙层 +
-/// 放大图标提示可进入播放页，点击整个区域进入。
+/// 左区：封面 + 曲名/歌手跑马灯 + 操作按钮行。
+/// 悬停封面时浮出半透明蒙层 + 放大图标提示可进入播放页，点击进入。
 @visibleForTesting
 class SongInfo extends StatefulWidget {
   const SongInfo({
@@ -237,11 +231,15 @@ class SongInfo extends StatefulWidget {
     required this.song,
     required this.colorScheme,
     required this.onTap,
+    this.player,
+    this.auth,
   });
 
   final Song? song;
   final ColorScheme colorScheme;
   final VoidCallback onTap;
+  final PlayerController? player;
+  final AuthController? auth;
 
   @override
   State<SongInfo> createState() => _SongInfoState();
@@ -250,36 +248,38 @@ class SongInfo extends StatefulWidget {
 typedef _SongInfo = SongInfo;
 
 class _SongInfoState extends State<SongInfo> {
-  bool _hovered = false;
+  bool _coverHovered = false;
 
   @override
   Widget build(BuildContext context) {
     final song = widget.song;
-    return Flexible(
-      child: MouseRegion(
-        onEnter: (_) {
-          if (mounted) setState(() => _hovered = true);
-        },
-        onExit: (_) {
-          if (mounted) setState(() => _hovered = false);
-        },
-        child: Tooltip(
-          message: song == null ? '' : '展开歌曲详情页',
-          child: InkWell(
-            onTap: song == null ? null : widget.onTap,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
+    final colorScheme = widget.colorScheme;
+    final iconColor = colorScheme.onSurfaceVariant;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        Widget content = Row(
+          children: [
+            // 48x48 封面，悬停展示 ExpandDetailIcon 和 tooltip
+            MouseRegion(
+              onEnter: (_) {
+                if (mounted) setState(() => _coverHovered = true);
+              },
+              onExit: (_) {
+                if (mounted) setState(() => _coverHovered = false);
+              },
+              child: Tooltip(
+                message: song == null ? '' : '展开歌曲详情页',
+                child: InkWell(
+                  onTap: song == null ? null : widget.onTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
                     width: 48,
                     height: 48,
                     child: Stack(
                       children: [
                         Artwork(url: song?.coverUrl, size: 48, borderRadius: 8),
-                        if (_hovered && song != null)
+                        if (_coverHovered && song != null)
                           Positioned.fill(
                             child: DecoratedBox(
                               decoration: BoxDecoration(
@@ -294,44 +294,88 @@ class _SongInfoState extends State<SongInfo> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Flexible(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          song?.title ?? '尚未播放',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: song == null
-                                ? widget.colorScheme.onSurfaceVariant
-                                : widget.colorScheme.onSurface,
-                          ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // 右侧纵向居中 Column：
+            // Row 1: MarqueeText（歌名粗体 onSurface - 歌手常规 onSurfaceVariant）
+            // Row 2: 操作按钮行 [LikeButton, SizedBox(width: 8), CommentButton, SizedBox(width: 8), SongMoreButton]
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: song == null ? null : widget.onTap,
+                    child: MouseRegion(
+                      cursor: song == null
+                          ? SystemMouseCursors.basic
+                          : SystemMouseCursors.click,
+                      child: MarqueeText(
+                        textSpan: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: song?.title ?? '尚未播放',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: song == null
+                                    ? colorScheme.onSurfaceVariant
+                                    : colorScheme.onSurface,
+                              ),
+                            ),
+                            if (song != null && song.artist.isNotEmpty)
+                              TextSpan(
+                                text: ' - ${song.artist}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          song?.artist ?? '去挑一首喜欢的歌吧',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: widget.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LikeButton(
+                        auth: widget.auth,
+                        song: song,
+                        iconColor: iconColor,
+                        activeColor: colorScheme.secondary,
+                      ),
+                      const SizedBox(width: 8),
+                      _CommentButton(
+                        player: widget.player,
+                        song: song,
+                        iconColor: iconColor,
+                      ),
+                      const SizedBox(width: 8),
+                      SongMoreButton(
+                        player: widget.player,
+                        auth: widget.auth,
+                        song: song,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
-        ),
-      ),
+          ],
+        );
+
+        if (!constraints.hasBoundedWidth) {
+          content = SizedBox(width: kPlayerBarLeftWidth, child: content);
+        }
+        return content;
+      },
     );
   }
 }
@@ -370,90 +414,61 @@ dynamic _safeApi(PlayerController player) {
   }
 }
 
-/// 左区：喜欢/评论/下载/更多。无歌时全部禁用，窄窗只留喜欢。
-class _SongActionRail extends StatelessWidget {
-  const _SongActionRail({
-    required this.player,
+class _LikeButton extends StatelessWidget {
+  const _LikeButton({
     required this.auth,
     required this.song,
-    required this.compact,
+    required this.iconColor,
+    required this.activeColor,
+    this.iconSize = 18.0,
   });
 
-  final PlayerController player;
-  final AuthController auth;
+  final AuthController? auth;
   final Song? song;
-  final bool compact;
+  final Color iconColor;
+  final Color activeColor;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final iconColor = colorScheme.onSurfaceVariant;
-    const iconSize = 19.0;
-
+    if (auth == null) {
+      return IconButton(
+        tooltip: '喜欢',
+        onPressed: null,
+        icon: const Icon(Icons.favorite_border_rounded),
+        iconSize: iconSize,
+        color: iconColor,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      );
+    }
     return AnimatedBuilder(
-      animation: auth,
+      animation: auth!,
       builder: (context, _) {
-        final liked = song == null ? null : _safeIsLiked(auth, song!);
-        // 与播放页统一：仅酷狗源可喜欢（喜欢走歌单 fileId 体系）。
+        final liked = song == null ? null : _safeIsLiked(auth!, song!);
         final likeEnabled =
             song != null && song!.source == SongSource.kugou && liked != null;
         final isLiked = liked == true;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: isLiked ? '取消喜欢' : '喜欢',
-              onPressed: !likeEnabled
-                  ? null
-                  : () {
-                      try {
-                        auth.toggleLike(song!);
-                      } catch (_) {
-                        Toast.error('收藏失败，请重试');
-                      }
-                    },
-              icon: Icon(
-                isLiked
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
-                size: iconSize,
-              ),
-              color: isLiked ? colorScheme.secondary : iconColor,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-            ),
-            if (!compact) ...[
-              _CommentButton(
-                player: player,
-                song: song,
-                iconColor: iconColor,
-                iconSize: iconSize,
-              ),
-              _DownloadButton(
-                player: player,
-                song: song,
-                iconColor: iconColor,
-                iconSize: iconSize,
-              ),
-              IconButton(
-                tooltip: '添加到歌单',
-                onPressed: song == null
-                    ? null
-                    : () => showAddToPlaylistSheet(
-                        context: context,
-                        auth: auth,
-                        song: song!,
-                      ),
-                icon: const Icon(Icons.playlist_add_rounded, size: iconSize),
-                color: iconColor,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 30,
-                  height: 30,
-                ),
-              ),
-            ],
-          ],
+        return IconButton(
+          tooltip: isLiked ? '取消喜欢' : '喜欢',
+          onPressed: !likeEnabled
+              ? null
+              : () {
+                  try {
+                    auth!.toggleLike(song!);
+                  } catch (_) {
+                    Toast.error('收藏失败，请重试');
+                  }
+                },
+          icon: Icon(
+            isLiked
+                ? Icons.favorite_rounded
+                : Icons.favorite_border_rounded,
+          ),
+          iconSize: iconSize,
+          color: isLiked ? activeColor : iconColor,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         );
       },
     );
@@ -465,18 +480,17 @@ class _CommentButton extends StatelessWidget {
     required this.player,
     required this.song,
     required this.iconColor,
-    required this.iconSize,
+    this.iconSize = 18.0,
   });
 
-  final PlayerController player;
+  final PlayerController? player;
   final Song? song;
   final Color iconColor;
   final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    final api = _safeApi(player);
-    // 与播放页统一：仅酷狗源有评论。
+    final api = player == null ? null : _safeApi(player!);
     final enabled =
         song != null &&
         song!.source == SongSource.kugou &&
@@ -499,70 +513,154 @@ class _CommentButton extends StatelessWidget {
       iconSize: iconSize,
       color: iconColor,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
     );
   }
 }
 
-class _DownloadButton extends StatelessWidget {
-  const _DownloadButton({
+@visibleForTesting
+class SongMoreButton extends StatelessWidget {
+  const SongMoreButton({
+    super.key,
     required this.player,
+    required this.auth,
     required this.song,
-    required this.iconColor,
-    required this.iconSize,
+    this.iconSize = 18.0,
   });
 
-  final PlayerController player;
+  final PlayerController? player;
+  final AuthController? auth;
   final Song? song;
-  final Color iconColor;
   final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    final ctrl = _safeDownloadController(player);
-    if (ctrl == null) {
-      return IconButton(
-        tooltip: '下载',
-        onPressed: null,
-        icon: const Icon(Icons.download_rounded),
-        iconSize: iconSize,
-        color: iconColor,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-      );
-    }
-    return AnimatedBuilder(
-      animation: ctrl,
-      builder: (context, _) {
-        bool downloaded = false;
-        try {
-          downloaded = song == null ? false : ctrl.isDownloaded(song!);
-        } catch (_) {
-          downloaded = false;
-        }
+    final colorScheme = Theme.of(context).colorScheme;
+    final iconColor = colorScheme.onSurfaceVariant;
+    final enabled = song != null;
+
+    return Builder(
+      builder: (buttonContext) {
         return IconButton(
-          tooltip: downloaded ? '已下载' : '下载',
-          onPressed: song == null
+          key: const ValueKey('desktop_song_more_button'),
+          tooltip: '更多操作',
+          iconSize: iconSize,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          color: iconColor,
+          onPressed: !enabled
               ? null
               : () {
-                  if (downloaded) {
-                    Toast.info('歌曲已下载');
-                  } else {
+                  final s = song!;
+                  final p = player;
+                  final a = auth;
+                  final ctrl = p == null ? null : _safeDownloadController(p);
+                  bool downloaded = false;
+                  if (ctrl != null) {
                     try {
-                      ctrl.download(song!, player.audioQuality);
-                      Toast.success('已加入下载队列');
+                      downloaded = ctrl.isDownloaded(s);
                     } catch (_) {
-                      Toast.error('下载失败，请重试');
+                      downloaded = false;
                     }
                   }
+
+                  final actions = <SongSheetAction>[
+                    if (p != null)
+                      SongSheetAction(
+                        icon: Icons.queue_music_rounded,
+                        title: '下一首播放',
+                        onTap: () async {
+                          try {
+                            await p.insertNext(s);
+                            Toast.show('已设为下一首播放');
+                          } catch (e) {
+                            Toast.error('添加失败：$e');
+                          }
+                        },
+                      ),
+                    if (a != null)
+                      SongSheetAction(
+                        icon: Icons.playlist_add_rounded,
+                        title: '添加到歌单',
+                        onTap: () => showAddToPlaylistSheet(
+                          context: buttonContext,
+                          auth: a,
+                          song: s,
+                        ),
+                      ),
+                    if (ctrl != null && p != null)
+                      SongSheetAction(
+                        icon: downloaded
+                            ? Icons.download_done_rounded
+                            : Icons.download_rounded,
+                        title: downloaded ? '已下载' : '下载',
+                        onTap: () {
+                          if (downloaded) {
+                            Toast.info('歌曲已下载');
+                          } else {
+                            try {
+                              ctrl.download(s, p.audioQuality);
+                              Toast.success('已加入下载队列');
+                            } catch (_) {
+                              Toast.error('下载失败，请重试');
+                            }
+                          }
+                        },
+                      ),
+                    if (s.artist.isNotEmpty)
+                      SongSheetAction(
+                        icon: Icons.person_rounded,
+                        title: '查看歌手',
+                        onTap: () async {
+                          final api = p == null ? null : _safeApi(p);
+                          final artist = s.artists.firstWhere(
+                            (item) => item.name.isNotEmpty,
+                            orElse: () => ArtistRef(
+                              id: '',
+                              name: s.artist,
+                            ),
+                          );
+                          if (api != null &&
+                              a != null &&
+                              p != null &&
+                              artist.name.isNotEmpty) {
+                            Navigator.of(buttonContext).push(
+                              MaterialPageRoute(
+                                builder: (_) => ArtistDetailPage(
+                                  api: api,
+                                  auth: a,
+                                  artist: artist,
+                                  player: p,
+                                ),
+                              ),
+                            );
+                          } else {
+                            await Clipboard.setData(
+                              ClipboardData(text: s.artist),
+                            );
+                            Toast.success('已复制歌手名：${s.artist}');
+                          }
+                        },
+                      ),
+                    SongSheetAction(
+                      icon: Icons.copy_rounded,
+                      title: '复制歌曲信息',
+                      onTap: () async {
+                        final text = '${s.title} - ${s.artist}';
+                        await Clipboard.setData(ClipboardData(text: text));
+                        Toast.success('已复制歌曲信息');
+                      },
+                    ),
+                  ];
+
+                  showSongActionSheet(
+                    context: buttonContext,
+                    song: s,
+                    actions: actions,
+                    anchor: anchorAbove(buttonContext),
+                  );
                 },
-          icon: Icon(
-            downloaded ? Icons.download_done_rounded : Icons.download_rounded,
-          ),
-          iconSize: iconSize,
-          color: downloaded ? Theme.of(context).colorScheme.primary : iconColor,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+          icon: const Icon(Icons.more_horiz_rounded),
         );
       },
     );
