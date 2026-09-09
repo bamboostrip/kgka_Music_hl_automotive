@@ -165,7 +165,13 @@ class DesktopPlayerBar extends StatelessWidget {
                             // 进度区（拖拽中显示拖拽位置，松手 seek）。
                             // 无歌时不渲染，但中间列仍由控制行撑住，底栏高度不变。
                             if (song != null) ...[
-                              _ProgressBar(player: player),
+                              Center(
+                                child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 440),
+                                  child: _ProgressBar(player: player),
+                                ),
+                              ),
                             ],
                           ],
                         ),

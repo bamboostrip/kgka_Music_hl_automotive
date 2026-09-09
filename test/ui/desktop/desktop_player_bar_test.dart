@@ -228,6 +228,23 @@ void main() {
     });
   });
 
+  group('进度条', () {
+    testWidgets('进度条最大宽度约束在 440px 居中', (tester) async {
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..duration = const Duration(minutes: 3);
+      await _pumpBar(tester, player);
+
+      final progressFinder = find.ancestor(
+        of: find.byType(Slider).first,
+        matching: find.byType(SliderTheme),
+      );
+      expect(progressFinder, findsOneWidget);
+      final size = tester.getSize(progressFinder);
+      expect(size.width, lessThanOrEqualTo(440));
+    });
+  });
+
   group('进度悬停时间气泡', () {
     testWidgets('悬停显示对应时间，拖拽中隐藏，离开消失', (tester) async {
       final player = _FakePlayerController()
