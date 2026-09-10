@@ -603,6 +603,20 @@ class _DesktopCascadeMenuHostState extends State<_DesktopCascadeMenuHost> {
     });
   }
 
+  /// 悬停到无二级的一级项时立即收起二级。
+  ///
+  /// 宽限期只服务「从父项移向二级」的路径；用户已明确停在叶子项上，
+  /// 不能因 _pointerInPrimary 而一直挂着。
+  void _closeSubmenuNow() {
+    _hoverTimer?.cancel();
+    _leaveTimer?.cancel();
+    if (_openIndex == null && _submenuRect == null) return;
+    setState(() {
+      _openIndex = null;
+      _submenuRect = null;
+    });
+  }
+
   void _closeAllAndRun(VoidCallback? onTap) {
     Navigator.of(context).pop();
     if (onTap == null) return;
@@ -632,7 +646,8 @@ class _DesktopCascadeMenuHostState extends State<_DesktopCascadeMenuHost> {
               onHover: (itemContext) {
                 final node = widget.items[i];
                 if (!node.hasSubmenu) {
-                  _scheduleCloseSubmenu();
+                  // 停在叶子项：立即收起已打开的二级，不留宽限。
+                  _closeSubmenuNow();
                   return;
                 }
                 _scheduleOpenSubmenu(i, _itemGlobalRect(itemContext));

@@ -794,6 +794,14 @@ void main() {
       expect(find.text('0.5x'), findsOneWidget);
       expect(find.text('倍速播放'), findsOneWidget);
       expect(find.text('添加到歌单'), findsOneWidget);
+
+      // 移到无二级的一级项：二级应立即收起，一级仍在
+      await gesture.moveTo(tester.getCenter(find.text('添加到歌单')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('0.5x'), findsNothing);
+      expect(find.text('添加到歌单'), findsOneWidget);
+      expect(find.text('倍速播放'), findsOneWidget);
     });
 
     testWidgets('点击更多菜单中的"定时播放"弹出二级菜单而非对话框', (tester) async {
