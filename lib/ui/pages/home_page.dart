@@ -1312,6 +1312,16 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                   // 下拉跟手顶出空白、松手吸附到 26 再刷新，无小圆圈）。
                   combinedRefreshIndicator: true,
                   slivers: [
+                    // 桌面端推荐 pane 的均衡器：刷新在途时出现在内容最顶部，
+                    // 与排行/电台 pane 内部自带的均衡器对齐（侧栏双击当前
+                    // 分区刷新时可见）。移动端不挂——下拉指示器与刷新均衡器
+                    // 共用 pullSpacer，再挂一份会出现双均衡器。
+                    if (isDesktop)
+                      SliverToBoxAdapter(
+                        child: RefreshEqualizer(
+                          visible: showRefreshEqualizer,
+                        ),
+                      ),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding:

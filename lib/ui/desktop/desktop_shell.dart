@@ -20,6 +20,10 @@ import 'desktop_player_bar.dart';
 import 'desktop_sidebar.dart';
 import 'desktop_title_bar.dart';
 
+/// 侧栏双击检测用的时钟，可注入（测试替换假时钟）；默认取真实时间。
+/// 与 app_shell 的 appShellNow 同一模式，各自独立互不依赖。
+DateTime Function() desktopShellNow = DateTime.now;
+
 /// 桌面骨架的内容分区。home 分区对应 HomePage 的三个子 tab
 /// （推荐/排行榜/电台），由侧栏直接切换。
 enum _DesktopSection { home, library, downloads, settings }
@@ -67,6 +71,43 @@ class _DesktopShellState extends State<DesktopShell> {
   /// Tab 切换修订号：内嵌 Navigator 会缓存 `/` 路由，父级 setState
   /// 不会重建路由内容，故用 notifier 显式驱动 [_DesktopContent] 重建。
   final _tabsRevision = ValueNotifier<int>(0);
+
+  /// 首页三分区（推荐/排行榜/电台）的回顶刷新入口：侧栏双击当前分区时
+  /// 经此调用 [HomePageState.scrollToTopAndRefresh]（含顶部均衡器动画）。
+  final _homePageKey = GlobalKey<HomePageState>();
+
+  /// 侧栏双击检测窗口（与移动端底部「首页」双击一致，350ms）。
+  static const _sidebarDoubleClickInterval = Duration(milliseconds: 350);
+  int? _lastSidebarTapIndex;
+  DateTime? _lastSidebarTapTime;
+
+  /// 侧栏条目点按：单击语义不变（切换分区/回内容根）；350ms 内连点同一
+  /// 条目视为双击当前分区，触发对应页面刷新。检测用手动计时窗口而非
+  /// InkWell.onDoubleTap——否则 Flutter 为消歧会把每次单击推迟 ~300ms
+  /// 才派发，侧栏切换会明显变钝。
+  void _handleSidebarTap(int index) {
+    // wasCurrent 取本分组在首次点按前的选中态：从其它分区双击一个条目，
+    // 第一击已完成切换，第二击不再触发刷新（与移动端「点其它 tab 只切换」
+    // 一致，切换本身就会带出各分区保留的内容）。
+    final wasCurrent = index == _sidebarIndex;
+    _selectSection(index);
+    final now = desktopShellNow();
+    if (wasCurrent &&
+        _lastSidebarTapIndex == index &&
+        _lastSidebarTapTime != null &&
+        now.difference(_lastSidebarTapTime!) < _sidebarDoubleClickInterval) {
+      _lastSidebarTapIndex = null;
+      _lastSidebarTapTime = null;
+      // 只有首页三分区有刷新语义；我的音乐/已下载/设置双击只保留单击
+      // 的回根行为（与移动端「我的」无刷新内容一致）。
+      if (index <= 2) {
+        _homePageKey.currentState?.scrollToTopAndRefresh();
+      }
+      return;
+    }
+    _lastSidebarTapIndex = index;
+    _lastSidebarTapTime = now;
+  }
 
   @override
   void dispose() {
@@ -250,7 +291,7 @@ class _DesktopShellState extends State<DesktopShell> {
                         ),
                       ],
                       selectedIndex: _sidebarIndex,
-                      onSelect: _selectSection,
+                      onSelect: _handleSidebarTap,
                     ),
                     const VerticalDivider(width: 1, thickness: 1),
                     Expanded(
@@ -271,6 +312,7 @@ class _DesktopShellState extends State<DesktopShell> {
                                       sectionProvider: () => _section,
                                       homeTabProvider: () => _homeTab,
                                       contentIndexProvider: () => _contentIndex,
+                                      homePageKey: _homePageKey,
                                       api: widget.api,
                                       auth: widget.auth,
                                       player: widget.player,
@@ -331,6 +373,7 @@ class _DesktopContent extends StatelessWidget {
     required this.sectionProvider,
     required this.homeTabProvider,
     required this.contentIndexProvider,
+    required this.homePageKey,
     required this.api,
     required this.auth,
     required this.player,
@@ -350,6 +393,10 @@ class _DesktopContent extends StatelessWidget {
   final _DesktopSection Function() sectionProvider;
   final int Function() homeTabProvider;
   final int Function() contentIndexProvider;
+
+  /// 透传给 [HomePage] 的 GlobalKey：供 shell 侧栏双击当前分区时调用
+  /// HomePageState.scrollToTopAndRefresh（回顶 + 刷新 + 顶部均衡器）。
+  final GlobalKey<HomePageState> homePageKey;
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
@@ -368,6 +415,7 @@ class _DesktopContent extends StatelessWidget {
           index: contentIndexProvider(),
           children: [
             HomePage(
+              key: homePageKey,
               api: api,
               auth: auth,
               player: player,
