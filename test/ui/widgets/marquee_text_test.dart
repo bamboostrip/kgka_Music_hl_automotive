@@ -296,6 +296,45 @@ void main() {
     );
 
     testWidgets(
+      '无界高度父级（Column min）+ 溢出文本时布局不崩溃',
+      (tester) async {
+        // 复现桌面播放栏左区：Column(mainAxisSize.min) 给子项无界高度，
+        // 溢出文本走 OverflowBox。旧实现 fit:max 会把 size 设成
+        // Size(availableWidth, Infinity)，debug 下直接断言失败。
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 172,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      MarqueeText(
+                        textSpan: TextSpan(
+                          text: '很长的歌曲标题 - 歌手名',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final size = tester.getSize(find.byType(MarqueeText));
+        expect(size.width, 172.0);
+        expect(size.height.isFinite, isTrue);
+        expect(size.height, greaterThan(0));
+      },
+    );
+
+    testWidgets(
       'Renders static text without error when width is unbounded',
       (tester) async {
         await tester.pumpWidget(

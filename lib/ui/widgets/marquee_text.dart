@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 
 /// An animatable that implements a ping-pong marquee translation cycle:
 /// 1. Pause at offset 0 for [p1] of total duration.
@@ -231,6 +232,11 @@ class _MarqueeTextState extends State<MarqueeText>
         return ClipRect(
           child: OverflowBox(
             alignment: Alignment.centerLeft,
+            // deferToChild：自身尺寸跟随子项（有限文本高），再用父级约束
+            // constrain。默认 fit:max 会 size=constraints.biggest——播放栏
+            // 左区 Column(mainAxisSize.min) 给的是无界高度，biggest 高度
+            // 为 Infinity，触发 RenderBox 断言崩溃。
+            fit: OverflowBoxFit.deferToChild,
             minWidth: textWidth,
             maxWidth: textWidth,
             child: AnimatedBuilder(
