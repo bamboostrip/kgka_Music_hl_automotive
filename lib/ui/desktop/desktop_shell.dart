@@ -9,6 +9,7 @@ import '../../controllers/theme_controller.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../pages/comment_page.dart';
+import '../pages/artist_detail_page.dart';
 import '../pages/downloaded_songs_page.dart';
 import '../pages/home_page.dart';
 import '../pages/library_page.dart';
@@ -415,13 +416,22 @@ class _DesktopShellState extends State<DesktopShell> {
                                 auth: widget.auth,
                                 onOpenPlayerPage: () =>
                                     _openPlayerPage(context),
-                                // 评论等详情页推入内容区 Navigator，保留侧栏；
+                                // 评论/歌手等详情页推入内容区 Navigator，保留侧栏；
                                 // 根 Navigator 会整窗全屏盖住侧栏。
                                 onOpenComment: (mixsongid) => _pushContent(
                                   context,
                                   CommentPage(
                                     api: widget.api,
                                     mixsongid: mixsongid,
+                                  ),
+                                ),
+                                onOpenArtist: (artist) => _pushContent(
+                                  context,
+                                  ArtistDetailPage(
+                                    api: widget.api,
+                                    auth: widget.auth,
+                                    artist: artist,
+                                    player: widget.player,
                                   ),
                                 ),
                               ),

@@ -353,3 +353,192 @@ class _AnchoredPopupPositionState extends State<_AnchoredPopupPosition> {
     );
   }
 }
+
+/// PC 二级菜单通用面板皮肤（标题行 + 可滚动选项列表）。
+///
+/// 供倍速/定时等「从更多菜单二级进入」的锚定弹层复用，
+/// 视觉与 [showDesktopAnchoredMenu] 上下文菜单一致。
+class DesktopPopupMenuPanel extends StatelessWidget {
+  const DesktopPopupMenuPanel({
+    super.key,
+    required this.title,
+    required this.children,
+    this.width = 200,
+    this.trailing,
+  });
+
+  final String title;
+  final List<Widget> children;
+  final double width;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1E212B) : colorScheme.surface;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : colorScheme.outlineVariant.withValues(alpha: 0.8);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : colorScheme.outlineVariant.withValues(alpha: 0.6);
+
+    return Container(
+      width: width,
+      constraints: const BoxConstraints(maxHeight: 420),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    ?trailing,
+                  ],
+                ),
+              ),
+              Divider(height: 1, thickness: 1, color: dividerColor),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: children,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// PC 二级菜单单行选项（可带选中勾、副文案）。
+class DesktopPopupMenuItem extends StatefulWidget {
+  const DesktopPopupMenuItem({
+    super.key,
+    required this.label,
+    this.subtitle,
+    this.selected = false,
+    this.onTap,
+  });
+
+  final String label;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  State<DesktopPopupMenuItem> createState() => _DesktopPopupMenuItemState();
+}
+
+class _DesktopPopupMenuItemState extends State<DesktopPopupMenuItem> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final hoverColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : colorScheme.surfaceContainerHigh;
+    final color = widget.selected
+        ? colorScheme.primary
+        : colorScheme.onSurface;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Semantics(
+        button: true,
+        selected: widget.selected,
+        label: widget.label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            constraints: const BoxConstraints(minHeight: 36),
+            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: _hovering ? hoverColor : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontSize: 13.5,
+                      fontWeight: widget.selected
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                      color: color,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                if (widget.subtitle != null) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ],
+                if (widget.selected) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.check_rounded, size: 16, color: colorScheme.primary),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

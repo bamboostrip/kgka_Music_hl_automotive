@@ -699,7 +699,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // 弹出菜单中包含全部 QQ 音乐风格扩展操作
-      expect(find.text('下一首播放'), findsOneWidget);
+      // 「下一首播放」在底栏无意义（就是当前歌曲），已移除
+      expect(find.text('下一首播放'), findsNothing);
       expect(find.text('添加到歌单'), findsOneWidget);
       expect(find.text('试听高潮'), findsOneWidget);
       expect(find.text('倍速播放'), findsOneWidget);
@@ -745,7 +746,7 @@ void main() {
       expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
     });
 
-    testWidgets('点击更多菜单中的"下一首播放"调用 player.insertNext', (tester) async {
+    testWidgets('点击更多菜单中的"倍速播放"弹出二级菜单而非对话框', (tester) async {
       debugDesktopFormFactorOverride = true;
       addTearDown(() => debugDesktopFormFactorOverride = null);
 
@@ -755,11 +756,33 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('下一首播放'));
+      await tester.tap(find.text('倍速播放'));
       await tester.pumpAndSettle();
 
-      expect(player.insertNextCalls, 1);
-      expect(player.lastInsertedNextSong, _song);
+      // 二级菜单列出档位；不出现 Dialog
+      expect(find.text('0.5x'), findsOneWidget);
+      expect(find.text('1x'), findsOneWidget);
+      expect(find.text('2x'), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
+    });
+
+    testWidgets('点击更多菜单中的"定时播放"弹出二级菜单而非对话框', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('定时播放'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('15 分钟'), findsOneWidget);
+      expect(find.text('30 分钟'), findsOneWidget);
+      expect(find.text('播完当前歌曲再停止'), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
     });
 
     testWidgets('点击更多菜单中的"复制歌曲信息"写入剪贴板', (tester) async {

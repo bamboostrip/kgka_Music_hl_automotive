@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/player_controller.dart';
 import '../form_factor.dart';
+import 'desktop_anchored_menu.dart';
 
 Future<void> showSleepTimerSheet({
   required BuildContext context,
@@ -31,6 +32,110 @@ Future<void> showSleepTimerSheet({
     backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (context) => _SleepTimerSheet(player: player),
   );
+}
+
+/// PC 二级菜单：定时选项（播放栏「更多」菜单二级进入，不弹窗）。
+///
+/// 时长点击即设并关闭；「播完当前歌曲再停止」为开关项；
+/// 已激活时提供「关闭定时」。
+Future<void> showDesktopSleepTimerMenu({
+  required BuildContext context,
+  required Offset anchor,
+  required PlayerController player,
+}) {
+  return showDesktopAnchoredMenu<void>(
+    context: context,
+    anchor: anchor,
+    builder: (menuContext) {
+      return _DesktopSleepTimerMenu(
+        player: player,
+        onClose: () => Navigator.of(menuContext).pop(),
+      );
+    },
+  );
+}
+
+class _DesktopSleepTimerMenu extends StatefulWidget {
+  const _DesktopSleepTimerMenu({required this.player, required this.onClose});
+
+  final PlayerController player;
+  final VoidCallback onClose;
+
+  @override
+  State<_DesktopSleepTimerMenu> createState() => _DesktopSleepTimerMenuState();
+}
+
+class _DesktopSleepTimerMenuState extends State<_DesktopSleepTimerMenu> {
+  late bool _finishSong;
+
+  @override
+  void initState() {
+    super.initState();
+    _finishSong =
+        widget.player.isSleepFinishCurrentSong ||
+        widget.player.sleepFinishCurrentSongOption;
+  }
+
+  void _setTimer(Duration duration) {
+    widget.onClose();
+    if (_finishSong) {
+      widget.player.setSleepTimerFinishSong(duration);
+    } else {
+      widget.player.setSleepTimer(duration);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final player = widget.player;
+    final isActive = player.isSleepTimerActive || player.isSleepFinishCurrentSong;
+    final remaining = formatSleepRemaining(player.sleepTimerRemaining);
+
+    return DesktopPopupMenuPanel(
+      title: isActive && remaining.isNotEmpty ? '定时 · $remaining' : '定时播放',
+      width: 220,
+      trailing: isActive
+          ? TextButton(
+              onPressed: () {
+                widget.onClose();
+                player.cancelSleepTimer();
+              },
+              child: const Text('关闭定时'),
+            )
+          : null,
+      children: [
+        DesktopPopupMenuItem(
+          label: '播完当前歌曲再停止',
+          subtitle: _finishSong ? '开' : '关',
+          selected: _finishSong,
+          onTap: () {
+            setState(() => _finishSong = !_finishSong);
+            player.updateSleepTimerOption(_finishSong);
+          },
+        ),
+        DesktopPopupMenuItem(
+          label: '15 分钟',
+          onTap: () => _setTimer(const Duration(minutes: 15)),
+        ),
+        DesktopPopupMenuItem(
+          label: '30 分钟',
+          onTap: () => _setTimer(const Duration(minutes: 30)),
+        ),
+        DesktopPopupMenuItem(
+          label: '45 分钟',
+          onTap: () => _setTimer(const Duration(minutes: 45)),
+        ),
+        DesktopPopupMenuItem(
+          label: '60 分钟',
+          onTap: () => _setTimer(const Duration(minutes: 60)),
+        ),
+        DesktopPopupMenuItem(
+          label: '90 分钟',
+          onTap: () => _setTimer(const Duration(minutes: 90)),
+        ),
+      ],
+    );
+  }
 }
 
 class _SleepTimerSheet extends StatefulWidget {
@@ -83,7 +188,7 @@ class _SleepTimerSheetState extends State<_SleepTimerSheet> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

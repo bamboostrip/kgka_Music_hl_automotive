@@ -49,6 +49,7 @@ class DesktopPlayerBar extends StatelessWidget {
     required this.auth,
     this.onOpenPlayerPage,
     this.onOpenComment,
+    this.onOpenArtist,
   });
 
   final PlayerController player;
@@ -58,6 +59,10 @@ class DesktopPlayerBar extends StatelessWidget {
   /// 打开评论页。桌面由 shell 传入，推入内容区 Navigator（保留侧栏）；
   /// 未传时退回根 Navigator（全屏，移动端语义）。
   final ValueChanged<String>? onOpenComment;
+
+  /// 打开歌手页。桌面由 shell 传入，推入内容区 Navigator（保留侧栏）；
+  /// 未传时退回根 Navigator（全屏）。
+  final ValueChanged<ArtistRef>? onOpenArtist;
 
   void _openPlayerPage(BuildContext context) {
     if (player.currentSong == null) return;
@@ -116,6 +121,7 @@ class DesktopPlayerBar extends StatelessWidget {
                       colorScheme: colorScheme,
                       onTap: () => _openPlayerPage(context),
                       onOpenComment: onOpenComment,
+                      onOpenArtist: onOpenArtist,
                     ),
                   ),
                   // —— 中：控制（上）+ 进度（下），Expanded 吃满剩余宽度 ——
@@ -261,6 +267,7 @@ class SongInfo extends StatefulWidget {
     this.player,
     this.auth,
     this.onOpenComment,
+    this.onOpenArtist,
   });
 
   final Song? song;
@@ -269,6 +276,7 @@ class SongInfo extends StatefulWidget {
   final PlayerController? player;
   final AuthController? auth;
   final ValueChanged<String>? onOpenComment;
+  final ValueChanged<ArtistRef>? onOpenArtist;
 
   @override
   State<SongInfo> createState() => _SongInfoState();
@@ -394,6 +402,7 @@ class _SongInfoState extends State<SongInfo> {
                           player: widget.player,
                           auth: widget.auth,
                           song: song,
+                          onOpenArtist: widget.onOpenArtist,
                         ),
                       ],
                     ),
@@ -588,12 +597,14 @@ class SongMoreButton extends StatefulWidget {
     required this.auth,
     required this.song,
     this.iconSize = 18.0,
+    this.onOpenArtist,
   });
 
   final PlayerController? player;
   final AuthController? auth;
   final Song? song;
   final double iconSize;
+  final ValueChanged<ArtistRef>? onOpenArtist;
 
   @override
   State<SongMoreButton> createState() => _SongMoreButtonState();
@@ -617,20 +628,11 @@ class _SongMoreButtonState extends State<SongMoreButton> {
       }
     }
 
+    // 二级菜单与主菜单共用同一锚点（更多按钮上方）。
+    final menuAnchor = anchorAbove(buttonContext);
+
     final actions = <SongSheetAction>[
-      if (p != null)
-        SongSheetAction(
-          icon: Icons.queue_music_rounded,
-          title: '下一首播放',
-          onTap: () async {
-            try {
-              await p.insertNext(s);
-              Toast.show('已设为下一首播放');
-            } catch (e) {
-              Toast.error('添加失败：$e');
-            }
-          },
-        ),
+      // 正在播放栏的「...」是当前歌曲：无需「下一首播放」（无意义）。
       if (a != null)
         SongSheetAction(
           icon: Icons.playlist_add_rounded,
@@ -660,8 +662,9 @@ class _SongMoreButtonState extends State<SongMoreButton> {
           icon: Icons.speed_rounded,
           title: '倍速播放',
           subtitle: _safePlaybackSpeedLabel(p),
-          onTap: () => showPlaybackSpeedSheet(
+          onTap: () => showDesktopPlaybackSpeedMenu(
             context: buttonContext,
+            anchor: menuAnchor,
             player: p,
           ),
         ),
@@ -670,8 +673,9 @@ class _SongMoreButtonState extends State<SongMoreButton> {
           icon: Icons.bedtime_rounded,
           title: '定时播放',
           subtitle: _safeSleepTimerSubtitle(p),
-          onTap: () => showSleepTimerSheet(
+          onTap: () => showDesktopSleepTimerMenu(
             context: buttonContext,
+            anchor: menuAnchor,
             player: p,
           ),
         ),
@@ -699,7 +703,7 @@ class _SongMoreButtonState extends State<SongMoreButton> {
           icon: Icons.person_rounded,
           title: '查看歌手',
           onTap: () async {
-            final api = p == null ? null : _safeApi(p);
+            final openArtist = widget.onOpenArtist;
             final artist = s.artists.firstWhere(
               (item) => item.name.isNotEmpty,
               orElse: () => ArtistRef(
@@ -707,10 +711,13 @@ class _SongMoreButtonState extends State<SongMoreButton> {
                 name: s.artist,
               ),
             );
-            if (api != null &&
-                a != null &&
-                p != null &&
-                artist.name.isNotEmpty) {
+            if (openArtist != null && artist.name.isNotEmpty) {
+              openArtist(artist);
+              return;
+            }
+            final api = p == null ? null : _safeApi(p);
+            if (api != null && a != null && p != null && artist.name.isNotEmpty) {
+              // 兜底：未注入内容区回调时仍可打开（整窗全屏）。
               Navigator.of(buttonContext).push(
                 MaterialPageRoute(
                   builder: (_) => ArtistDetailPage(
@@ -744,7 +751,7 @@ class _SongMoreButtonState extends State<SongMoreButton> {
       context: buttonContext,
       song: s,
       actions: actions,
-      anchor: anchorAbove(buttonContext),
+      anchor: menuAnchor,
     );
   }
 

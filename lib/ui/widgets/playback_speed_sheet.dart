@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/player_controller.dart';
 import '../form_factor.dart';
+import 'desktop_anchored_menu.dart';
 
 /// 倍速档位：滑块与标签共用的唯一事实来源。
 const List<double> kPlaybackSpeedSteps = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
@@ -53,6 +54,44 @@ Future<double?> showPlaybackSpeedSheet({
     backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (sheetContext) {
       return _PlaybackSpeedSheet(player: player, inDialog: false);
+    },
+  );
+}
+
+/// PC 二级菜单：倍速档位列表（播放栏「更多」菜单二级进入，不弹窗）。
+Future<void> showDesktopPlaybackSpeedMenu({
+  required BuildContext context,
+  required Offset anchor,
+  required PlayerController player,
+}) {
+  return showDesktopAnchoredMenu<void>(
+    context: context,
+    anchor: anchor,
+    builder: (menuContext) {
+      final current = snapToPlaybackSpeed(player.playbackSpeed);
+      return DesktopPopupMenuPanel(
+        title: '倍速播放',
+        width: 180,
+        children: [
+          for (final step in kPlaybackSpeedSteps)
+            DesktopPopupMenuItem(
+              label: formatPlaybackSpeed(step),
+              selected: step == current,
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                player.setPlaybackSpeed(step);
+              },
+            ),
+          if (current != 1.0)
+            DesktopPopupMenuItem(
+              label: '恢复默认',
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                player.setPlaybackSpeed(1.0);
+              },
+            ),
+        ],
+      );
     },
   );
 }

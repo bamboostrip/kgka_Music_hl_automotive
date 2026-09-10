@@ -279,74 +279,87 @@ Future<bool> showAddSongsToPlaylistSheet({
   final playlists = auth.createdPlaylists
       .where((playlist) => playlist.listId?.isNotEmpty == true)
       .toList();
-  final picked = await showModalBottomSheet<PlaylistSummary>(
-    context: context,
-    showDragHandle: true,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    builder: (sheetContext) {
-      final colorScheme = Theme.of(sheetContext).colorScheme;
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                songs.length == 1
-                    ? '添加到歌单'
-                    : '添加 ${songs.length} 首到歌单',
-                style: Theme.of(
-                  sheetContext,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 12),
-              if (playlists.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    '还没有可添加的歌单',
-                    style: Theme.of(sheetContext).textTheme.bodyMedium
-                        ?.copyWith(color: colorScheme.onSurfaceVariant),
-                  ),
-                )
-              else
-                Flexible(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: playlists.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 4),
-                      itemBuilder: (context, index) {
-                        final playlist = playlists[index];
-                        return ListTile(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          leading: Artwork(
-                            url: playlist.coverUrl,
-                            size: 46,
-                            borderRadius: 9,
-                          ),
-                          title: Text(
-                            playlist.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text('${playlist.songCount ?? 0} 首歌'),
-                          onTap: () => Navigator.of(context).pop(playlist),
-                        );
-                      },
+  final title = songs.length == 1
+      ? '添加到歌单'
+      : '添加 ${songs.length} 首到歌单';
+
+  final PlaylistSummary? picked;
+  if (isDesktopFormFactor) {
+    picked = await showDialog<PlaylistSummary>(
+      context: context,
+      builder: (dialogContext) => _DesktopAddToPlaylistDialog(
+        title: title,
+        playlists: playlists,
+      ),
+    );
+  } else {
+    picked = await showModalBottomSheet<PlaylistSummary>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        final colorScheme = Theme.of(sheetContext).colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 12),
+                if (playlists.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      '还没有可添加的歌单',
+                      style: Theme.of(sheetContext).textTheme.bodyMedium
+                          ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: playlists.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 4),
+                        itemBuilder: (context, index) {
+                          final playlist = playlists[index];
+                          return ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            leading: Artwork(
+                              url: playlist.coverUrl,
+                              size: 46,
+                              borderRadius: 9,
+                            ),
+                            title: Text(
+                              playlist.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text('${playlist.songCount ?? 0} 首歌'),
+                            onTap: () => Navigator.of(context).pop(playlist),
+                          );
+                        },
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 
   if (picked == null || !context.mounted) return false;
 
@@ -364,6 +377,161 @@ Future<bool> showAddSongsToPlaylistSheet({
   } catch (error) {
     Toast.error('添加失败：$error');
     return false;
+  }
+}
+
+/// PC 端「添加到歌单」：紧凑居中对话框（不用移动端底部弹层）。
+class _DesktopAddToPlaylistDialog extends StatelessWidget {
+  const _DesktopAddToPlaylistDialog({
+    required this.title,
+    required this.playlists,
+  });
+
+  final String title;
+  final List<PlaylistSummary> playlists;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Dialog(
+      backgroundColor: colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 480),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (playlists.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 8, 8, 16),
+                  child: Text(
+                    '还没有可添加的歌单',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: playlists.length,
+                    itemBuilder: (context, index) {
+                      final playlist = playlists[index];
+                      return _DesktopPlaylistPickTile(
+                        playlist: playlist,
+                        onTap: () => Navigator.of(context).pop(playlist),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopPlaylistPickTile extends StatefulWidget {
+  const _DesktopPlaylistPickTile({required this.playlist, required this.onTap});
+
+  final PlaylistSummary playlist;
+  final VoidCallback onTap;
+
+  @override
+  State<_DesktopPlaylistPickTile> createState() =>
+      _DesktopPlaylistPickTileState();
+}
+
+class _DesktopPlaylistPickTileState extends State<_DesktopPlaylistPickTile> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hoverColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : colorScheme.surfaceContainerHigh;
+    final playlist = widget.playlist;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: _hovering ? hoverColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Artwork(url: playlist.coverUrl, size: 36, borderRadius: 6),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      playlist.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${playlist.songCount ?? 0} 首歌',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_hovering)
+                Icon(
+                  Icons.add_rounded,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
