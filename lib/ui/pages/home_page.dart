@@ -673,11 +673,13 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   }
 
   /// 当前子 tab 对应的刷新入口：双击首页与桌面头部刷新按钮共用同一语义。
-  Future<void> _refreshCurrentSection() => switch (_sectionIndex) {
-        1 => _rankKey.currentState?.refresh() ?? Future<void>.value(),
-        2 => _radioKey.currentState?.refresh() ?? Future<void>.value(),
-        _ => refresh(),
-      };
+  Future<void> _refreshCurrentSection() {
+    return switch (_sectionIndex) {
+      1 => _rankKey.currentState?.refresh() ?? Future<void>.value(),
+      2 => _radioKey.currentState?.refresh() ?? Future<void>.value(),
+      _ => refresh(),
+    };
+  }
 
   /// 判定滚动的阈值（px）：超过即认为用户已在本页下滑。
   static const double _tapRefreshScrollThreshold = 8.0;
@@ -716,13 +718,19 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   /// 双击底部首页按钮：回到当前 tab 顶部并且刷新对应内容。
   /// 推荐 tab 刷新推荐流，排行榜 / 电台 tab 刷新各自内容（标题栏刷新按钮已移除，
   /// 统一收敛到这里）。车机顶栏点中当前 tab 同样走这里（含均衡器动画）。
-  Future<void> scrollToTopAndRefresh() async {
+  /// 回顶并刷新对应内容。移动端（双击首页按钮/点中当前 tab）先回顶后刷新；
+  /// 桌面侧栏双击传 [refreshInParallel]：立即起刷新让均衡器当帧出现，
+  /// 回顶动画并行进行，不等滚动完成。
+  Future<void> scrollToTopAndRefresh({bool refreshInParallel = false}) async {
     // 用户显式要求回顶：作废未完成的点按飞行对齐，避免落地帧把本页
     // 又推回顶栏地板高度（飞行中重按目标 tab / 对齐重试未完时双击）。
     _switchTarget = null;
     final size = MediaQuery.sizeOf(context);
     final isCarMode =
         size.width > size.height && ThemeController.instance.carModeEnabled;
+    if (refreshInParallel) {
+      unawaited(_refreshCurrentSection());
+    }
     if (isCarMode) {
       // 车机单滚动容器：直接回顶。
       if (_scrollController.hasClients) {
@@ -748,7 +756,9 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       }
     }
     if (!mounted) return;
-    await _refreshCurrentSection();
+    if (!refreshInParallel) {
+      await _refreshCurrentSection();
+    }
   }
 
   /// 车机模式是否已滚动（单滚动容器偏离顶部即算）。

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -8,6 +9,10 @@ import '../src/rust/api.dart';
 import '../src/rust/frb_generated.dart';
 import 'api_client.dart';
 import 'api_client_interface.dart';
+
+/// 后台 isolate 解析用回调：必须是顶层/静态函数才能跨 isolate 发送
+/// （jsonDecode 自带 reviver 命名参数，签名不满足 compute 的要求）。
+Future<dynamic> _decodeJsonOffThread(String body) => jsonDecode(body);
 
 class RustApiClient implements ApiClientInterface {
   RustApiClient._(this._engine);
@@ -73,6 +78,21 @@ class RustApiClient implements ApiClientInterface {
   /// 给长尾留余量；超时转为 408 ApiException 进正常错误处理链。
   static const Duration _requestTimeout = Duration(seconds: 20);
 
+  /// 超过该长度的响应体交给后台 isolate 解析。大响应（电台分类目录等
+  /// 可达数百 KB）在主 isolate 上 jsonDecode 会同步卡住 UI 线程数百毫秒，
+  /// 刷新期间帧率掉光（顶部均衡器动画冻结直到刷新结束才弹出）。小响应
+  /// 仍就地解析，省去 isolate 启动的固定开销。
+  static const int _offThreadDecodeThreshold = 32 * 1024;
+
+  /// 大响应在后台 isolate 解析，避免阻塞 UI 线程；解析结果为纯
+  /// JSON 值（Map/List/String/num/bool/null），可跨 isolate 传输。
+  Future<dynamic> _decodeBody(String body) {
+    if (body.length < _offThreadDecodeThreshold) {
+      return Future<dynamic>.value(jsonDecode(body));
+    }
+    return compute(_decodeJsonOffThread, body);
+  }
+
   Future<dynamic> _request(
     String method,
     String path,
@@ -93,7 +113,7 @@ class RustApiClient implements ApiClientInterface {
         body: bodyJson,
       ).timeout(_requestTimeout);
       if (result.isEmpty || result == 'null') return null;
-      final decoded = jsonDecode(result);
+      final decoded = await _decodeBody(result);
       return unwrapData(decoded);
     } on TimeoutException {
       throw ApiException('请求超时，请检查网络后重试', statusCode: 408);

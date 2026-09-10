@@ -223,6 +223,13 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
     }
   }
 
+  /// 手动刷新起跑前先让均衡器展开的时间：[RefreshEqualizer] 的高度过渡
+  /// 第一帧从 0 开始（AnimatedSize 裁剪子内容），横轨换 Key 整轨重建、
+  /// 发请求等重活若叠在首帧会把帧率打没，动画要等刷新结束才可见。
+  /// 延后约 100ms（easeOutCubic 下已展开 ~78%）再上重活，保证用户
+  /// 先看到「正在刷新」的反馈。
+  static const _refreshWarmup = Duration(milliseconds: 100);
+
   /// 对外入口：手动刷新（双击首页 / 桌面刷新按钮 / 下拉刷新 / 错误重试）。
   ///
   /// 双击刷新优先级最高：自增代数使在途的静默刷新/冷启动恢复响应作废。
@@ -230,9 +237,22 @@ abstract class SwrSectionState<W extends StatefulWidget, T> extends State<W> {
   /// 清掉，第二次仍在途时均衡器动画会提前收起（数据安全由代数保证，
   /// 不受此影响）。
   Future<void> refresh() async {
-    if (_manualRefreshing) return;
+    if (_manualRefreshing) {
+      return;
+    }
     final epoch = ++_loadEpoch;
     _manualRefreshing = true;
+    // 先只翻刷新态重建（轻帧）：顶部均衡器当帧出现。等展开过渡明显
+    // 可见后再启动重活，见 [_refreshWarmup]。
+    setState(() {});
+    await Future<void>.delayed(_refreshWarmup);
+    if (!mounted) return;
+    if (epoch != _loadEpoch) {
+      // 预热期间代数被并发刷新（网络恢复触发的静默刷新等）抢占：本次
+      // 手动刷新作废，收起均衡器退出。
+      setState(() => _manualRefreshing = false);
+      return;
+    }
     // 横轨回到最左侧：页面用 railResetEpoch 做 ValueKey 重建横轨。
     _railResetEpoch++;
     onManualRefreshStart();

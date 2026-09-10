@@ -266,6 +266,8 @@ void main() {
       DailyRecommend(title: '每日推荐', songs: [_song(1), _song(2)]),
     );
     await tester.pumpAndSettle();
+    // 最短展示保持期（600ms）过后才真正收起。
+    await tester.pump(const Duration(milliseconds: 700));
     expect(_visibleEqualizer(), findsNothing, reason: '刷新完成后均衡器收起');
   });
 
@@ -296,6 +298,8 @@ void main() {
 
     api.fmGate!.complete(const [FmStation(id: 'fm_1', name: '电台一', type: 2)]);
     await tester.pumpAndSettle();
+    // 最短展示保持期（600ms）过后才真正收起。
+    await tester.pump(const Duration(milliseconds: 700));
     expect(_visibleEqualizer(), findsNothing, reason: '刷新完成后均衡器收起');
   });
 

@@ -101,8 +101,10 @@ class _DesktopShellState extends State<DesktopShell> {
       _lastSidebarTapTime = null;
       // 只有首页三分区有刷新语义；我的音乐/已下载/设置双击只保留单击
       // 的回根行为（与移动端「我的」无刷新内容一致）。
+      // 并行刷新：立即起刷新让均衡器当帧出现，回顶动画并行进行。
       if (index <= 2) {
-        _homePageKey.currentState?.scrollToTopAndRefresh();
+        _homePageKey.currentState
+            ?.scrollToTopAndRefresh(refreshInParallel: true);
       }
       return;
     }
@@ -141,13 +143,24 @@ class _DesktopShellState extends State<DesktopShell> {
 
   void _selectSection(int sidebarIndex) {
     _popToContentRoot();
+    final targetSection = sidebarIndex <= 2
+        ? _DesktopSection.home
+        : _DesktopSection.values[sidebarIndex - 2];
+    final targetHomeTab = sidebarIndex <= 2 ? sidebarIndex : _homeTab;
+    // 点按已选中的首页子分区（含双击当前分区刷新的两击）：分区状态不变，
+    // 只回内容根。此时不再 setState + _tabsRevision++——修订号会经
+    // ValueListenableBuilder 把 LazyIndexedStack 里所有已访问分区整树
+    // 重建一遍，恰与双击触发的分区刷新叠进同一帧，把顶部均衡器该出现
+    // 的首帧挤掉（动画直到刷新结束才可见）。非首页分区保留原行为：
+    // 「已下载」靠修订号变化在重复点按时重新对账下载索引。
+    if (targetSection == _DesktopSection.home &&
+        _section == _DesktopSection.home &&
+        _homeTab == targetHomeTab) {
+      return;
+    }
     setState(() {
-      if (sidebarIndex <= 2) {
-        _section = _DesktopSection.home;
-        _homeTab = sidebarIndex;
-      } else {
-        _section = _DesktopSection.values[sidebarIndex - 2];
-      }
+      _section = targetSection;
+      _homeTab = targetHomeTab;
     });
     _tabsRevision.value++;
   }
