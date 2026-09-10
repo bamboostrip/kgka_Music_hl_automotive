@@ -48,11 +48,16 @@ class DesktopPlayerBar extends StatelessWidget {
     required this.player,
     required this.auth,
     this.onOpenPlayerPage,
+    this.onOpenComment,
   });
 
   final PlayerController player;
   final AuthController auth;
   final VoidCallback? onOpenPlayerPage;
+
+  /// 打开评论页。桌面由 shell 传入，推入内容区 Navigator（保留侧栏）；
+  /// 未传时退回根 Navigator（全屏，移动端语义）。
+  final ValueChanged<String>? onOpenComment;
 
   void _openPlayerPage(BuildContext context) {
     if (player.currentSong == null) return;
@@ -110,6 +115,7 @@ class DesktopPlayerBar extends StatelessWidget {
                       song: song,
                       colorScheme: colorScheme,
                       onTap: () => _openPlayerPage(context),
+                      onOpenComment: onOpenComment,
                     ),
                   ),
                   // —— 中：控制（上）+ 进度（下），Expanded 吃满剩余宽度 ——
@@ -254,6 +260,7 @@ class SongInfo extends StatefulWidget {
     required this.onTap,
     this.player,
     this.auth,
+    this.onOpenComment,
   });
 
   final Song? song;
@@ -261,6 +268,7 @@ class SongInfo extends StatefulWidget {
   final VoidCallback onTap;
   final PlayerController? player;
   final AuthController? auth;
+  final ValueChanged<String>? onOpenComment;
 
   @override
   State<SongInfo> createState() => _SongInfoState();
@@ -379,6 +387,7 @@ class _SongInfoState extends State<SongInfo> {
                           player: widget.player,
                           song: song,
                           iconColor: iconColor,
+                          onOpenComment: widget.onOpenComment,
                         ),
                         const SizedBox(width: 8),
                         SongMoreButton(
@@ -527,11 +536,13 @@ class _CommentButton extends StatelessWidget {
     required this.player,
     required this.song,
     required this.iconColor,
+    this.onOpenComment,
   });
 
   final PlayerController? player;
   final Song? song;
   final Color iconColor;
+  final ValueChanged<String>? onOpenComment;
   static const double _iconSize = 18.0;
 
   @override
@@ -540,7 +551,7 @@ class _CommentButton extends StatelessWidget {
     final enabled =
         song != null &&
         song!.source == SongSource.kugou &&
-        api != null &&
+        (api != null || onOpenComment != null) &&
         (song!.albumAudioId ?? song!.id).isNotEmpty;
     return IconButton(
       tooltip: enabled ? '评论' : '暂无评论',
@@ -549,6 +560,11 @@ class _CommentButton extends StatelessWidget {
           : () {
               final mixsongid = song!.albumAudioId ?? song!.id;
               if (mixsongid.isEmpty) return;
+              final openComment = onOpenComment;
+              if (openComment != null) {
+                openComment(mixsongid);
+                return;
+              }
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => CommentPage(api: api, mixsongid: mixsongid),

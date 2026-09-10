@@ -86,11 +86,16 @@ class RustApiClient implements ApiClientInterface {
 
   /// 大响应在后台 isolate 解析，避免阻塞 UI 线程；解析结果为纯
   /// JSON 值（Map/List/String/num/bool/null），可跨 isolate 传输。
-  Future<dynamic> _decodeBody(String body) {
+  Future<dynamic> _decodeBody(String body) async {
     if (body.length < _offThreadDecodeThreshold) {
-      return Future<dynamic>.value(jsonDecode(body));
+      return jsonDecode(body);
     }
-    return compute(_decodeJsonOffThread, body);
+    try {
+      return await compute(_decodeJsonOffThread, body);
+    } catch (_) {
+      // isolate 启动/传输异常时退回主 isolate 解析，保证接口可用性。
+      return jsonDecode(body);
+    }
   }
 
   Future<dynamic> _request(

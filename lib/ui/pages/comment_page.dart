@@ -145,17 +145,28 @@ class _CommentPageState extends State<CommentPage> {
 
     if (_errorMessage != null) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('评论加载失败', style: Theme.of(context).textTheme.bodyLarge),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _loadInitial,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('重试'),
-            ),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('评论加载失败', style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _loadInitial,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
         ),
       );
     }

@@ -14,7 +14,21 @@ mixin _MusicApiSong on _MusicApiBase {
         'pagesize': pageSize,
       }),
     );
-    return MusicCommentResponse.fromJson(json);
+    final response = MusicCommentResponse.fromJson(json);
+    // Rust 层失败时仍回传原始信封（status/error_code/msg）。list 为空
+    // 且 status 非成功时必须抛错，否则 UI 会误显示「还没有人评论」。
+    final status = response.status ?? asInt(json['status']);
+    final errorCode = response.errorCode ?? asInt(json['error_code']);
+    final ok =
+        (status == null || status == 1 || status == 200) &&
+        (errorCode == null || errorCode == 0);
+    if (!ok && (response.list == null || response.list!.isEmpty)) {
+      throw ApiException(
+        response.message ?? response.msg ?? '评论服务暂不可用',
+        statusCode: errorCode,
+      );
+    }
+    return response;
   }
 
   /// 获取歌曲高潮片段时间信息，无高潮时返回 null。
