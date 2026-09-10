@@ -10,6 +10,7 @@ class DesktopWindowCaptionButton extends StatefulWidget {
     super.key,
     required this.icon,
     required this.onTap,
+    this.height = 40,
     this.hoverColor,
     this.hoverIconColor,
     this.iconColor,
@@ -18,6 +19,10 @@ class DesktopWindowCaptionButton extends StatefulWidget {
 
   final IconData icon;
   final VoidCallback onTap;
+
+  /// 按钮高度。标题栏内传标题栏全高（52），按钮贴窗口顶边——
+  /// 与原生 Windows 标题栏按钮一致；浮层内用默认 40（浮层自身 40 高）。
+  final double height;
   final Color? hoverColor;
   final Color? hoverIconColor;
 
@@ -53,7 +58,7 @@ class _DesktopWindowCaptionButtonState extends State<DesktopWindowCaptionButton>
         onTap: widget.onTap,
         child: Container(
           width: 46,
-          height: 40,
+          height: widget.height,
           color: bgColor,
           alignment: Alignment.center,
           child: Icon(widget.icon, size: 16, color: iconColor),

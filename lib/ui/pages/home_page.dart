@@ -1426,7 +1426,8 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
               );
               if (isDesktop) {
                 // 桌面端（QQ 音乐 PC 式）：无移动端吸顶搜索+胶囊 tab，
-                // 切换只走左侧栏；内容区顶部放 slim 工具条保留刷新入口。
+                // 切换只走左侧栏；内容区顶部只保留分区标题（刷新走
+                // 双击首页按钮/下拉，不再放刷新按钮）。
                 const sectionTitles = ['推荐', '排行榜', '电台'];
                 content = Column(
                   children: [
@@ -1440,15 +1441,6 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
                                 .textTheme
                                 .titleLarge
                                 ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            tooltip: '刷新',
-                            icon: const Icon(Icons.refresh_rounded),
-                            iconSize: 20,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            visualDensity: VisualDensity.compact,
-                            onPressed: _refreshCurrentSection,
                           ),
                         ],
                       ),

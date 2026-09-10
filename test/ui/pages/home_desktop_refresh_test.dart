@@ -243,17 +243,13 @@ void main() {
     return (api, player);
   }
 
-  testWidgets('桌面端：无下拉刷新，页头刷新按钮存在且触发数据重载', (tester) async {
-    final (api, _) = await pumpHome(tester, desktop: true);
+  testWidgets('桌面端：无下拉刷新，页头也无刷新按钮（刷新走双击首页/点中当前分区）', (tester) async {
+    await pumpHome(tester, desktop: true);
 
     expect(find.byType(RefreshIndicator), findsNothing);
-    final refreshButton = find.byTooltip('刷新');
-    expect(refreshButton, findsOneWidget);
-
-    final before = api.dailyRecommendCalls;
-    await tester.tap(refreshButton);
-    await tester.pumpAndSettle();
-    expect(api.dailyRecommendCalls, greaterThan(before));
+    // 桌面 slim 工具条只保留分区标题，刷新入口统一收敛到双击首页按钮
+    // （见 home_scroll_to_top_test.dart）。
+    expect(find.byTooltip('刷新'), findsNothing);
   });
 
   testWidgets('桌面端：新歌速递封面 hover 浮现播放蒙层，点击直接播放对应队列', (tester) async {

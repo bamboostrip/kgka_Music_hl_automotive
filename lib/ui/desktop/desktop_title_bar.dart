@@ -122,13 +122,16 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
             ),
           ),
 
-          // 右侧窗口控制按钮区（与全屏页面浮层共用同一套按钮）
+          // 右侧窗口控制按钮区（与全屏页面浮层共用同一套按钮）。
+          // 高度传标题栏全高：按钮贴窗口顶边，与原生 Windows 标题栏一致，
+          // 否则 40 高的按钮垂直居中会在顶部留出 6px 空白。
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               DesktopWindowCaptionButton(
                 icon: Icons.remove_rounded,
                 tooltip: '最小化',
+                height: 52,
                 onTap: () async {
                   try {
                     await windowManager.minimize();
@@ -140,6 +143,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                     ? Icons.filter_none_rounded
                     : Icons.crop_square_rounded,
                 tooltip: _isMaximized ? '还原' : '最大化',
+                height: 52,
                 onTap: () async {
                   try {
                     if (await windowManager.isMaximized()) {
@@ -153,6 +157,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
               DesktopWindowCaptionButton(
                 icon: Icons.close_rounded,
                 tooltip: '关闭',
+                height: 52,
                 hoverColor: const Color(0xFFE81123),
                 hoverIconColor: Colors.white,
                 onTap: () async {
