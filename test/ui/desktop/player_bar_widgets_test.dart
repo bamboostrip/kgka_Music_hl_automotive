@@ -139,6 +139,50 @@ void main() {
     });
   });
 
+  group('CommentBubbleIcon', () {
+    testWidgets('renders CustomPaint with bubble painter', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: CommentBubbleIcon(size: 18, color: Colors.white),
+          ),
+        ),
+      );
+      expect(find.byType(CommentBubbleIcon), findsOneWidget);
+      final customPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(CommentBubbleIcon),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      expect(customPaint.size, const Size(18, 18));
+      expect(customPaint.painter, isNotNull);
+      // 默认无角标：描边完整闭合
+      final icon = tester.widget<CommentBubbleIcon>(
+        find.byType(CommentBubbleIcon),
+      );
+      expect(icon.showBadgeGap, isFalse);
+    });
+
+    testWidgets('showBadgeGap 为 true 时右上角留角标缺口', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: CommentBubbleIcon(
+              size: 18,
+              color: Colors.white,
+              showBadgeGap: true,
+            ),
+          ),
+        ),
+      );
+      final icon = tester.widget<CommentBubbleIcon>(
+        find.byType(CommentBubbleIcon),
+      );
+      expect(icon.showBadgeGap, isTrue);
+    });
+  });
+
   group('SongInfo (封面与歌曲详情展开)', () {
     const testSong = Song(
       id: '1',

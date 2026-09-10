@@ -1,3 +1,5 @@
+import 'dart:math' show pi;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -581,7 +583,10 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
   }
 }
 
-/// 封面悬停时展示的对角直角展开图标（截图 3 风格：右上角 ┐ + 左下角 └）。
+/// 对角双直角图标（QQ 音乐 PC 截图同款：右上 └ + 左下 ┐）。
+///
+/// 两个直角的顶点都朝向图标中心、两臂向外伸到顶/右/左/底边，
+/// 整体读作「展开/收起」：封面悬停放大提示与播放页收起键共用同一字形。
 class ExpandDetailIcon extends StatelessWidget {
   const ExpandDetailIcon({
     super.key,
@@ -621,24 +626,136 @@ class _ExpandDetailPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final p = strokeWidth / 2;
-    final arm = w * 0.42;
 
-    // 左下角 └
-    final pathBottomLeft = Path()
-      ..moveTo(p, h - p - arm)
-      ..lineTo(p, h - p)
-      ..lineTo(p + arm, h - p);
-    canvas.drawPath(pathBottomLeft, paint);
-
-    // 右上角 ┐
+    // 右上角：顶点朝内（约在 2/3、1/3 处），臂向外伸到顶边与右边
     final pathTopRight = Path()
-      ..moveTo(w - p - arm, p)
-      ..lineTo(w - p, p)
-      ..lineTo(w - p, p + arm);
+      ..moveTo(w * 0.67, p)
+      ..lineTo(w * 0.67, h * 0.33)
+      ..lineTo(w - p, h * 0.33);
     canvas.drawPath(pathTopRight, paint);
+
+    // 左下角：与右上角关于中心点 180° 对称，臂伸到左边与底边
+    final pathBottomLeft = Path()
+      ..moveTo(p, h * 0.67)
+      ..lineTo(w * 0.33, h * 0.67)
+      ..lineTo(w * 0.33, h - p);
+    canvas.drawPath(pathBottomLeft, paint);
   }
 
   @override
   bool shouldRepaint(covariant _ExpandDetailPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
+}
+
+/// 评论气泡图标（QQ 音乐 PC 截图同款：圆角气泡 + 内部两点 + 底部小尾巴）。
+///
+/// [showBadgeGap] 为 true 时右上角描边留出缺口，供外部叠放评论数角标文字
+/// （与截图一致：数字嵌在气泡右上描边处）；false 时描边完整闭合。
+class CommentBubbleIcon extends StatelessWidget {
+  const CommentBubbleIcon({
+    super.key,
+    this.size = 18,
+    required this.color,
+    this.showBadgeGap = false,
+    this.strokeWidth = 1.6,
+  });
+
+  final double size;
+  final Color color;
+  final bool showBadgeGap;
+  final double strokeWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _CommentBubblePainter(
+        color: color,
+        strokeWidth: strokeWidth,
+        showBadgeGap: showBadgeGap,
+      ),
+    );
+  }
+}
+
+class _CommentBubblePainter extends CustomPainter {
+  const _CommentBubblePainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.showBadgeGap,
+  });
+
+  final Color color;
+  final double strokeWidth;
+  final bool showBadgeGap;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final s = size.width;
+    final p = strokeWidth / 2;
+    final r = s * 0.28;
+    // 气泡底边整体上移，给底部小尾巴留出空间（尾巴尖伸到 s - p）。
+    final bubbleBottom = s - s * 0.16;
+    // 有角标时右上描边留缺口：顶边缺到 52%、右边缺到 40%，数字嵌在这段空隙。
+    final hasGap = showBadgeGap;
+
+    final bubble = Path()
+      ..moveTo(hasGap ? s * 0.52 : s - p - r, p)
+      // 顶边 → 左上圆角 → 左边
+      ..lineTo(p + r, p)
+      ..arcTo(
+        Rect.fromLTWH(p, p, r * 2, r * 2),
+        -pi / 2,
+        -pi / 2,
+        false,
+      )
+      ..lineTo(p, bubbleBottom - r)
+      // 左下圆角 → 底边（带小尾巴）→ 右下圆角
+      ..arcTo(
+        Rect.fromLTWH(p, bubbleBottom - r * 2, r * 2, r * 2),
+        pi,
+        -pi / 2,
+        false,
+      )
+      ..lineTo(s * 0.47, bubbleBottom)
+      ..lineTo(s * 0.37, s - p)
+      ..lineTo(s * 0.30, bubbleBottom)
+      ..lineTo(s - p - r, bubbleBottom)
+      ..arcTo(
+        Rect.fromLTWH(s - p - r * 2, bubbleBottom - r * 2, r * 2, r * 2),
+        pi / 2,
+        -pi / 2,
+        false,
+      )
+      // 右边向上；无缺口时再补画右上圆角，回到起点闭合描边
+      ..lineTo(s - p, hasGap ? s * 0.40 : p + r);
+    if (!hasGap) {
+      bubble.arcTo(
+        Rect.fromLTWH(s - p - r * 2, p, r * 2, r * 2),
+        0,
+        -pi / 2,
+        false,
+      );
+    }
+    canvas.drawPath(bubble, stroke);
+
+    // 气泡内两个「眼睛」圆点
+    final dot = Paint()..color = color..style = PaintingStyle.fill;
+    final dotRadius = s * 0.052;
+    canvas.drawCircle(Offset(s * 0.40, s * 0.52), dotRadius, dot);
+    canvas.drawCircle(Offset(s * 0.60, s * 0.52), dotRadius, dot);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CommentBubblePainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.showBadgeGap != showBadgeGap;
 }

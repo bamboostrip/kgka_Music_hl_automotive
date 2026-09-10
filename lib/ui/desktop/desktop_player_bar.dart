@@ -81,7 +81,7 @@ class DesktopPlayerBar extends StatelessWidget {
   /// 播放页底部复用本栏时必须置 false：否则点一下会在播放页上再叠一层播放页。
   final bool openPlayerPageEnabled;
 
-  /// 沉浸深色：半透明黑底 + 浅色前景，用于播放页的黑色封面背景之上。
+  /// 沉浸深色：整条透明底 + 浅色前景，用于播放页的黑色封面背景之上。
   final bool overlayDark;
 
   void _openPlayerPage(BuildContext context) {
@@ -107,11 +107,13 @@ class DesktopPlayerBar extends StatelessWidget {
         : Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    // 播放页复用时底栏浮在黑色封面之上：整条透明，不再叠半透明黑底，
+    // 与封面背景融为一体（QQ 音乐 PC 正在播放页观感）。
     final background = overlayDark
-        ? Colors.black.withValues(alpha: .38)
+        ? Colors.transparent
         : (isDark ? const Color(0xFF1E2433) : Colors.white);
     final borderColor = overlayDark
-        ? Colors.white.withValues(alpha: .10)
+        ? Colors.transparent
         : colorScheme.outlineVariant.withValues(alpha: .5);
 
     return Theme(
@@ -131,7 +133,11 @@ class DesktopPlayerBar extends StatelessWidget {
                 height: 80,
                 decoration: BoxDecoration(
                   color: background,
-                  border: Border(top: BorderSide(color: borderColor, width: 1)),
+                  border: overlayDark
+                      ? null
+                      : Border(
+                          top: BorderSide(color: borderColor, width: 1),
+                        ),
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -146,7 +152,7 @@ class DesktopPlayerBar extends StatelessWidget {
                         if (onCollapse != null) ...[
                           const SizedBox(width: 6),
                           _CollapseButton(onPressed: onCollapse!),
-                          const SizedBox(width: 2),
+                          const SizedBox(width: 10),
                         ] else
                           const SizedBox(width: 12),
                         // —— 左：歌曲信息 + 操作入口 ——
@@ -336,7 +342,10 @@ ThemeData _overlayDarkBarTheme(ThemeData base) {
 ThemeData? _overlayDarkBaseCache;
 ThemeData? _overlayDarkResultCache;
 
-/// 播放页底栏最左「收起」键：收起播放页返回主界面（QQ 音乐 PC 正在播放页同款）。
+/// 播放页底栏最左「收起」键：收起播放页返回主界面。
+///
+/// 图标与封面悬停「展开」同一款对角双直角（QQ 音乐 PC 截图同款：
+/// 右上 └ + 左下 ┐，顶点朝内、臂向外），仅以位置区分语义。
 class _CollapseButton extends StatelessWidget {
   const _CollapseButton({required this.onPressed});
 
@@ -349,9 +358,8 @@ class _CollapseButton extends StatelessWidget {
       onPressed: onPressed,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-      icon: Icon(
-        Icons.keyboard_arrow_down_rounded,
-        size: 24,
+      icon: ExpandDetailIcon(
+        size: 22,
         // 直接给色而非走 IconButton.color：便于单测断言颜色，
         // 也避免 IconTheme 解析层级带来的歧义。
         color: Theme.of(context).colorScheme.onSurface,
@@ -726,7 +734,32 @@ class _LikeButton extends StatelessWidget {
   }
 }
 
-class _CommentButton extends StatelessWidget {
+/// 评论数 ≥ 万/亿时按「x.x万」「x.x亿」缩写（与 QQ 音乐一致）。
+String formatCommentCount(int count) {
+  String trimZero(String s) =>
+      s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
+  if (count >= 100000000) {
+    return '${trimZero((count / 100000000).toStringAsFixed(1))}亿';
+  }
+  if (count >= 10000) {
+    return '${trimZero((count / 10000).toStringAsFixed(1))}万';
+  }
+  return '$count';
+}
+
+/// 评论数角标会话内缓存（mixsongid → 条数）：主界面底栏与播放页底栏共用，
+/// 切回已拉取过的歌曲不重复请求。
+final Map<String, int> _commentCountCache = {};
+
+/// 正在拉取评论数的 mixsongid，防止同一首歌被底栏/播放页重复请求。
+final Set<String> _commentCountInFlight = {};
+
+/// 评论气泡按钮（QQ 音乐 PC 截图同款）：
+/// 圆角气泡 + 内部两点 + 底部小尾巴，右上角描边缺口处嵌评论数角标。
+///
+/// 评论数来自 `api.musicComments(pageSize: 1)` 的 `count`，会话内缓存；
+/// 无接口/拉取失败时静默退化为无角标气泡，不影响点击进评论页。
+class _CommentButton extends StatefulWidget {
   const _CommentButton({
     required this.player,
     required this.song,
@@ -738,37 +771,109 @@ class _CommentButton extends StatelessWidget {
   final Song? song;
   final Color iconColor;
   final ValueChanged<String>? onOpenComment;
+
+  @override
+  State<_CommentButton> createState() => _CommentButtonState();
+}
+
+class _CommentButtonState extends State<_CommentButton> {
   static const double _iconSize = 18.0;
+
+  String? get _mixsongid {
+    final song = widget.song;
+    if (song == null) return null;
+    final id = song.albumAudioId ?? song.id;
+    return id.isEmpty ? null : id;
+  }
+
+  Future<void> _fetchCount(dynamic api, String mixsongid) async {
+    if (_commentCountInFlight.contains(mixsongid)) return;
+    _commentCountInFlight.add(mixsongid);
+    try {
+      final response = await api.musicComments(
+        mixsongid,
+        page: 1,
+        pageSize: 1,
+      );
+      final count = response.count as int?;
+      if (count != null && count > 0) {
+        _commentCountCache[mixsongid] = count;
+        if (mounted) setState(() {});
+      }
+    } catch (_) {
+      // 拉取失败本次不显示角标，不打扰播放；下次重建再试。
+    } finally {
+      _commentCountInFlight.remove(mixsongid);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final api = player == null ? null : _safeApi(player!);
+    final api = widget.player == null ? null : _safeApi(widget.player!);
+    final mixsongid = _mixsongid;
     final enabled =
-        song != null &&
-        song!.source == SongSource.kugou &&
-        (api != null || onOpenComment != null) &&
-        (song!.albumAudioId ?? song!.id).isNotEmpty;
+        widget.song != null &&
+        widget.song!.source == SongSource.kugou &&
+        mixsongid != null &&
+        (api != null || widget.onOpenComment != null);
+
+    // 有接口才拉评论数；缓存命中直接显示。
+    //（enabled 蕴含 mixsongid 非空，流分析可提升，无需再判空。）
+    int? count;
+    if (enabled && api != null) {
+      count = _commentCountCache[mixsongid];
+      if (count == null) {
+        _fetchCount(api, mixsongid);
+      }
+    }
+    final badge = count == null ? null : formatCommentCount(count);
+    // 自绘图标不走 IconTheme（禁用态不会自动变淡），需手动降不透明度。
+    final effectiveColor = enabled
+        ? widget.iconColor
+        : widget.iconColor.withValues(alpha: 0.38);
+
     return IconButton(
       tooltip: enabled ? '评论' : '暂无评论',
       onPressed: !enabled
           ? null
           : () {
-              final mixsongid = song!.albumAudioId ?? song!.id;
-              if (mixsongid.isEmpty) return;
-              final openComment = onOpenComment;
+              final id = mixsongid;
+              final openComment = widget.onOpenComment;
               if (openComment != null) {
-                openComment(mixsongid);
+                openComment(id);
                 return;
               }
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => CommentPage(api: api, mixsongid: mixsongid),
+                  builder: (_) =>
+                      CommentPage(api: api, mixsongid: id),
                 ),
               );
             },
-      icon: const Icon(Icons.chat_bubble_outline_rounded),
-      iconSize: _iconSize,
-      color: iconColor,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CommentBubbleIcon(
+            size: _iconSize,
+            color: effectiveColor,
+            showBadgeGap: badge != null,
+          ),
+          if (badge != null)
+            Positioned(
+              left: _iconSize - 7,
+              top: -3,
+              child: Text(
+                badge,
+                style: TextStyle(
+                  fontSize: 9,
+                  height: 1,
+                  fontWeight: FontWeight.w500,
+                  color: effectiveColor,
+                ),
+              ),
+            ),
+        ],
+      ),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 28, height: 28),
     );

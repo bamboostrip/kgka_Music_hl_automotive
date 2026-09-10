@@ -6,7 +6,9 @@ import 'package:shiyin_music/controllers/auth_controller.dart';
 import 'package:shiyin_music/controllers/download_controller.dart';
 import 'package:shiyin_music/controllers/player_controller.dart';
 import 'package:shiyin_music/models/music_models.dart' hide formatDuration;
+import 'package:shiyin_music/services/music_api.dart';
 import 'package:shiyin_music/ui/desktop/desktop_player_bar.dart';
+import 'package:shiyin_music/ui/desktop/player_bar_widgets.dart';
 import 'package:shiyin_music/ui/form_factor.dart';
 import 'package:shiyin_music/ui/widgets/artwork.dart';
 import 'package:shiyin_music/ui/widgets/marquee_text.dart';
@@ -24,9 +26,39 @@ class _FakeDownloadController extends ChangeNotifier implements DownloadControll
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// 评论接口 fake：[count] 非空时返回对应评论数，为空时模拟服务不可用。
+class _FakeCommentApi implements MusicApi {
+  _FakeCommentApi({this.count});
+
+  final int? count;
+  int calls = 0;
+
+  @override
+  Future<MusicCommentResponse> musicComments(
+    String mixsongid, {
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    calls++;
+    if (count == null) {
+      throw Exception('评论服务暂不可用');
+    }
+    return MusicCommentResponse(count: count, list: const []);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _FakePlayerController extends ChangeNotifier implements PlayerController {
   @override
   Song? currentSong;
+
+  /// 评论接口 fake（真实签名为 `MusicApi get api`）；
+  /// 未注入时访问抛错 → `_safeApi` 捕获后按无接口降级。
+  @override
+  MusicApi get api => commentApi ?? (throw Exception('api 未注入'));
+  MusicApi? commentApi;
   @override
   bool isPlaying = false;
   @override
@@ -201,6 +233,7 @@ Future<void> _pumpBar(
   _FakeAuthController? auth,
   VoidCallback? onOpenPlayerPage,
   VoidCallback? onCollapse,
+  ValueChanged<String>? onOpenComment,
   bool openPlayerPageEnabled = true,
   bool overlayDark = false,
 }) async {
@@ -216,6 +249,7 @@ Future<void> _pumpBar(
             player: player,
             auth: auth ?? _FakeAuthController(),
             onOpenPlayerPage: onOpenPlayerPage,
+            onOpenComment: onOpenComment,
             onCollapse: onCollapse,
             openPlayerPageEnabled: openPlayerPageEnabled,
             overlayDark: overlayDark,
@@ -684,6 +718,45 @@ void main() {
       expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
     });
 
+    testWidgets('有评论接口时拉取评论数并显示右上角角标', (tester) async {
+      final commentApi = _FakeCommentApi(count: 169);
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..commentApi = commentApi;
+      await _pumpBar(tester, player, onOpenComment: (_) {});
+
+      await tester.pumpAndSettle();
+      expect(commentApi.calls, 1);
+      expect(find.text('169'), findsOneWidget);
+    });
+
+    testWidgets('评论数拉取失败时静默降级为无角标气泡', (tester) async {
+      final commentApi = _FakeCommentApi(); // count 为空 → 模拟服务不可用
+      // 独立歌曲 id：避免命中上一条测试留下的评论数会话缓存
+      const song = Song(id: 'no-comment', title: '无声曲', artist: '某人', hash: 'h2');
+      final player = _FakePlayerController()
+        ..currentSong = song
+        ..commentApi = commentApi;
+      await _pumpBar(tester, player, onOpenComment: (_) {});
+
+      await tester.pumpAndSettle();
+      expect(find.text('169'), findsNothing);
+      // 气泡图标本体仍渲染（无缺口样式）
+      expect(find.byType(CommentBubbleIcon), findsOneWidget);
+      final bubble = tester.widget<CommentBubbleIcon>(
+        find.byType(CommentBubbleIcon),
+      );
+      expect(bubble.showBadgeGap, isFalse);
+    });
+
+    test('评论数 ≥ 万/亿按中文缩写展示', () {
+      expect(formatCommentCount(169), '169');
+      expect(formatCommentCount(9999), '9999');
+      expect(formatCommentCount(10000), '1万');
+      expect(formatCommentCount(16800), '1.7万');
+      expect(formatCommentCount(120000000), '1.2亿');
+    });
+
     testWidgets('无歌曲时展示"尚未播放"，更多操作按钮禁用', (tester) async {
       final player = _FakePlayerController()..currentSong = null;
       await _pumpBar(tester, player);
@@ -1009,18 +1082,15 @@ void main() {
         overlayDark: true,
       );
 
-      // 收起键：显式白色
-      expect(
-        tester
-            .widget<Icon>(
-              find.descendant(
-                of: find.byTooltip('收起播放页'),
-                matching: find.byType(Icon),
-              ),
-            )
-            .color,
-        Colors.white,
+      // 收起键：对角双直角图标（右上└ + 左下┐，QQ 音乐 PC 截图同款），白色前景
+      final collapseIcon = tester.widget<ExpandDetailIcon>(
+        find.descendant(
+          of: find.byTooltip('收起播放页'),
+          matching: find.byType(ExpandDetailIcon),
+        ),
       );
+      expect(collapseIcon.color, Colors.white);
+      expect(collapseIcon.size, 22);
 
       // 相邻控制键：同样拿到浅色前景，证明确保局部主题覆写已下发到子部件
       // （PlayModeButton / VolumePopoverButton 这些共用件只读 Theme）
