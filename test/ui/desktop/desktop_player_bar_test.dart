@@ -1043,15 +1043,26 @@ void main() {
 
       final collapseBtn = find.byTooltip('收起播放页');
       expect(collapseBtn, findsOneWidget);
-      // 最左：收起键在封面左侧
+      // 播放页内嵌态不渲染封面，收起键顶替封面位置（QQ 音乐 PC 式）
+      expect(find.byType(Artwork), findsNothing);
+      // 最左：收起键在歌曲信息（歌名跑马灯）左侧
       expect(
         tester.getTopLeft(collapseBtn).dx,
-        lessThan(tester.getTopLeft(find.byType(Artwork)).dx),
+        lessThan(tester.getTopLeft(find.byType(MarqueeText)).dx),
       );
 
       await tester.tap(collapseBtn);
       await tester.pump();
       expect(collapseCalls, 1);
+    });
+
+    testWidgets('主界面底栏（无 onCollapse）正常渲染封面，播放页内嵌则不渲染', (tester) async {
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+      expect(find.byType(Artwork), findsOneWidget);
+
+      await _pumpBar(tester, player, onCollapse: () {});
+      expect(find.byType(Artwork), findsNothing);
     });
 
     testWidgets('openPlayerPageEnabled=false 时点击底栏空白与歌曲信息都不再进入播放页', (tester) async {

@@ -38,6 +38,7 @@ const double kPlayerBarLeftWidthCompact = 232;
 /// 桌面底部播放栏：QQ 音乐 PC 式左/中/右三段布局，视觉沿用本项目主题。
 ///
 /// - 左：封面/曲目信息（悬停浮出放大图标，点击进播放页）+ 喜欢/评论/下载/更多（窄窗只留喜欢）。
+///   播放页内嵌时（[onCollapse] 非空）不展示封面，由最左「收起」键占据封面位置。
 /// - 中：上层播放控制（居中，含播放模式、上一首、播放/暂停、下一首、音量气泡）+ 下层进度条（Expanded 吃满剩余宽度）。
 /// - 右：音质 + 音效(?) + 桌面词(?) + 队列。
 ///
@@ -156,6 +157,8 @@ class DesktopPlayerBar extends StatelessWidget {
                         ] else
                           const SizedBox(width: 12),
                         // —— 左：歌曲信息 + 操作入口 ——
+                        // 播放页内嵌态（onCollapse != null）不渲染封面：
+                        // 页内已有封面大图，收起键顶替封面位置。
                         SizedBox(
                           width: leftWidth,
                           child: SongInfo(
@@ -168,6 +171,7 @@ class DesktopPlayerBar extends StatelessWidget {
                                 : null,
                             onOpenComment: onOpenComment,
                             onOpenArtist: onOpenArtist,
+                            showCover: onCollapse == null,
                           ),
                         ),
                         // —— 中：控制（上）+ 进度（下），Expanded 吃满剩余宽度 ——
@@ -373,6 +377,9 @@ class _CollapseButton extends StatelessWidget {
 ///
 /// [onTap] 为 null 表示当前场景不允许进播放页（如播放页底栏复用本栏时），
 /// 此时封面不浮出放大提示、点击无响应。
+///
+/// [showCover] 为 false 时整体不渲染封面（播放页内嵌态：封面已在页内
+/// 大图展示，底栏由最左「收起」键占据对应位置，与 QQ 音乐 PC 一致）。
 @visibleForTesting
 class SongInfo extends StatefulWidget {
   const SongInfo({
@@ -384,6 +391,7 @@ class SongInfo extends StatefulWidget {
     this.auth,
     this.onOpenComment,
     this.onOpenArtist,
+    this.showCover = true,
   });
 
   final Song? song;
@@ -393,6 +401,9 @@ class SongInfo extends StatefulWidget {
   final AuthController? auth;
   final ValueChanged<String>? onOpenComment;
   final ValueChanged<ArtistRef>? onOpenArtist;
+
+  /// 是否渲染 48x48 封面（含悬停放大提示）。播放页内嵌态传 false。
+  final bool showCover;
 
   @override
   State<SongInfo> createState() => _SongInfoState();
@@ -414,44 +425,51 @@ class _SongInfoState extends State<SongInfo> {
       builder: (context, constraints) {
         Widget content = Row(
           children: [
-            // 48x48 封面，悬停展示 ExpandDetailIcon 和 tooltip
-            MouseRegion(
-              onEnter: (_) {
-                if (mounted) setState(() => _coverHovered = true);
-              },
-              onExit: (_) {
-                if (mounted) setState(() => _coverHovered = false);
-              },
-              child: Tooltip(
-                message: openable ? '展开歌曲详情页' : '',
-                child: InkWell(
-                  onTap: openable ? widget.onTap : null,
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Stack(
-                      children: [
-                        Artwork(url: song?.coverUrl, size: 48, borderRadius: 8),
-                        if (_coverHovered && openable)
-                          Positioned.fill(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: .45),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Center(
-                                child: ExpandDetailIcon(size: 20),
+            // 48x48 封面，悬停展示 ExpandDetailIcon 和 tooltip；
+            // 播放页内嵌态不渲染，收起键顶替封面位置。
+            if (widget.showCover) ...[
+              MouseRegion(
+                onEnter: (_) {
+                  if (mounted) setState(() => _coverHovered = true);
+                },
+                onExit: (_) {
+                  if (mounted) setState(() => _coverHovered = false);
+                },
+                child: Tooltip(
+                  message: openable ? '展开歌曲详情页' : '',
+                  child: InkWell(
+                    onTap: openable ? widget.onTap : null,
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Stack(
+                        children: [
+                          Artwork(
+                            url: song?.coverUrl,
+                            size: 48,
+                            borderRadius: 8,
+                          ),
+                          if (_coverHovered && openable)
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: .45),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: ExpandDetailIcon(size: 20),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
+            ],
             // 右侧纵向居中 Column：
             // Row 1: MarqueeText（歌名粗体 onSurface - 歌手常规 onSurfaceVariant）
             // Row 2: 操作按钮行 [LikeButton, SizedBox(width: 8), CommentButton, SizedBox(width: 8), SongMoreButton]
