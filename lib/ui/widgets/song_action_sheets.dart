@@ -16,6 +16,7 @@ class SongSheetAction {
     required this.icon,
     required this.title,
     this.subtitle,
+    this.tooltip,
     this.danger = false,
     this.isGrid = false,
     this.selected = false,
@@ -29,6 +30,9 @@ class SongSheetAction {
   final IconData icon;
   final String title;
   final String? subtitle;
+
+  /// 悬浮完整说明（标题被截断或语义需展开时）。
+  final String? tooltip;
   final bool danger;
   final bool isGrid;
 
@@ -765,6 +769,7 @@ CascadeMenuNode _toCascadeNode(SongSheetAction action) {
     title: action.title,
     icon: action.icon,
     trailingLabel: action.subtitle,
+    tooltip: action.tooltip ?? action.title,
     selected: action.selected,
     children: action.hasSubmenu
         ? [for (final child in action.submenu!) _toCascadeNode(child)]

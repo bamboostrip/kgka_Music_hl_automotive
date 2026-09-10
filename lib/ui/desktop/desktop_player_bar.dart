@@ -525,8 +525,9 @@ List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
   return [
     SongSheetAction(
       icon: Icons.queue_play_next_rounded,
-      title: '播完这首再定时结束',
-      // 勾选表示开启；不写「开/关」副文案，避免与右侧时长项混淆。
+      // 短文案适配窄菜单；悬浮出完整语义。
+      title: '播完这首再停',
+      tooltip: '定时结束后，等当前歌曲播完再暂停',
       selected: finishSong,
       onTap: () => player.updateSleepTimerOption(!finishSong),
     ),

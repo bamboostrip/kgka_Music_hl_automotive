@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../design_tokens.dart';
+
 /// PC 锚定菜单与屏幕四周保留的最小边距（逻辑像素）。
 const double kAnchoredMenuMinScreenMargin = 8;
 
@@ -377,6 +379,7 @@ class CascadeMenuNode {
     required this.title,
     this.icon,
     this.trailingLabel,
+    this.tooltip,
     this.selected = false,
     this.children,
     this.onTap,
@@ -385,6 +388,9 @@ class CascadeMenuNode {
   final String title;
   final IconData? icon;
   final String? trailingLabel;
+
+  /// 悬浮提示；为空时用 [title]。
+  final String? tooltip;
   final bool selected;
   final List<CascadeMenuNode>? children;
   final VoidCallback? onTap;
@@ -402,7 +408,7 @@ Future<void> showDesktopCascadeMenu({
   required List<CascadeMenuNode> items,
   Widget? header,
   double width = 220,
-  double submenuWidth = 180,
+  double submenuWidth = 200,
 }) {
   return Navigator.of(context, rootNavigator: true).push(
     _DesktopCascadeMenuRoute(
@@ -861,10 +867,13 @@ class _CascadeMenuItemState extends State<_CascadeMenuItem> {
             setState(() => _hovering = false);
             widget.onLeave();
           },
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => widget.onTap(itemContext),
-            child: AnimatedContainer(
+          child: Tooltip(
+            message: widget.node.tooltip ?? widget.node.title,
+            waitDuration: AppDesktopTheme.tooltipWaitDuration,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.onTap(itemContext),
+              child: AnimatedContainer(
               duration: const Duration(milliseconds: 100),
               constraints: const BoxConstraints(minHeight: 36),
               margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
@@ -923,7 +932,8 @@ class _CascadeMenuItemState extends State<_CascadeMenuItem> {
               ),
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }

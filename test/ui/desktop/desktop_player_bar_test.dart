@@ -794,22 +794,23 @@ void main() {
       // 未到悬停延迟：二级尚未出现
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('0.5x'), findsNothing);
-      expect(find.text('倍速播放'), findsOneWidget);
+      // Tooltip 会再挂一份同文案 Text，故用 findsWidgets
+      expect(find.text('倍速播放'), findsWidgets);
 
       // 越过悬停延迟：先触发定时器重建，再等一帧完成二级测量定位
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
       expect(find.text('0.5x'), findsOneWidget);
-      expect(find.text('倍速播放'), findsOneWidget);
-      expect(find.text('添加到歌单'), findsOneWidget);
+      expect(find.text('倍速播放'), findsWidgets);
+      expect(find.text('添加到歌单'), findsWidgets);
 
       // 移到无二级的一级项：二级应立即收起，一级仍在
       await gesture.moveTo(tester.getCenter(find.text('添加到歌单')));
       await tester.pump();
       await tester.pump();
       expect(find.text('0.5x'), findsNothing);
-      expect(find.text('添加到歌单'), findsOneWidget);
-      expect(find.text('倍速播放'), findsOneWidget);
+      expect(find.text('添加到歌单'), findsWidgets);
+      expect(find.text('倍速播放'), findsWidgets);
     });
 
     testWidgets('点击更多菜单中的"定时播放"弹出二级菜单而非对话框', (tester) async {
@@ -825,13 +826,13 @@ void main() {
       await tester.tap(find.text('定时播放'));
       await tester.pumpAndSettle();
 
-      expect(find.text('播完这首再定时结束'), findsOneWidget);
+      expect(find.text('播完这首再停'), findsOneWidget);
       expect(find.text('15 分钟'), findsOneWidget);
       expect(find.text('30 分钟'), findsOneWidget);
       expect(find.byType(Dialog), findsNothing);
     });
 
-    testWidgets('定时二级里勾选「播完这首再定时结束」会记住偏好', (tester) async {
+    testWidgets('定时二级里勾选「播完这首再停」会记住偏好', (tester) async {
       debugDesktopFormFactorOverride = true;
       addTearDown(() => debugDesktopFormFactorOverride = null);
 
@@ -843,7 +844,7 @@ void main() {
       await tester.tap(find.text('定时播放'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('播完这首再定时结束'));
+      await tester.tap(find.text('播完这首再停'));
       await tester.pumpAndSettle();
 
       expect(player.updateSleepTimerOptionCalls, 1);
