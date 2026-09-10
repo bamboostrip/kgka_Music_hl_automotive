@@ -5,6 +5,7 @@
 
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'services/identify.dart';
 import 'services/local_media.dart';
 
 Future<Engine> createEngine({required String dataDir}) =>
@@ -58,6 +59,12 @@ Stream<ScanEvent> scanLocalMedia({required List<String> roots}) =>
 /// 取消在途的本地音乐扫描。
 Future<void> cancelLocalScan() =>
     RustLib.instance.api.crateApiCancelLocalScan();
+
+/// 听歌识曲:上传 8000Hz/16bit/单声道 PCM,按匹配度降序返回候选。
+Future<List<IdentifyCandidate>> identifyMusic({
+  required Engine engine,
+  required List<int> pcm,
+}) => RustLib.instance.api.crateApiIdentifyMusic(engine: engine, pcm: pcm);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Engine>>
 abstract class Engine implements RustOpaqueInterface {}

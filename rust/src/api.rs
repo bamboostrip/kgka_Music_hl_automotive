@@ -2,6 +2,7 @@ use crate::engine::KugouEngine;
 use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 
+use crate::services::identify::{self, IdentifyCandidate};
 use crate::services::local_media::{self, LocalSongEntry};
 use crate::services::loudness;
 
@@ -139,4 +140,18 @@ pub fn scan_local_media(roots: Vec<String>, events: StreamSink<ScanEvent>) -> Re
 /// 取消在途的本地音乐扫描。
 pub fn cancel_local_scan() {
     local_media::cancel_scan();
+}
+
+// ---- 听歌识曲 ----
+//
+// PCM 由平台采集层提供(桌面 = 本文件 identify_capture_snapshot,
+// Android = 原生 AudioRecord 通道),识别统一走这里。
+
+/// 听歌识曲:上传 8000Hz/16bit/单声道 PCM,按匹配度降序返回候选。
+pub async fn identify_music(
+    engine: &mut Engine,
+    pcm: Vec<u8>,
+) -> Result<Vec<IdentifyCandidate>, String> {
+    let v = engine.0.identify(pcm).await.map_err(|e| e.to_string())?;
+    Ok(identify::parse_candidates(&v))
 }
