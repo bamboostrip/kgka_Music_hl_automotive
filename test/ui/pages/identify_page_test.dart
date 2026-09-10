@@ -81,11 +81,14 @@ void main() {
     expect(find.text('晴天'), findsOneWidget);
     // 点击结果 → playSong 被调用
     await tester.tap(find.text('晴天'));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300)); // 返回过渡走完
     expect(player.played.single.hash, 'abc123');
-    // 后端启动过一次,正常完成路径不走 cancel
+    // 再推一秒让页面完全出树(pop 过渡结束 → 移除路由 → dispose):关页即停
+    // 采集——桌面快照只取不停流,此断言即回归守卫。
+    await tester.pump(const Duration(seconds: 1));
+    // 后端启动过一次,关页后 cancel 恰好一次
     expect(backend.startCalls, 1);
-    expect(backend.cancelCalls, 0);
+    expect(backend.cancelCalls, 1);
   });
 
   testWidgets('识别不到结果显示空态文案', (tester) async {

@@ -120,10 +120,9 @@ class _IdentifyPageState extends State<IdentifyPage>
     _autoSubmitTimer?.cancel();
     _elapsedTimer?.cancel();
     _pulse.dispose();
-    // 关页时仍在聆听:丢弃采集(cancel 失败无处展示,fire-and-forget)。
-    if (_phase == _IdentifyPhase.listening) {
-      unawaited(_backend.cancel());
-    }
+    // 关页一律停采集:桌面 stopAndCollect 只取快照不停流,matching/done/empty
+    // 态离开页面也必须 cancel(两端 cancel 均幂等安全,fire-and-forget)。
+    unawaited(_backend.cancel());
     super.dispose();
   }
 
@@ -207,6 +206,9 @@ class _IdentifyPageState extends State<IdentifyPage>
   /// 桌面切源:切换即 cancel 旧源采集 → 以新源重新 start(重新计时)。
   Future<void> _switchSource(_IdentifySource source) async {
     if (_source == source || _phase != _IdentifyPhase.listening) return;
+    // 先停旧源定时器:await cancel 挂起期间旧源定时器可能到期触发提交(竞态)。
+    _autoSubmitTimer?.cancel();
+    _elapsedTimer?.cancel();
     setState(() => _source = source);
     await _backend.cancel();
     if (mounted && _phase == _IdentifyPhase.listening) _beginListening();
@@ -229,10 +231,8 @@ class _IdentifyPageState extends State<IdentifyPage>
           tooltip: '返回',
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () {
-            // 关页前仍在聆听先丢弃采集(dispose 兜底也会 cancel,双保险)。
-            if (_phase == _IdentifyPhase.listening) {
-              unawaited(_backend.cancel());
-            }
+            // 关页/返回一律停采集,dispose 再兜底。
+            unawaited(_backend.cancel());
             Navigator.of(context).maybePop();
           },
         ),
