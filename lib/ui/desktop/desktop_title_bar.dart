@@ -98,10 +98,10 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
           // 左侧品牌区（与侧栏宽度 208 对齐）
           SizedBox(
             width: 208,
-            child: DragToMoveArea(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: widget.onChromeTap,
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) => widget.onChromeTap?.call(),
+              child: DragToMoveArea(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
@@ -225,6 +225,10 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
 }
 
 /// 标题栏空白拖拽区：填充剩余空间保证可拖动，双击切换最大化/还原。
+///
+/// [onTap] 用 PointerDown 即刻触发（而非 GestureDetector.onTap）：
+/// 手势竞技场会把 tap 推迟到与 DragToMoveArea 消歧之后，表现为
+/// 「点顶栏收起搜索浮层卡一下」；pointer down 无延迟。
 class _TitleBarDragSpacer extends StatelessWidget {
   const _TitleBarDragSpacer({super.key, this.onTap});
 
@@ -242,12 +246,15 @@ class _TitleBarDragSpacer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DragToMoveArea(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: onTap,
-        onDoubleTap: _toggleMaximize,
-        child: const SizedBox.expand(),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => onTap?.call(),
+      child: DragToMoveArea(
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onDoubleTap: _toggleMaximize,
+          child: const SizedBox.expand(),
+        ),
       ),
     );
   }
@@ -384,6 +391,10 @@ class _TitleBarSearchFieldState extends State<_TitleBarSearchField> {
                       ),
                       decoration: InputDecoration(
                         isDense: true,
+                        // 全局 InputDecorationTheme 会填白底，盖住胶囊灰底，
+                        // 必须显式关掉 filled。
+                        filled: false,
+                        fillColor: Colors.transparent,
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,

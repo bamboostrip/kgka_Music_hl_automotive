@@ -90,6 +90,9 @@ class _DesktopShellState extends State<DesktopShell> {
   final _searchFocusNode = FocusNode();
   var _searchPanelOpen = false;
 
+  /// 内容区导航栈上是否已有搜索结果页（用于连搜时 replace 而非叠层）。
+  var _searchPageOpen = false;
+
   /// 侧栏条目点按：单击语义不变（切换分区/回内容根）；窗口时长内连点同一
   /// 条目视为双击当前分区，触发对应页面刷新。检测用手动计时窗口而非
   /// InkWell.onDoubleTap——否则 Flutter 为消歧会把每次单击推迟 ~300ms
@@ -219,9 +222,19 @@ class _DesktopShellState extends State<DesktopShell> {
       _pushContent(context, page);
       return;
     }
-    // 重复搜索替换栈上已有搜索页，避免连搜堆多层返回。
-    inner.popUntil((route) => route.isFirst);
-    inner.push(MaterialPageRoute<void>(builder: (_) => page));
+    // 不 popUntil 根：保留用户原先的内容栈（如歌单详情），返回即回上一页。
+    // 仅当栈顶已是搜索页时 replace，避免连搜叠多层。
+    final route = MaterialPageRoute<void>(builder: (_) => page);
+    final Future<void> popped;
+    if (_searchPageOpen && inner.canPop()) {
+      popped = inner.pushReplacement(route);
+    } else {
+      popped = inner.push(route);
+    }
+    _searchPageOpen = true;
+    popped.whenComplete(() {
+      if (mounted) _searchPageOpen = false;
+    });
   }
 
   void _openPlayerPage(BuildContext context) {
