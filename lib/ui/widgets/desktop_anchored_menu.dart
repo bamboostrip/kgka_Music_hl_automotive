@@ -382,6 +382,8 @@ class CascadeMenuNode {
     this.tooltip,
     this.selected = false,
     this.children,
+    this.childrenBuilder,
+    this.closeOnTap = true,
     this.onTap,
   });
 
@@ -392,10 +394,23 @@ class CascadeMenuNode {
   /// 悬浮提示；为空时用 [title]。
   final String? tooltip;
   final bool selected;
+
+  /// 静态二级；与 [childrenBuilder] 二选一。
   final List<CascadeMenuNode>? children;
+
+  /// 动态二级：每次展开/刷新时重新求值（开关类选项改完可不关菜单）。
+  final List<CascadeMenuNode> Function()? childrenBuilder;
+
+  /// 点击后是否关闭整组菜单。开关/单选偏好用 false。
+  final bool closeOnTap;
+
   final VoidCallback? onTap;
 
-  bool get hasSubmenu => children != null && children!.isNotEmpty;
+  bool get hasSubmenu =>
+      (children?.isNotEmpty ?? false) || childrenBuilder != null;
+
+  List<CascadeMenuNode> resolveChildren() =>
+      childrenBuilder?.call() ?? children ?? const <CascadeMenuNode>[];
 }
 
 /// 弹出 PC 级联菜单（QQ 音乐式：一级常驻，悬停/点击展开二级）。
@@ -665,6 +680,11 @@ class _DesktopCascadeMenuHostState extends State<_DesktopCascadeMenuHost> {
                   _openSubmenuImmediately(i, _itemGlobalRect(itemContext));
                   return;
                 }
+                if (!node.closeOnTap) {
+                  node.onTap?.call();
+                  setState(() {});
+                  return;
+                }
                 _closeAllAndRun(node.onTap);
               },
             ),
@@ -680,6 +700,7 @@ class _DesktopCascadeMenuHostState extends State<_DesktopCascadeMenuHost> {
 
     Widget? submenu;
     if (openNode?.hasSubmenu == true) {
+      final subItems = openNode!.resolveChildren();
       submenu = KeyedSubtree(
         key: _submenuMeasureKey,
         child: MouseRegion(
@@ -694,13 +715,21 @@ class _DesktopCascadeMenuHostState extends State<_DesktopCascadeMenuHost> {
           child: _CascadeMenuPanel(
             width: widget.submenuWidth,
             children: [
-              for (final child in openNode!.children!)
+              for (final child in subItems)
                 _CascadeMenuItem(
                   node: child,
                   expanded: false,
                   onHover: (_) {},
                   onLeave: () {},
-                  onTap: (_) => _closeAllAndRun(child.onTap),
+                  onTap: (_) {
+                    child.onTap?.call();
+                    if (child.closeOnTap) {
+                      Navigator.of(context).pop();
+                    } else {
+                      // 开关/单选：留在菜单内，立刻刷新勾选态。
+                      setState(() {});
+                    }
+                  },
                 ),
             ],
           ),

@@ -20,10 +20,14 @@ class SongSheetAction {
     this.danger = false,
     this.isGrid = false,
     this.selected = false,
+    this.closeOnTap = true,
     this.onTap,
     this.submenu,
+    this.submenuBuilder,
   }) : assert(
-         onTap != null || submenu != null,
+         onTap != null ||
+             submenu != null ||
+             submenuBuilder != null,
          'SongSheetAction 需要 onTap 或 submenu',
        );
 
@@ -39,6 +43,9 @@ class SongSheetAction {
   /// 二级菜单叶子项是否选中（显示勾）。
   final bool selected;
 
+  /// 点击后是否关闭菜单。开关/单选偏好用 false。
+  final bool closeOnTap;
+
   /// 叶子动作。有 [submenu] 时桌面端忽略本字段（点父项展开二级）。
   final FutureOr<void> Function()? onTap;
 
@@ -46,7 +53,14 @@ class SongSheetAction {
   /// 移动端不使用二级，仍走 [onTap]。
   final List<SongSheetAction>? submenu;
 
-  bool get hasSubmenu => submenu != null && submenu!.isNotEmpty;
+  /// 动态二级：每次展开时重新求值（状态会变的开关项）。
+  final List<SongSheetAction> Function()? submenuBuilder;
+
+  bool get hasSubmenu =>
+      (submenu != null && submenu!.isNotEmpty) || submenuBuilder != null;
+
+  List<SongSheetAction> resolveSubmenu() =>
+      submenuBuilder?.call() ?? submenu ?? const <SongSheetAction>[];
 }
 
 Future<void> showSongActionSheet({
@@ -771,8 +785,9 @@ CascadeMenuNode _toCascadeNode(SongSheetAction action) {
     trailingLabel: action.subtitle,
     tooltip: action.tooltip ?? action.title,
     selected: action.selected,
-    children: action.hasSubmenu
-        ? [for (final child in action.submenu!) _toCascadeNode(child)]
+    closeOnTap: action.closeOnTap,
+    childrenBuilder: action.hasSubmenu
+        ? () => [for (final child in action.resolveSubmenu()) _toCascadeNode(child)]
         : null,
     onTap: action.onTap == null ? null : () => action.onTap!(),
   );

@@ -501,6 +501,8 @@ List<SongSheetAction> _speedSubmenu(PlayerController player) {
 }
 
 /// 桌面级联二级：定时选项。
+///
+/// 语义：设 90 分钟后，到点是立刻暂停，还是等「当时正在播的那首」播完再停。
 List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
   final finishSong =
       player.isSleepFinishCurrentSong || player.sleepFinishCurrentSongOption;
@@ -510,7 +512,6 @@ List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
     icon: Icons.schedule_rounded,
     title: label,
     onTap: () {
-      // 调用时再读偏好，避免菜单构建时捕获过期的 finishSong。
       final finish =
           player.isSleepFinishCurrentSong ||
           player.sleepFinishCurrentSongOption;
@@ -523,13 +524,22 @@ List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
   );
 
   return [
+    // 互斥单选：菜单上直接标出到点行为，避免用户猜。
     SongSheetAction(
-      icon: Icons.queue_play_next_rounded,
-      // 短文案适配窄菜单；悬浮出完整语义。
-      title: '播完这首再停',
-      tooltip: '定时结束后，等当前歌曲播完再暂停',
+      icon: Icons.pause_circle_outline_rounded,
+      title: '到点立即暂停',
+      tooltip: '定时一到就暂停，不等当前歌曲播完',
+      selected: !finishSong,
+      closeOnTap: false,
+      onTap: () => player.updateSleepTimerOption(false),
+    ),
+    SongSheetAction(
+      icon: Icons.lyrics_outlined,
+      title: '到点后听完这首',
+      tooltip: '例如定时 90 分钟：到点后等当时正在播的这首播完，再暂停',
       selected: finishSong,
-      onTap: () => player.updateSleepTimerOption(!finishSong),
+      closeOnTap: false,
+      onTap: () => player.updateSleepTimerOption(true),
     ),
     durationAction('15 分钟', const Duration(minutes: 15)),
     durationAction('30 分钟', const Duration(minutes: 30)),
@@ -744,7 +754,8 @@ class _SongMoreButtonState extends State<SongMoreButton> {
             context: buttonContext,
             player: p,
           ),
-          submenu: _sleepTimerSubmenu(p),
+          // 每次展开重新求值，保证单选勾选态最新。
+          submenuBuilder: () => _sleepTimerSubmenu(p),
         ),
       if (ctrl != null && p != null)
         SongSheetAction(
