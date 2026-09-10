@@ -22,6 +22,7 @@ class DesktopTitleBar extends StatefulWidget {
     this.onSubmitted,
     this.onFocusChanged,
     this.onEscape,
+    this.onChromeTap,
   });
 
   /// 保留参数兼容旧调用点：播放信息已由底部播放栏展示，标题栏不再重复显示。
@@ -42,6 +43,9 @@ class DesktopTitleBar extends StatefulWidget {
 
   /// 搜索框内按下 Esc（收起浮层/清空焦点）。
   final VoidCallback? onEscape;
+
+  /// 点击标题栏非搜索区（品牌/拖拽区/窗口按钮）时回调，用于收起搜索浮层。
+  final VoidCallback? onChromeTap;
 
   @override
   State<DesktopTitleBar> createState() => _DesktopTitleBarState();
@@ -95,63 +99,73 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
           SizedBox(
             width: 208,
             child: DragToMoveArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.asset(
-                        'lib/assets/logo.png',
-                        width: 24,
-                        height: 24,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: widget.onChromeTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.asset(
+                          'lib/assets/logo.png',
+                          width: 24,
+                          height: 24,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '时音',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Text(
+                        '时音',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
 
-          // 中间：搜索胶囊居中（QQ 音乐 PC 式），两侧弹簧拖拽区保留窗口拖动。
+          // 中间：搜索胶囊居中（QQ 音乐 PC 式）。固定 420 宽，两侧拖拽区
+          // 贴到胶囊边缘——若用 Flexible 撑开，胶囊左右会留下不可拖的死区。
           Expanded(
             child: Row(
               children: [
-                Expanded(child: _TitleBarDragSpacer(key: const ValueKey('desktop_title_bar_drag_left'))),
-                if (widget.onSearch != null ||
-                    widget.controller != null)
-                  Flexible(
-                    flex: 2,
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        child: _TitleBarSearchField(
-                          onTapLegacy: widget.onSearch,
-                          controller: widget.controller,
-                          focusNode: widget.focusNode,
-                          onQueryChanged: widget.onQueryChanged,
-                          onSubmitted: widget.onSubmitted,
-                          onFocusChanged: widget.onFocusChanged,
-                          onEscape: widget.onEscape,
-                        ),
-                      ),
+                Expanded(
+                  child: _TitleBarDragSpacer(
+                    key: const ValueKey('desktop_title_bar_drag_left'),
+                    onTap: widget.onChromeTap,
+                  ),
+                ),
+                if (widget.onSearch != null || widget.controller != null)
+                  SizedBox(
+                    width: 420,
+                    child: _TitleBarSearchField(
+                      onTapLegacy: widget.onSearch,
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      onQueryChanged: widget.onQueryChanged,
+                      onSubmitted: widget.onSubmitted,
+                      onFocusChanged: widget.onFocusChanged,
+                      onEscape: widget.onEscape,
                     ),
                   )
                 else
-                  const Expanded(
+                  Expanded(
                     child: _TitleBarDragSpacer(
-                      key: ValueKey('desktop_title_bar_middle'),
+                      key: const ValueKey('desktop_title_bar_middle'),
+                      onTap: widget.onChromeTap,
                     ),
                   ),
-                Expanded(child: _TitleBarDragSpacer(key: const ValueKey('desktop_title_bar_drag_right'))),
+                Expanded(
+                  child: _TitleBarDragSpacer(
+                    key: const ValueKey('desktop_title_bar_drag_right'),
+                    onTap: widget.onChromeTap,
+                  ),
+                ),
               ],
             ),
           ),
@@ -167,6 +181,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                 tooltip: '最小化',
                 height: 52,
                 onTap: () async {
+                  widget.onChromeTap?.call();
                   try {
                     await windowManager.minimize();
                   } catch (_) {}
@@ -179,6 +194,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                 tooltip: _isMaximized ? '还原' : '最大化',
                 height: 52,
                 onTap: () async {
+                  widget.onChromeTap?.call();
                   try {
                     if (await windowManager.isMaximized()) {
                       await windowManager.unmaximize();
@@ -210,7 +226,9 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
 
 /// 标题栏空白拖拽区：填充剩余空间保证可拖动，双击切换最大化/还原。
 class _TitleBarDragSpacer extends StatelessWidget {
-  const _TitleBarDragSpacer({super.key});
+  const _TitleBarDragSpacer({super.key, this.onTap});
+
+  final VoidCallback? onTap;
 
   Future<void> _toggleMaximize() async {
     try {
@@ -227,6 +245,7 @@ class _TitleBarDragSpacer extends StatelessWidget {
     return DragToMoveArea(
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
+        onTap: onTap,
         onDoubleTap: _toggleMaximize,
         child: const SizedBox.expand(),
       ),
@@ -300,32 +319,35 @@ class _TitleBarSearchFieldState extends State<_TitleBarSearchField> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // 聚焦描边用中性深灰而非 primary：金色主题下 primary 边框会像
+    // 「黄框」，与 QQ/网易云的灰底搜索胶囊观感不符。
     final borderColor = _focused
-        ? colorScheme.primary.withValues(alpha: .75)
-        : colorScheme.outlineVariant
-            .withValues(alpha: isDark ? .85 : .45);
-    final bg = _hovering
-        ? colorScheme.surfaceContainerHigh
-        : (isDark
-            ? colorScheme.surfaceContainerHighest
-            : const Color(0xFFF3F4F6));
+        ? colorScheme.onSurface.withValues(alpha: isDark ? .55 : .38)
+        : colorScheme.outlineVariant.withValues(alpha: isDark ? .55 : .40);
+    // 浅色：固定浅灰 #F3F4F6（与首页搜索胶囊一致）；深色用中性容器色。
+    final bg = isDark
+        ? colorScheme.surfaceContainerHighest
+        : (_hovering ? const Color(0xFFECEEF1) : const Color(0xFFF3F4F6));
     final hintColor = colorScheme.onSurfaceVariant.withValues(
       alpha: isDark ? .7 : .6,
     );
 
-    return MouseRegion(
+    return SizedBox(
+      width: double.infinity,
+      child: MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         height: 34,
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(17),
           border: Border.all(
             color: borderColor,
-            width: _focused ? 1.5 : 1,
+            width: 1,
           ),
         ),
         child: Row(
@@ -418,6 +440,7 @@ class _TitleBarSearchFieldState extends State<_TitleBarSearchField> {
           ],
         ),
       ),
+    ),
     );
   }
 }

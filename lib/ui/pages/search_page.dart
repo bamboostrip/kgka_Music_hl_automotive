@@ -474,7 +474,7 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
 
-    // 桌面嵌入模式：顶栏搜索框负责输入，本页只展示关键词标题与结果。
+    // 桌面嵌入模式：顶栏搜索框负责输入，本页只展示返回、关键词与结果。
     if (widget.embedded) {
       final query = _controller.text.trim();
       return Scaffold(
@@ -484,12 +484,24 @@ class _SearchPageState extends State<SearchPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Text(
-                  query.isEmpty ? '搜索' : '搜索“$query”',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
+                padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: '返回',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                    ),
+                    Expanded(
+                      child: Text(
+                        query.isEmpty ? '搜索' : '搜索“$query”',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
+                    ),
+                  ],
                 ),
               ),
               Expanded(

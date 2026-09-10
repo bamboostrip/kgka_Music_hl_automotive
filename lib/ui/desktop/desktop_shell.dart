@@ -318,6 +318,7 @@ class _DesktopShellState extends State<DesktopShell> {
                     },
                     onSubmitted: _submitSearch,
                     onEscape: () => _closeSearchPanel(unfocus: true),
+                    onChromeTap: () => _closeSearchPanel(unfocus: true),
                   ),
                   const Divider(height: 1, thickness: 1),
                   Expanded(
