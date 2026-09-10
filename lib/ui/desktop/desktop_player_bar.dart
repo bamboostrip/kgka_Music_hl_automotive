@@ -480,6 +480,67 @@ String? _safeSleepTimerSubtitle(PlayerController player) {
   }
 }
 
+/// 桌面级联二级：倍速档位。
+List<SongSheetAction> _speedSubmenu(PlayerController player) {
+  final current = snapToPlaybackSpeed(player.playbackSpeed);
+  return [
+    for (final step in kPlaybackSpeedSteps)
+      SongSheetAction(
+        icon: Icons.speed_rounded,
+        title: formatPlaybackSpeed(step),
+        selected: step == current,
+        onTap: () => player.setPlaybackSpeed(step),
+      ),
+    if (current != 1.0)
+      SongSheetAction(
+        icon: Icons.restart_alt_rounded,
+        title: '恢复默认',
+        onTap: () => player.setPlaybackSpeed(1.0),
+      ),
+  ];
+}
+
+/// 桌面级联二级：定时选项。
+List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
+  final finishSong =
+      player.isSleepFinishCurrentSong || player.sleepFinishCurrentSongOption;
+  final isActive = player.isSleepTimerActive || player.isSleepFinishCurrentSong;
+
+  SongSheetAction durationAction(String label, Duration d) => SongSheetAction(
+    icon: Icons.schedule_rounded,
+    title: label,
+    onTap: () {
+      if (finishSong) {
+        player.setSleepTimerFinishSong(d);
+      } else {
+        player.setSleepTimer(d);
+      }
+    },
+  );
+
+  return [
+    SongSheetAction(
+      icon: Icons.queue_play_next_rounded,
+      title: '播完当前歌曲再停止',
+      subtitle: finishSong ? '开' : '关',
+      selected: finishSong,
+      onTap: () => player.updateSleepTimerOption(!finishSong),
+    ),
+    durationAction('15 分钟', const Duration(minutes: 15)),
+    durationAction('30 分钟', const Duration(minutes: 30)),
+    durationAction('45 分钟', const Duration(minutes: 45)),
+    durationAction('60 分钟', const Duration(minutes: 60)),
+    durationAction('90 分钟', const Duration(minutes: 90)),
+    if (isActive)
+      SongSheetAction(
+        icon: Icons.timer_off_outlined,
+        title: '关闭定时',
+        danger: true,
+        onTap: player.cancelSleepTimer,
+      ),
+  ];
+}
+
 class _LikeButton extends StatelessWidget {
   const _LikeButton({
     required this.auth,
@@ -662,22 +723,23 @@ class _SongMoreButtonState extends State<SongMoreButton> {
           icon: Icons.speed_rounded,
           title: '倍速播放',
           subtitle: _safePlaybackSpeedLabel(p),
-          onTap: () => showDesktopPlaybackSpeedMenu(
+          // 桌面走二级菜单；移动端仍弹底部面板。
+          onTap: () => showPlaybackSpeedSheet(
             context: buttonContext,
-            anchor: menuAnchor,
             player: p,
           ),
+          submenu: _speedSubmenu(p),
         ),
       if (p != null)
         SongSheetAction(
           icon: Icons.bedtime_rounded,
           title: '定时播放',
           subtitle: _safeSleepTimerSubtitle(p),
-          onTap: () => showDesktopSleepTimerMenu(
+          onTap: () => showSleepTimerSheet(
             context: buttonContext,
-            anchor: menuAnchor,
             player: p,
           ),
+          submenu: _sleepTimerSubmenu(p),
         ),
       if (ctrl != null && p != null)
         SongSheetAction(

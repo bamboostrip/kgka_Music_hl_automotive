@@ -43,6 +43,32 @@ void main() {
       expect(rect.top, 100);
     });
 
+    test('placeCascadeSubmenu：默认贴父项右侧顶对齐', () {
+      final rect = placeCascadeSubmenu(
+        parentItemTopRight: const Offset(300, 200),
+        parentItemBottomLeft: const Offset(80, 236),
+        submenuSize: const Size(180, 220),
+        primarySize: const Size(220, 400),
+        primaryTopLeft: const Offset(80, 40),
+        screenSize: const Size(1280, 800),
+      );
+      expect(rect.left, 304); // gap 4
+      expect(rect.top, 200);
+    });
+
+    test('placeCascadeSubmenu：右侧放不下时翻到一级左侧', () {
+      final rect = placeCascadeSubmenu(
+        parentItemTopRight: const Offset(1180, 200),
+        parentItemBottomLeft: const Offset(960, 236),
+        submenuSize: const Size(180, 220),
+        primarySize: const Size(220, 400),
+        primaryTopLeft: const Offset(960, 40),
+        screenSize: const Size(1280, 800),
+      );
+      expect(rect.right, lessThanOrEqualTo(1280 - 8));
+      expect(rect.left, 960 - 4 - 180);
+    });
+
     test('右下角双溢出：同时向左向上翻转', () {
       final rect = placeAnchoredMenu(
         anchor: const Offset(1200, 700),

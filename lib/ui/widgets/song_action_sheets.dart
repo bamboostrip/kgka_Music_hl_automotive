@@ -18,15 +18,31 @@ class SongSheetAction {
     this.subtitle,
     this.danger = false,
     this.isGrid = false,
-    required this.onTap,
-  });
+    this.selected = false,
+    this.onTap,
+    this.submenu,
+  }) : assert(
+         onTap != null || submenu != null,
+         'SongSheetAction 需要 onTap 或 submenu',
+       );
 
   final IconData icon;
   final String title;
   final String? subtitle;
   final bool danger;
   final bool isGrid;
-  final FutureOr<void> Function() onTap;
+
+  /// 二级菜单叶子项是否选中（显示勾）。
+  final bool selected;
+
+  /// 叶子动作。有 [submenu] 时桌面端忽略本字段（点父项展开二级）。
+  final FutureOr<void> Function()? onTap;
+
+  /// 桌面端二级菜单；非空时父项右侧显示 `>`，悬停/点击展开。
+  /// 移动端不使用二级，仍走 [onTap]。
+  final List<SongSheetAction>? submenu;
+
+  bool get hasSubmenu => submenu != null && submenu!.isNotEmpty;
 }
 
 Future<void> showSongActionSheet({
@@ -208,13 +224,15 @@ class _GridItem extends StatelessWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        Navigator.of(context).pop();
-        Future<void>.delayed(
-          const Duration(milliseconds: 120),
-          () => action.onTap(),
-        );
-      },
+      onTap: action.onTap == null
+          ? null
+          : () {
+              Navigator.of(context).pop();
+              Future<void>.delayed(
+                const Duration(milliseconds: 120),
+                () => action.onTap!(),
+              );
+            },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -237,22 +255,22 @@ class _GridItem extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: color,
               fontWeight: FontWeight.w600,
-                fontSize: 12,
+              fontSize: 12,
+            ),
+          ),
+          if (action.subtitle != null)
+            Text(
+              action.subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 10,
               ),
             ),
-            if (action.subtitle != null)
-              Text(
-                action.subtitle!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontSize: 10,
-                ),
-              ),
-          ],
-        ),
+        ],
+      ),
     );
   }
 }
@@ -561,13 +579,15 @@ class _SongActionTile extends StatelessWidget {
       leading: Icon(action.icon, color: color),
       title: Text(action.title, style: TextStyle(color: color)),
       subtitle: action.subtitle == null ? null : Text(action.subtitle!),
-      onTap: () {
-        Navigator.of(context).pop();
-        Future<void>.delayed(
-          const Duration(milliseconds: 120),
-          () => action.onTap(),
-        );
-      },
+      onTap: action.onTap == null
+          ? null
+          : () {
+              Navigator.of(context).pop();
+              Future<void>.delayed(
+                const Duration(milliseconds: 120),
+                () => action.onTap!(),
+              );
+            },
     );
   }
 }
@@ -661,13 +681,15 @@ class _CarGridActionItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          Navigator.of(context).pop();
-          Future<void>.delayed(
-            const Duration(milliseconds: 120),
-            () => action.onTap(),
-          );
-        },
+        onTap: action.onTap == null
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                Future<void>.delayed(
+                  const Duration(milliseconds: 120),
+                  () => action.onTap!(),
+                );
+              },
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
           child: Column(
@@ -715,16 +737,13 @@ Future<void> _showDesktopSongActionMenu({
   // 屏幕边缘自动翻转；无坐标或坐标无效（首帧未布局时 anchorBelow 回
   // Offset.zero）退回原有居中弹窗兜底，避免菜单飞到左上角。
   if (anchor != null && anchor != Offset.zero && anchor.isFinite) {
-    return showDesktopAnchoredMenu<void>(
+    return showDesktopCascadeMenu(
       context: context,
       anchor: anchor,
-      builder: (menuContext) {
-        return _DesktopSongActionMenuPanel(
-          song: song,
-          actions: actions,
-          width: 220,
-        );
-      },
+      header: _DesktopSongMenuHeader(song: song),
+      width: 220,
+      submenuWidth: 180,
+      items: [for (final action in actions) _toCascadeNode(action)],
     );
   }
 
@@ -739,6 +758,70 @@ Future<void> _showDesktopSongActionMenu({
       );
     },
   );
+}
+
+CascadeMenuNode _toCascadeNode(SongSheetAction action) {
+  return CascadeMenuNode(
+    title: action.title,
+    icon: action.icon,
+    trailingLabel: action.subtitle,
+    selected: action.selected,
+    children: action.hasSubmenu
+        ? [for (final child in action.submenu!) _toCascadeNode(child)]
+        : null,
+    onTap: action.onTap == null ? null : () => action.onTap!(),
+  );
+}
+
+/// 级联菜单顶部的紧凑歌曲信息。
+class _DesktopSongMenuHeader extends StatelessWidget {
+  const _DesktopSongMenuHeader({required this.song});
+
+  final Song song;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: Row(
+        children: [
+          Artwork(url: song.coverUrl, size: 32, borderRadius: 6),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  song.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  song.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DesktopSongActionMenuDialog extends StatelessWidget {
@@ -915,13 +998,15 @@ class _DesktopSongActionItemState extends State<_DesktopSongActionItem> {
         label: widget.action.title,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () {
-            Navigator.of(context).pop();
-            Future<void>.delayed(
-              const Duration(milliseconds: 100),
-              () => widget.action.onTap(),
-            );
-          },
+          onTap: widget.action.onTap == null
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  Future<void>.delayed(
+                    const Duration(milliseconds: 100),
+                    () => widget.action.onTap!(),
+                  );
+                },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             // 最小高度而非固定高度：系统字体缩放（make text bigger）

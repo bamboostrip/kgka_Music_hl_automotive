@@ -759,11 +759,41 @@ void main() {
       await tester.tap(find.text('倍速播放'));
       await tester.pumpAndSettle();
 
-      // 二级菜单列出档位；不出现 Dialog
+      // 级联：一级仍可见，右侧二级列出档位；不出现 Dialog
+      expect(find.text('倍速播放'), findsWidgets);
       expect(find.text('0.5x'), findsOneWidget);
       expect(find.text('1x'), findsOneWidget);
       expect(find.text('2x'), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsWidgets);
       expect(find.byType(Dialog), findsNothing);
+    });
+
+    testWidgets('悬停"倍速播放"延时后展开二级，一级菜单保持可见', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+
+      await gesture.moveTo(tester.getCenter(find.text('倍速播放')));
+      // 未到悬停延迟：二级尚未出现
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('0.5x'), findsNothing);
+      expect(find.text('倍速播放'), findsOneWidget);
+
+      // 越过悬停延迟：先触发定时器重建，再等一帧完成二级测量定位
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(find.text('0.5x'), findsOneWidget);
+      expect(find.text('倍速播放'), findsOneWidget);
+      expect(find.text('添加到歌单'), findsOneWidget);
     });
 
     testWidgets('点击更多菜单中的"定时播放"弹出二级菜单而非对话框', (tester) async {

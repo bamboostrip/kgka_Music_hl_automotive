@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,10 +10,13 @@ const double kAnchoredMenuMinScreenMargin = 8;
 /// PC 面板类锚定弹层（如播放队列面板）与屏幕四周保留的最小边距（逻辑像素）。
 const double kAnchoredPanelMinScreenMargin = 12;
 
+/// 悬停到父项后弹出二级菜单的延迟（对齐 Windows/QQ 音乐节奏）。
+const Duration kCascadeMenuHoverDelay = Duration(milliseconds: 320);
+
+/// 从父项移出、尚未进入二级菜单时的关闭宽限，避免移动路径抖动关掉。
+const Duration kCascadeMenuLeaveGrace = Duration(milliseconds: 180);
+
 /// 锚定弹层定位函数：输入锚点、内容实测尺寸与窗口尺寸，返回内容最终矩形。
-///
-/// `placeAnchoredMenu` 与 `placeAnchoredPanelAbove` 均符合此签名，
-/// 供 [DesktopAnchoredPopupRoute] 首帧测量后调用。
 typedef AnchoredPlacement = Rect Function(
   Offset anchor,
   Size menuSize,
@@ -20,13 +24,6 @@ typedef AnchoredPlacement = Rect Function(
 );
 
 /// 计算锚定菜单在屏幕（窗口）内的最终位置。
-///
-/// 纯函数，便于单测：
-/// - [anchor] 是菜单左上角的参考点（全局/窗口坐标，如右键位置或 `...` 按钮底边中点）；
-/// - 默认菜单从锚点向右下展开；
-/// - 向右溢出屏幕时向左翻转（菜单右缘贴锚点左侧），向下溢出时向上翻转；
-/// - 翻转与钳制保证菜单整体与屏幕四周保留 ≥ [margin] 的边距；
-/// - 菜单本身比屏幕还大时，先收缩到可用区域再定位（左上角贴边距）。
 Rect placeAnchoredMenu({
   required Offset anchor,
   required Size menuSize,
@@ -42,7 +39,6 @@ Rect placeAnchoredMenu({
           ? screenSize.height
           : 0;
 
-  // 菜单可用尺寸：屏幕减去四周边距，不允许为负。
   final double availableWidth = math.max(0.0, screenWidth - safeMargin * 2);
   final double availableHeight = math.max(0.0, screenHeight - safeMargin * 2);
 
@@ -56,16 +52,13 @@ Rect placeAnchoredMenu({
   var left = anchor.dx.isFinite ? anchor.dx : 0.0;
   var top = anchor.dy.isFinite ? anchor.dy : 0.0;
 
-  // 向右溢出 → 向左翻转（右缘贴锚点左侧）。
   if (left + menuWidth > screenWidth - safeMargin) {
     left = anchor.dx - menuWidth;
   }
-  // 向下溢出 → 向上翻转（底缘贴锚点上方）。
   if (top + menuHeight > screenHeight - safeMargin) {
     top = anchor.dy - menuHeight;
   }
 
-  // 翻转后仍可能越界（如锚点在屏幕外），钳制到边距内。
   final double maxLeft = screenWidth - safeMargin - menuWidth;
   final double maxTop = screenHeight - safeMargin - menuHeight;
   if (left < safeMargin) left = safeMargin;
@@ -77,13 +70,6 @@ Rect placeAnchoredMenu({
 }
 
 /// 计算底边锚定面板（如播放队列面板）在屏幕（窗口）内的最终位置。
-///
-/// 纯函数，便于单测：
-/// - [anchor] 是面板底边参考点（如播放条队列按钮「顶边-右缘」交点）；
-/// - 面板右缘贴 anchor.dx、底缘贴 anchor.dy（即出现在锚点上方、与锚点右对齐）；
-/// - 不做翻转（触发点在窗口底栏，上方恒有空间），越界时整体向窗口内钳制；
-/// - 与屏幕四周保留 ≥ [margin] 的边距；
-/// - 面板比可用区域还大时，先收缩到可用区域再定位。
 Rect placeAnchoredPanelAbove({
   required Offset anchor,
   required Size panelSize,
@@ -110,13 +96,11 @@ Rect placeAnchoredPanelAbove({
   final double panelHeight =
       math.min(math.max(0.0, rawHeight), availableHeight);
 
-  // 右缘贴锚点右对齐；不越过屏幕右缘-边距，也不把面板推出左缘之外。
   final double maxRight = math.max(safeMargin, screenWidth - safeMargin);
   final double minRight = math.min(safeMargin + panelWidth, maxRight);
   final double rightRaw = anchor.dx.isFinite ? anchor.dx : maxRight;
   final double right = rightRaw.clamp(minRight, maxRight);
 
-  // 底缘贴锚点上方；锚点太靠顶时向下收进屏幕（保证上边距）。
   final double maxBottom = math.max(safeMargin, screenHeight - safeMargin);
   final double minBottom = math.min(safeMargin + panelHeight, maxBottom);
   final double bottomRaw = anchor.dy.isFinite ? anchor.dy : maxBottom;
@@ -130,8 +114,53 @@ Rect placeAnchoredPanelAbove({
   );
 }
 
-/// 取 [context] 对应 RenderBox 顶边中点的全局（窗口）坐标，
-/// 供底栏按钮等触发点把菜单锚定在自己的上方。
+/// 计算二级菜单相对一级菜单/父项的最终位置（右侧展开，越界左翻/上移）。
+Rect placeCascadeSubmenu({
+  required Offset parentItemTopRight,
+  required Offset parentItemBottomLeft,
+  required Size submenuSize,
+  required Size primarySize,
+  required Offset primaryTopLeft,
+  required Size screenSize,
+  double gap = 4,
+  double margin = kAnchoredMenuMinScreenMargin,
+}) {
+  final double screenWidth =
+      screenSize.width.isFinite && screenSize.width > 0 ? screenSize.width : 0;
+  final double screenHeight =
+      screenSize.height.isFinite && screenSize.height > 0
+          ? screenSize.height
+          : 0;
+  final double availableWidth = math.max(0.0, screenWidth - margin * 2);
+  final double availableHeight = math.max(0.0, screenHeight - margin * 2);
+  final double menuWidth = math.min(submenuSize.width, availableWidth);
+  final double menuHeight = math.min(submenuSize.height, availableHeight);
+
+  // 默认：贴父项右缘、顶对齐父项顶边。
+  var left = parentItemTopRight.dx + gap;
+  var top = parentItemTopRight.dy;
+
+  // 右侧放不下 → 翻到一级菜单左侧。
+  if (left + menuWidth > screenWidth - margin) {
+    left = primaryTopLeft.dx - gap - menuWidth;
+  }
+  // 仍越左 → 贴一级菜单右侧并钳制。
+  if (left < margin) {
+    left = math.min(primaryTopLeft.dx + primarySize.width + gap, screenWidth - margin - menuWidth);
+  }
+
+  // 底部放不下 → 上移对齐父项底边或贴边距。
+  if (top + menuHeight > screenHeight - margin) {
+    top = parentItemBottomLeft.dy - menuHeight;
+  }
+  if (top < margin) top = margin;
+  final maxTop = screenHeight - margin - menuHeight;
+  if (top > maxTop) top = math.max(margin, maxTop);
+
+  return Rect.fromLTWH(left, top, menuWidth, menuHeight);
+}
+
+/// 取 [context] 对应 RenderBox 顶边中点的全局（窗口）坐标。
 Offset anchorAbove(BuildContext context) {
   final RenderObject? renderObject = context.findRenderObject();
   if (renderObject is! RenderBox || !renderObject.hasSize) {
@@ -142,8 +171,7 @@ Offset anchorAbove(BuildContext context) {
   );
 }
 
-/// 取 [context] 对应 RenderBox 底边中点的全局（窗口）坐标，
-/// 供 `...` 按钮等触发点把菜单锚定在自己的下方。
+/// 取 [context] 对应 RenderBox 底边中点的全局（窗口）坐标。
 Offset anchorBelow(BuildContext context) {
   final RenderObject? renderObject = context.findRenderObject();
   if (renderObject is! RenderBox || !renderObject.hasSize) {
@@ -154,8 +182,7 @@ Offset anchorBelow(BuildContext context) {
   );
 }
 
-/// 取 [context] 对应 RenderBox「顶边-右缘」交点的全局（窗口）坐标，
-/// 供底栏按钮等触发点把面板锚定在自己的上方（面板底缘贴按钮顶边、右对齐按钮）。
+/// 取 [context] 对应 RenderBox「顶边-右缘」交点的全局（窗口）坐标。
 Offset anchorAboveRight(BuildContext context) {
   final RenderObject? renderObject = context.findRenderObject();
   if (renderObject is! RenderBox || !renderObject.hasSize) {
@@ -166,14 +193,7 @@ Offset anchorAboveRight(BuildContext context) {
   );
 }
 
-/// 以 PC 上下文菜单的形式，在 [anchor]（全局/窗口坐标）附近弹出锚定菜单。
-///
-/// - 全屏 barrier：**视觉透明**，仅用于点击菜单外任意处关闭（light dismiss，
-///   Windows/macOS 桌面惯例：右键菜单不压暗背景；QQ 音乐/网易云同）；
-/// - Esc 关闭；
-/// - 菜单尺寸在首帧测量后经 [placeAnchoredMenu] 定位（窗口尺寸变化不跟随，
-///   关闭重开即可，符合任务要求）；
-/// - 坐标空间 = 当前应用窗口（MediaQuery 尺寸），不处理跨显示器。
+/// 以 PC 上下文菜单的形式，在 [anchor] 附近弹出锚定菜单。
 Future<T?> showDesktopAnchoredMenu<T>({
   required BuildContext context,
   required Offset anchor,
@@ -199,11 +219,7 @@ Future<T?> showDesktopAnchoredMenu<T>({
   );
 }
 
-/// PC 锚定弹层通用路由：全屏半透明 barrier（点击关闭）+ Esc 关闭 +
-/// 首帧以 Offstage 测量内容尺寸后经 [placement] 纯函数定位。
-///
-/// 上下文菜单（`showDesktopAnchoredMenu`）与播放队列面板
-/// （`showDesktopQueuePanel`）共用本路由，barrier/Esc/测量逻辑只此一份。
+/// PC 锚定弹层通用路由。
 class DesktopAnchoredPopupRoute<T> extends PopupRoute<T> {
   DesktopAnchoredPopupRoute({
     required Offset anchor,
@@ -216,7 +232,7 @@ class DesktopAnchoredPopupRoute<T> extends PopupRoute<T> {
        _menuBuilder = menuBuilder,
        _barrierLabel = barrierLabel ?? '关闭菜单';
 
-  static const Color _defaultScrimColor = Color(0x1F000000); // black 12%
+  static const Color _defaultScrimColor = Color(0x1F000000);
 
   final Offset _anchor;
   final WidgetBuilder _menuBuilder;
@@ -270,7 +286,6 @@ class DesktopAnchoredPopupRoute<T> extends PopupRoute<T> {
   }
 }
 
-/// 首帧以 Offstage 测量内容实际尺寸，再用 [placement] 计算位置并显示。
 class _AnchoredPopupPosition extends StatefulWidget {
   const _AnchoredPopupPosition({
     required this.anchor,
@@ -302,7 +317,6 @@ class _AnchoredPopupPositionState extends State<_AnchoredPopupPosition> {
     if (measureContext == null) return;
     final RenderObject? renderObject = measureContext.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) {
-      // 尺寸尚未就绪（字体/图标异步），下一帧重试。
       WidgetsBinding.instance.addPostFrameCallback((_) => _measureAndPlace());
       return;
     }
@@ -345,7 +359,6 @@ class _AnchoredPopupPositionState extends State<_AnchoredPopupPosition> {
                 child: menu,
               )
             else
-              // 测量帧：不绘制、不命中，菜单随下一帧出现在锚定位置。
               Offstage(child: menu),
           ],
         ),
@@ -354,10 +367,554 @@ class _AnchoredPopupPositionState extends State<_AnchoredPopupPosition> {
   }
 }
 
-/// PC 二级菜单通用面板皮肤（标题行 + 可滚动选项列表）。
+// ---------------------------------------------------------------------------
+// 级联菜单（一级保留 + 右侧二级，悬停延时 / 点击展开）
+// ---------------------------------------------------------------------------
+
+/// 级联菜单节点：叶子可点击；有 [children] 时右侧展开二级。
+class CascadeMenuNode {
+  const CascadeMenuNode({
+    required this.title,
+    this.icon,
+    this.trailingLabel,
+    this.selected = false,
+    this.children,
+    this.onTap,
+  });
+
+  final String title;
+  final IconData? icon;
+  final String? trailingLabel;
+  final bool selected;
+  final List<CascadeMenuNode>? children;
+  final VoidCallback? onTap;
+
+  bool get hasSubmenu => children != null && children!.isNotEmpty;
+}
+
+/// 弹出 PC 级联菜单（QQ 音乐式：一级常驻，悬停/点击展开二级）。
 ///
-/// 供倍速/定时等「从更多菜单二级进入」的锚定弹层复用，
-/// 视觉与 [showDesktopAnchoredMenu] 上下文菜单一致。
+/// 使用全屏路由，由 [showDesktopCascadeMenu] 内部自行定位一级/二级，
+/// 不走 [DesktopAnchoredPopupRoute] 的外层 Positioned（会二次偏移）。
+Future<void> showDesktopCascadeMenu({
+  required BuildContext context,
+  required Offset anchor,
+  required List<CascadeMenuNode> items,
+  Widget? header,
+  double width = 220,
+  double submenuWidth = 180,
+}) {
+  return Navigator.of(context, rootNavigator: true).push(
+    _DesktopCascadeMenuRoute(
+      anchor: anchor,
+      items: items,
+      header: header,
+      width: width,
+      submenuWidth: submenuWidth,
+    ),
+  );
+}
+
+class _DesktopCascadeMenuRoute extends PopupRoute<void> {
+  _DesktopCascadeMenuRoute({
+    required this.anchor,
+    required this.items,
+    required this.header,
+    required this.width,
+    required this.submenuWidth,
+  });
+
+  final Offset anchor;
+  final List<CascadeMenuNode> items;
+  final Widget? header;
+  final double width;
+  final double submenuWidth;
+
+  @override
+  Color? get barrierColor => Colors.transparent;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String? get barrierLabel => '关闭菜单';
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 130);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 90);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return _DesktopCascadeMenuHost(
+      anchor: anchor,
+      items: items,
+      header: header,
+      width: width,
+      submenuWidth: submenuWidth,
+    );
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return FadeTransition(
+      opacity: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
+      child: child,
+    );
+  }
+}
+
+class _DesktopCascadeMenuHost extends StatefulWidget {
+  const _DesktopCascadeMenuHost({
+    required this.anchor,
+    required this.items,
+    required this.header,
+    required this.width,
+    required this.submenuWidth,
+  });
+
+  final Offset anchor;
+  final List<CascadeMenuNode> items;
+  final Widget? header;
+  final double width;
+  final double submenuWidth;
+
+  @override
+  State<_DesktopCascadeMenuHost> createState() =>
+      _DesktopCascadeMenuHostState();
+}
+
+class _DesktopCascadeMenuHostState extends State<_DesktopCascadeMenuHost> {
+  final GlobalKey _primaryMeasureKey = GlobalKey();
+  final GlobalKey _submenuMeasureKey = GlobalKey();
+
+  Rect? _primaryRect;
+  Rect? _submenuRect;
+  int? _openIndex;
+  Timer? _hoverTimer;
+  Timer? _leaveTimer;
+  bool _pointerInPrimary = false;
+  bool _pointerInSubmenu = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measurePrimary());
+  }
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    _leaveTimer?.cancel();
+    super.dispose();
+  }
+
+  void _measurePrimary() {
+    if (!mounted) return;
+    final box = _primaryMeasureKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measurePrimary());
+      return;
+    }
+    setState(() {
+      _primaryRect = placeAnchoredMenu(
+        anchor: widget.anchor,
+        menuSize: box.size,
+        screenSize: MediaQuery.sizeOf(context),
+      );
+    });
+  }
+
+  void _measureSubmenu(int index, Rect parentItemGlobal) {
+    if (!mounted || _primaryRect == null) return;
+    final box = _submenuMeasureKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _measureSubmenu(index, parentItemGlobal),
+      );
+      return;
+    }
+    // 仅当仍指向同一项时才落位，避免快速划过时用过期测量。
+    if (_openIndex != index) return;
+    setState(() {
+      _submenuRect = placeCascadeSubmenu(
+        parentItemTopRight: parentItemGlobal.topRight,
+        parentItemBottomLeft: parentItemGlobal.bottomLeft,
+        submenuSize: box.size,
+        primarySize: _primaryRect!.size,
+        primaryTopLeft: _primaryRect!.topLeft,
+        screenSize: MediaQuery.sizeOf(context),
+      );
+    });
+  }
+
+  void _scheduleOpenSubmenu(int index, Rect itemGlobal) {
+    _leaveTimer?.cancel();
+    if (_openIndex == index && _submenuRect != null) return;
+    _hoverTimer?.cancel();
+    _hoverTimer = Timer(kCascadeMenuHoverDelay, () {
+      if (!mounted) return;
+      setState(() {
+        _openIndex = index;
+        _submenuRect = null; // 先入树测量，再定位
+      });
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _measureSubmenu(index, itemGlobal),
+      );
+    });
+  }
+
+  void _openSubmenuImmediately(int index, Rect itemGlobal) {
+    _leaveTimer?.cancel();
+    _hoverTimer?.cancel();
+    setState(() {
+      _openIndex = index;
+      _submenuRect = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _measureSubmenu(index, itemGlobal),
+    );
+  }
+
+  void _scheduleCloseSubmenu() {
+    _hoverTimer?.cancel();
+    _leaveTimer?.cancel();
+    _leaveTimer = Timer(kCascadeMenuLeaveGrace, () {
+      if (!mounted) return;
+      if (_pointerInPrimary || _pointerInSubmenu) return;
+      setState(() {
+        _openIndex = null;
+        _submenuRect = null;
+      });
+    });
+  }
+
+  void _closeAllAndRun(VoidCallback? onTap) {
+    Navigator.of(context).pop();
+    if (onTap == null) return;
+    // 等一级路由 pop 后再执行（避免回调里再开菜单被当前 barrier 挡住）。
+    Future<void>.delayed(const Duration(milliseconds: 80), onTap);
+  }
+
+  Rect _itemGlobalRect(BuildContext itemContext) {
+    final box = itemContext.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return Rect.zero;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 无一级尺寸时仍入树测量（Offstage 由父路由处理）。
+    final primary = KeyedSubtree(
+      key: _primaryMeasureKey,
+      child: _CascadeMenuPanel(
+        width: widget.width,
+        header: widget.header,
+        children: [
+          for (var i = 0; i < widget.items.length; i++)
+            _CascadeMenuItem(
+              node: widget.items[i],
+              expanded: _openIndex == i,
+              onHover: (itemContext) {
+                final node = widget.items[i];
+                if (!node.hasSubmenu) {
+                  _scheduleCloseSubmenu();
+                  return;
+                }
+                _scheduleOpenSubmenu(i, _itemGlobalRect(itemContext));
+              },
+              onLeave: _scheduleCloseSubmenu,
+              onTap: (itemContext) {
+                final node = widget.items[i];
+                if (node.hasSubmenu) {
+                  _openSubmenuImmediately(i, _itemGlobalRect(itemContext));
+                  return;
+                }
+                _closeAllAndRun(node.onTap);
+              },
+            ),
+        ],
+      ),
+    );
+
+    final openIndex = _openIndex;
+    final openNode =
+        (openIndex != null && openIndex < widget.items.length)
+            ? widget.items[openIndex]
+            : null;
+
+    Widget? submenu;
+    if (openNode?.hasSubmenu == true) {
+      submenu = KeyedSubtree(
+        key: _submenuMeasureKey,
+        child: MouseRegion(
+          onEnter: (_) {
+            _pointerInSubmenu = true;
+            _leaveTimer?.cancel();
+          },
+          onExit: (_) {
+            _pointerInSubmenu = false;
+            _scheduleCloseSubmenu();
+          },
+          child: _CascadeMenuPanel(
+            width: widget.submenuWidth,
+            children: [
+              for (final child in openNode!.children!)
+                _CascadeMenuItem(
+                  node: child,
+                  expanded: false,
+                  onHover: (_) {},
+                  onLeave: () {},
+                  onTap: (_) => _closeAllAndRun(child.onTap),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 全屏铺满：Positioned 使用窗口绝对坐标，父级必须占满。
+    return SizedBox.expand(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 一级：测量后定位；子级未定位前不显示，避免闪烁。
+          if (_primaryRect != null)
+            Positioned(
+              left: _primaryRect!.left,
+              top: _primaryRect!.top,
+              width: _primaryRect!.width,
+              height: _primaryRect!.height,
+              child: MouseRegion(
+                onEnter: (_) {
+                  _pointerInPrimary = true;
+                  _leaveTimer?.cancel();
+                },
+                onExit: (_) {
+                  _pointerInPrimary = false;
+                  _scheduleCloseSubmenu();
+                },
+                child: primary,
+              ),
+            )
+          else
+            Offstage(child: primary),
+          // 二级：先入树测量（不可见），定位后显示。
+          if (submenu != null)
+            if (_submenuRect != null)
+              Positioned(
+                left: _submenuRect!.left,
+                top: _submenuRect!.top,
+                width: _submenuRect!.width,
+                height: _submenuRect!.height,
+                child: submenu,
+              )
+            else
+              Offstage(child: submenu),
+        ],
+      ),
+    );
+  }
+}
+
+class _CascadeMenuPanel extends StatelessWidget {
+  const _CascadeMenuPanel({
+    required this.width,
+    required this.children,
+    this.header,
+  });
+
+  final double width;
+  final List<Widget> children;
+  final Widget? header;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1E212B) : colorScheme.surface;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : colorScheme.outlineVariant.withValues(alpha: 0.8);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : colorScheme.outlineVariant.withValues(alpha: 0.6);
+
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        width: width,
+        constraints: const BoxConstraints(maxHeight: 460),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.14),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (header != null) ...[
+                header!,
+                Divider(height: 1, thickness: 1, color: dividerColor),
+              ],
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: children,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CascadeMenuItem extends StatefulWidget {
+  const _CascadeMenuItem({
+    required this.node,
+    required this.expanded,
+    required this.onHover,
+    required this.onLeave,
+    required this.onTap,
+  });
+
+  final CascadeMenuNode node;
+  final bool expanded;
+  final void Function(BuildContext itemContext) onHover;
+  final VoidCallback onLeave;
+  final void Function(BuildContext itemContext) onTap;
+
+  @override
+  State<_CascadeMenuItem> createState() => _CascadeMenuItemState();
+}
+
+class _CascadeMenuItemState extends State<_CascadeMenuItem> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final hoverColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : colorScheme.surfaceContainerHigh;
+    final color = widget.node.selected
+        ? colorScheme.primary
+        : colorScheme.onSurface;
+    final highlight = _hovering || widget.expanded;
+
+    return Builder(
+      builder: (itemContext) {
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) {
+            setState(() => _hovering = true);
+            widget.onHover(itemContext);
+          },
+          onExit: (_) {
+            setState(() => _hovering = false);
+            widget.onLeave();
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.onTap(itemContext),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              constraints: const BoxConstraints(minHeight: 36),
+              margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+              padding: const EdgeInsets.only(left: 10, right: 8, top: 8, bottom: 8),
+              decoration: BoxDecoration(
+                color: highlight ? hoverColor : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  if (widget.node.icon != null) ...[
+                    Icon(widget.node.icon, size: 18, color: color),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Text(
+                      widget.node.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontSize: 13.5,
+                        fontWeight: widget.node.selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        color: color,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                  if (widget.node.trailingLabel != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.node.trailingLabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                  if (widget.node.selected && !widget.node.hasSubmenu) ...[
+                    const SizedBox(width: 6),
+                    Icon(Icons.check_rounded, size: 16, color: colorScheme.primary),
+                  ],
+                  if (widget.node.hasSubmenu) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// PC 二级菜单通用面板皮肤（兼容旧调用；新代码优先用 [showDesktopCascadeMenu]）。
 class DesktopPopupMenuPanel extends StatelessWidget {
   const DesktopPopupMenuPanel({
     super.key,
