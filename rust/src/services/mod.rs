@@ -1,5 +1,6 @@
 pub mod album;
 pub mod artist;
+pub mod audio_capture;
 pub mod comment;
 pub mod discover;
 pub mod external_playlist;

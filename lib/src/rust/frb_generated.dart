@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1308216418;
+  int get rustContentHash => 837652492;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -101,10 +101,16 @@ abstract class RustLibApi extends BaseApi {
     required String t1,
   });
 
+  Future<void> crateApiIdentifyCancelCapture();
+
+  Future<Uint8List> crateApiIdentifyCaptureSnapshot({required int durationMs});
+
   Future<List<IdentifyCandidate>> crateApiIdentifyMusic({
     required Engine engine,
     required List<int> pcm,
   });
+
+  Future<void> crateApiIdentifyStartCapture({required String source});
 
   Future<String?> crateApiReadLocalLyrics({required String path});
 
@@ -328,6 +334,64 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<void> crateApiIdentifyCancelCapture() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiIdentifyCancelCaptureConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentifyCancelCaptureConstMeta =>
+      const TaskConstMeta(debugName: "identify_cancel_capture", argNames: []);
+
+  @override
+  Future<Uint8List> crateApiIdentifyCaptureSnapshot({required int durationMs}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(durationMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiIdentifyCaptureSnapshotConstMeta,
+        argValues: [durationMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentifyCaptureSnapshotConstMeta =>
+      const TaskConstMeta(
+        debugName: "identify_capture_snapshot",
+        argNames: ["durationMs"],
+      );
+
+  @override
   Future<List<IdentifyCandidate>> crateApiIdentifyMusic({
     required Engine engine,
     required List<int> pcm,
@@ -344,7 +408,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 9,
             port: port_,
           );
         },
@@ -365,6 +429,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<void> crateApiIdentifyStartCapture({required String source}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(source, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiIdentifyStartCaptureConstMeta,
+        argValues: [source],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiIdentifyStartCaptureConstMeta =>
+      const TaskConstMeta(
+        debugName: "identify_start_capture",
+        argNames: ["source"],
+      );
+
+  @override
   Future<String?> crateApiReadLocalLyrics({required String path}) {
     return handler.executeNormal(
       NormalTask(
@@ -374,7 +469,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 11,
             port: port_,
           );
         },
@@ -405,7 +500,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 9,
+              funcId: 12,
               port: port_,
             );
           },

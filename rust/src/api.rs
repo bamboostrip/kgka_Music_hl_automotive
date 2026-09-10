@@ -2,6 +2,7 @@ use crate::engine::KugouEngine;
 use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 
+use crate::services::audio_capture;
 use crate::services::identify::{self, IdentifyCandidate};
 use crate::services::local_media::{self, LocalSongEntry};
 use crate::services::loudness;
@@ -154,4 +155,20 @@ pub async fn identify_music(
 ) -> Result<Vec<IdentifyCandidate>, String> {
     let v = engine.0.identify(pcm).await.map_err(|e| e.to_string())?;
     Ok(identify::parse_candidates(&v))
+}
+
+/// 听歌识曲采集(桌面真实实现,其余平台为错误桩):source = "mic" | "system"。
+/// 幂等,已在采集中时再次调用直接成功。
+pub fn identify_start_capture(source: String) -> Result<(), String> {
+    audio_capture::start_with(&source)
+}
+
+/// 取末尾 duration_ms 的采集音频,转 8000Hz/16bit/单声道 PCM(识曲格式)。
+pub fn identify_capture_snapshot(duration_ms: u32) -> Result<Vec<u8>, String> {
+    audio_capture::snapshot_with(duration_ms)
+}
+
+/// 停止并释放采集(取消识别 / 页面关闭时调用)。
+pub fn identify_cancel_capture() {
+    audio_capture::stop_with();
 }
