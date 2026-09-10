@@ -18,6 +18,7 @@ import '../keyboard_focus_guard.dart';
 import '../player/player_route.dart';
 import '../widgets/lazy_indexed_stack.dart';
 import 'desktop_player_bar.dart';
+import 'desktop_search_suggest_panel.dart';
 import 'desktop_sidebar.dart';
 import 'desktop_title_bar.dart';
 
@@ -83,6 +84,12 @@ class _DesktopShellState extends State<DesktopShell> {
   int? _lastSidebarTapIndex;
   DateTime? _lastSidebarTapTime;
 
+  /// 顶栏搜索（QQ 音乐 PC 式）：可输入胶囊 + 聚焦时热门/历史浮层，
+  /// 提交后结果页嵌入内容区，侧栏保持可见。
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+  var _searchPanelOpen = false;
+
   /// 侧栏条目点按：单击语义不变（切换分区/回内容根）；窗口时长内连点同一
   /// 条目视为双击当前分区，触发对应页面刷新。检测用手动计时窗口而非
   /// InkWell.onDoubleTap——否则 Flutter 为消歧会把每次单击推迟 ~300ms
@@ -115,6 +122,8 @@ class _DesktopShellState extends State<DesktopShell> {
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     _tabsRevision.dispose();
     super.dispose();
   }
@@ -178,10 +187,41 @@ class _DesktopShellState extends State<DesktopShell> {
   }
 
   void _openSearch(BuildContext context) {
-    _pushContent(
-      context,
-      SearchPage(api: widget.api, auth: widget.auth, player: widget.player),
+    _searchFocusNode.requestFocus();
+    _searchController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _searchController.text.length,
     );
+    setState(() => _searchPanelOpen = true);
+  }
+
+  void _closeSearchPanel({bool unfocus = false}) {
+    if (unfocus) _searchFocusNode.unfocus();
+    if (_searchPanelOpen && mounted) {
+      setState(() => _searchPanelOpen = false);
+    }
+  }
+
+  void _submitSearch(String raw) {
+    final query = raw.trim();
+    if (query.isEmpty) return;
+    _searchController.text = query;
+    _closeSearchPanel(unfocus: true);
+    final inner = _contentNavKey.currentState;
+    final page = SearchPage(
+      api: widget.api,
+      auth: widget.auth,
+      player: widget.player,
+      initialQuery: query,
+      embedded: true,
+    );
+    if (inner == null) {
+      _pushContent(context, page);
+      return;
+    }
+    // 重复搜索替换栈上已有搜索页，避免连搜堆多层返回。
+    inner.popUntil((route) => route.isFirst);
+    inner.push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
   void _openPlayerPage(BuildContext context) {
@@ -264,105 +304,149 @@ class _DesktopShellState extends State<DesktopShell> {
           ),
         },
         child: Scaffold(
-          body: Column(
+          body: Stack(
             children: [
-              DesktopTitleBar(onSearch: () => _openSearch(context)),
-              const Divider(height: 1, thickness: 1),
-              Expanded(
-                child: Row(
-                  children: [
-                    DesktopSidebar(
-                      items: const [
-                        DesktopNavItem(
-                          icon: Icons.explore_outlined,
-                          activeIcon: Icons.explore_rounded,
-                          label: '推荐',
+              Column(
+                children: [
+                  DesktopTitleBar(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    onFocusChanged: (focused) {
+                      if (focused) {
+                        setState(() => _searchPanelOpen = true);
+                      }
+                    },
+                    onSubmitted: _submitSearch,
+                    onEscape: () => _closeSearchPanel(unfocus: true),
+                  ),
+                  const Divider(height: 1, thickness: 1),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        DesktopSidebar(
+                          items: const [
+                            DesktopNavItem(
+                              icon: Icons.explore_outlined,
+                              activeIcon: Icons.explore_rounded,
+                              label: '推荐',
+                            ),
+                            DesktopNavItem(
+                              icon: Icons.leaderboard_outlined,
+                              activeIcon: Icons.leaderboard_rounded,
+                              label: '排行榜',
+                            ),
+                            DesktopNavItem(
+                              icon: Icons.radio_rounded,
+                              activeIcon: Icons.radio_rounded,
+                              label: '电台',
+                            ),
+                            DesktopNavItem(
+                              icon: Icons.library_music_outlined,
+                              activeIcon: Icons.library_music_rounded,
+                              label: '我的音乐',
+                            ),
+                            DesktopNavItem(
+                              icon: Icons.download_outlined,
+                              activeIcon: Icons.download_rounded,
+                              label: '已下载',
+                            ),
+                            DesktopNavItem(
+                              icon: Icons.settings_outlined,
+                              activeIcon: Icons.settings_rounded,
+                              label: '设置',
+                              showDividerAbove: true,
+                            ),
+                          ],
+                          selectedIndex: _sidebarIndex,
+                          onSelect: _handleSidebarTap,
                         ),
-                        DesktopNavItem(
-                          icon: Icons.leaderboard_outlined,
-                          activeIcon: Icons.leaderboard_rounded,
-                          label: '排行榜',
-                        ),
-                        DesktopNavItem(
-                          icon: Icons.radio_rounded,
-                          activeIcon: Icons.radio_rounded,
-                          label: '电台',
-                        ),
-                        DesktopNavItem(
-                          icon: Icons.library_music_outlined,
-                          activeIcon: Icons.library_music_rounded,
-                          label: '我的音乐',
-                        ),
-                        DesktopNavItem(
-                          icon: Icons.download_outlined,
-                          activeIcon: Icons.download_rounded,
-                          label: '已下载',
-                        ),
-                        DesktopNavItem(
-                          icon: Icons.settings_outlined,
-                          activeIcon: Icons.settings_rounded,
-                          label: '设置',
-                          showDividerAbove: true,
+                        const VerticalDivider(width: 1, thickness: 1),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Expanded(
+                                // 内容区内嵌导航：`/` 为分区内容（侧栏切换），push 的
+                                // 歌单/搜索/歌手详情只覆盖本区域，侧栏与底栏常驻。
+                                child: Navigator(
+                                  key: _contentNavKey,
+                                  initialRoute: '/',
+                                  onGenerateRoute: (settings) {
+                                    if (settings.name == '/') {
+                                      return MaterialPageRoute(
+                                        settings: settings,
+                                        builder: (_) => _DesktopContent(
+                                          revision: _tabsRevision,
+                                          sectionProvider: () => _section,
+                                          homeTabProvider: () => _homeTab,
+                                          contentIndexProvider: () =>
+                                              _contentIndex,
+                                          homePageKey: _homePageKey,
+                                          api: widget.api,
+                                          auth: widget.auth,
+                                          player: widget.player,
+                                          cache: widget.cache,
+                                          downloads: widget.downloads,
+                                          theme: widget.theme,
+                                          localMusic: widget.localMusic,
+                                          onHomeTabSwitch: _handleHomeTabSwitch,
+                                        ),
+                                      );
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              DesktopPlayerBar(
+                                player: widget.player,
+                                auth: widget.auth,
+                                onOpenPlayerPage: () =>
+                                    _openPlayerPage(context),
+                                // 评论等详情页推入内容区 Navigator，保留侧栏；
+                                // 根 Navigator 会整窗全屏盖住侧栏。
+                                onOpenComment: (mixsongid) => _pushContent(
+                                  context,
+                                  CommentPage(
+                                    api: widget.api,
+                                    mixsongid: mixsongid,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
-                      selectedIndex: _sidebarIndex,
-                      onSelect: _handleSidebarTap,
                     ),
-                    const VerticalDivider(width: 1, thickness: 1),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(
-                            // 内容区内嵌导航：`/` 为分区内容（侧栏切换），push 的
-                            // 歌单/搜索/歌手详情只覆盖本区域，侧栏与底栏常驻。
-                            child: Navigator(
-                              key: _contentNavKey,
-                              initialRoute: '/',
-                              onGenerateRoute: (settings) {
-                                if (settings.name == '/') {
-                                  return MaterialPageRoute(
-                                    settings: settings,
-                                    builder: (_) => _DesktopContent(
-                                      revision: _tabsRevision,
-                                      sectionProvider: () => _section,
-                                      homeTabProvider: () => _homeTab,
-                                      contentIndexProvider: () => _contentIndex,
-                                      homePageKey: _homePageKey,
-                                      api: widget.api,
-                                      auth: widget.auth,
-                                      player: widget.player,
-                                      cache: widget.cache,
-                                      downloads: widget.downloads,
-                                      theme: widget.theme,
-                                      localMusic: widget.localMusic,
-                                      onHomeTabSwitch: _handleHomeTabSwitch,
-                                    ),
-                                  );
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          DesktopPlayerBar(
-                            player: widget.player,
-                            auth: widget.auth,
-                            onOpenPlayerPage: () => _openPlayerPage(context),
-                            // 评论等详情页推入内容区 Navigator，保留侧栏；
-                            // 根 Navigator 会整窗全屏盖住侧栏。
-                            onOpenComment: (mixsongid) => _pushContent(
-                              context,
-                              CommentPage(
-                                api: widget.api,
-                                mixsongid: mixsongid,
-                              ),
-                            ),
-                          ),
-                        ],
+                  ),
+                ],
+              ),
+              // 顶栏搜索浮层：点击内容区收起；标题栏保持可输入。
+              if (_searchPanelOpen) ...[
+                Positioned(
+                  top: 53,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => _closeSearchPanel(unfocus: true),
+                    child: const ColoredBox(color: Colors.transparent),
+                  ),
+                ),
+                Positioned(
+                  top: 52,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: DesktopSearchSuggestPanel(
+                        api: widget.api,
+                        onKeywordTap: _submitSearch,
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

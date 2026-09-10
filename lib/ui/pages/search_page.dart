@@ -28,11 +28,20 @@ class SearchPage extends StatefulWidget {
     required this.api,
     required this.auth,
     required this.player,
+    this.initialQuery,
+    this.embedded = false,
   });
 
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
+
+  /// 进入后立即搜索的关键词（桌面顶栏提交 / 移动端深链）。
+  final String? initialQuery;
+
+  /// 桌面内容区嵌入模式：顶栏已持有搜索框，本页不再展示页内搜索条
+  /// 与取消按钮，只保留结果与类型切换。
+  final bool embedded;
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -82,7 +91,15 @@ class _SearchPageState extends State<SearchPage> {
   void initState() {
     super.initState();
     _focusNode.addListener(_handleFocusChanged);
-    _focusNode.requestFocus();
+    final initial = widget.initialQuery?.trim() ?? '';
+    if (initial.isNotEmpty) {
+      _controller.text = initial;
+      _lastTextWasEmpty = false;
+    }
+    // 嵌入模式由顶栏负责聚焦与浮层；独立页仍自动聚焦。
+    if (!widget.embedded) {
+      _focusNode.requestFocus();
+    }
     _loadHotKeywords();
     _loadSearchHistory();
     _controller.addListener(_onTextChanged);
@@ -90,6 +107,11 @@ class _SearchPageState extends State<SearchPage> {
     _hotReloadSub = NetworkMonitor.instance.onConnectivityRestored.listen((_) {
       if (mounted && _hotFailed) _loadHotKeywords();
     });
+    if (initial.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _search(initial);
+      });
+    }
   }
 
   void _handleFocusChanged() {
@@ -447,6 +469,36 @@ class _SearchPageState extends State<SearchPage> {
                 ),
               ],
             ),
+          ),
+        ),
+      );
+    }
+
+    // 桌面嵌入模式：顶栏搜索框负责输入，本页只展示关键词标题与结果。
+    if (widget.embedded) {
+      final query = _controller.text.trim();
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: AdaptiveContentPadding(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  query.isEmpty ? '搜索' : '搜索“$query”',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              Expanded(
+                child: AnimatedBuilder(
+                  animation: widget.auth,
+                  builder: (context, _) => _buildBody(context),
+                ),
+              ),
+            ],
           ),
         ),
       );

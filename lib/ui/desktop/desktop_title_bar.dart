@@ -1,22 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'desktop_window_controls.dart';
 
 /// 桌面沉浸式自定义标题栏（QQ 音乐 PC 式）。
 ///
-/// 左侧品牌 Logo/标题（与侧栏 208 对齐），中间居中搜索胶囊（只读按钮，
-/// 点击由 [onSearch] 交给内容区打开搜索页），右侧标准 Windows
+/// 左侧品牌 Logo/标题（与侧栏 208 对齐），中间居中搜索胶囊（可输入，
+/// 聚焦时经 [onFocusChanged]/[onQueryChanged]/[onSubmitted] 交给
+/// shell 展示热门/历史浮层并提交搜索），右侧标准 Windows
 /// 最小化/最大化（还原）/关闭按钮。搜索框两侧保留拖拽区，保证空白处
 /// 仍可拖动窗口、双击最大化；搜索框自身在拖拽区之外，可正常点按聚焦。
 class DesktopTitleBar extends StatefulWidget {
-  const DesktopTitleBar({super.key, this.player, this.onSearch});
+  const DesktopTitleBar({
+    super.key,
+    this.player,
+    this.onSearch,
+    this.controller,
+    this.focusNode,
+    this.onQueryChanged,
+    this.onSubmitted,
+    this.onFocusChanged,
+    this.onEscape,
+  });
 
   /// 保留参数兼容旧调用点：播放信息已由底部播放栏展示，标题栏不再重复显示。
   final Object? player;
 
   /// 搜索胶囊点击回调；为 null 时不展示搜索框（测试/旧调用兼容）。
+  /// 未提供可输入相关回调时仍作只读按钮使用。
   final VoidCallback? onSearch;
+
+  /// 顶栏搜索文本（桌面 shell 持有，便于提交后仍显示关键词）。
+  final TextEditingController? controller;
+
+  final FocusNode? focusNode;
+
+  final ValueChanged<String>? onQueryChanged;
+  final ValueChanged<String>? onSubmitted;
+  final ValueChanged<bool>? onFocusChanged;
+
+  /// 搜索框内按下 Esc（收起浮层/清空焦点）。
+  final VoidCallback? onEscape;
 
   @override
   State<DesktopTitleBar> createState() => _DesktopTitleBarState();
@@ -101,13 +126,22 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
             child: Row(
               children: [
                 Expanded(child: _TitleBarDragSpacer(key: const ValueKey('desktop_title_bar_drag_left'))),
-                if (widget.onSearch != null)
+                if (widget.onSearch != null ||
+                    widget.controller != null)
                   Flexible(
                     flex: 2,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 420),
-                        child: _TitleBarSearchButton(onTap: widget.onSearch!),
+                        child: _TitleBarSearchField(
+                          onTapLegacy: widget.onSearch,
+                          controller: widget.controller,
+                          focusNode: widget.focusNode,
+                          onQueryChanged: widget.onQueryChanged,
+                          onSubmitted: widget.onSubmitted,
+                          onFocusChanged: widget.onFocusChanged,
+                          onEscape: widget.onEscape,
+                        ),
                       ),
                     ),
                   )
@@ -200,88 +234,176 @@ class _TitleBarDragSpacer extends StatelessWidget {
   }
 }
 
-/// 标题栏居中搜索胶囊（只读按钮，QQ 音乐 PC 式）。
+/// 标题栏居中搜索胶囊。
 ///
-/// 在拖拽区之外独立响应点按，键盘 Tab 可达、Enter/Space 激活，
-/// 焦点时显示主色焦点环。点击后由外层打开内容区搜索页。
-class _TitleBarSearchButton extends StatefulWidget {
-  const _TitleBarSearchButton({required this.onTap});
+/// 提供 [controller]/[focusNode] 时为可输入 TextField（QQ 音乐 PC 式）：
+/// 聚焦展示浮层、Enter 提交。否则退回只读按钮（测试/旧调用兼容）。
+class _TitleBarSearchField extends StatefulWidget {
+  const _TitleBarSearchField({
+    this.onTapLegacy,
+    this.controller,
+    this.focusNode,
+    this.onQueryChanged,
+    this.onSubmitted,
+    this.onFocusChanged,
+    this.onEscape,
+  });
 
-  final VoidCallback onTap;
+  final VoidCallback? onTapLegacy;
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onQueryChanged;
+  final ValueChanged<String>? onSubmitted;
+  final ValueChanged<bool>? onFocusChanged;
+  final VoidCallback? onEscape;
 
   @override
-  State<_TitleBarSearchButton> createState() => _TitleBarSearchButtonState();
+  State<_TitleBarSearchField> createState() => _TitleBarSearchFieldState();
 }
 
-class _TitleBarSearchButtonState extends State<_TitleBarSearchButton> {
+class _TitleBarSearchFieldState extends State<_TitleBarSearchField> {
   var _hovering = false;
   var _focused = false;
+
+  bool get _interactive => widget.controller != null;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_handleFocus);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TitleBarSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocus);
+      widget.focusNode?.addListener(_handleFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_handleFocus);
+    super.dispose();
+  }
+
+  void _handleFocus() {
+    final focused = widget.focusNode?.hasFocus ?? false;
+    if (focused != _focused) {
+      setState(() => _focused = focused);
+      widget.onFocusChanged?.call(focused);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Semantics(
-      button: true,
-      label: '搜索音乐',
-      onTap: widget.onTap,
-      child: InkWell(
-        key: const ValueKey('desktop_title_bar_search'),
-        onTap: widget.onTap,
-        excludeFromSemantics: true,
-        borderRadius: BorderRadius.circular(17),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        focusColor: Colors.transparent,
-        mouseCursor: SystemMouseCursors.click,
-        onHover: (hovering) => setState(() => _hovering = hovering),
-        onFocusChange: (focused) => setState(() => _focused = focused),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: _hovering
-                ? colorScheme.surfaceContainerHigh
-                : (isDark
-                    ? colorScheme.surfaceContainerHighest
-                    : const Color(0xFFF3F4F6)),
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(
-              color: _focused
-                  ? colorScheme.primary.withValues(alpha: .75)
-                  : colorScheme.outlineVariant
-                      .withValues(alpha: isDark ? .85 : .45),
-              width: _focused ? 1.5 : 1,
-            ),
+    final borderColor = _focused
+        ? colorScheme.primary.withValues(alpha: .75)
+        : colorScheme.outlineVariant
+            .withValues(alpha: isDark ? .85 : .45);
+    final bg = _hovering
+        ? colorScheme.surfaceContainerHigh
+        : (isDark
+            ? colorScheme.surfaceContainerHighest
+            : const Color(0xFFF3F4F6));
+    final hintColor = colorScheme.onSurfaceVariant.withValues(
+      alpha: isDark ? .7 : .6,
+    );
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(
+            color: borderColor,
+            width: _focused ? 1.5 : 1,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.search_rounded,
-                size: 16.5,
-                color: colorScheme.onSurfaceVariant.withValues(
-                  alpha: isDark ? .65 : .5,
-                ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.search_rounded,
+              size: 16.5,
+              color: colorScheme.onSurfaceVariant.withValues(
+                alpha: isDark ? .65 : .5,
               ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  '搜索音乐',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w400,
-                    color: colorScheme.onSurfaceVariant.withValues(
-                      alpha: isDark ? .7 : .6,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _interactive
+                  ? Focus(
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.escape) {
+                          widget.onEscape?.call();
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                      key: const ValueKey('desktop_title_bar_search'),
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      textInputAction: TextInputAction.search,
+                      onChanged: widget.onQueryChanged,
+                      onSubmitted: widget.onSubmitted,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: colorScheme.onSurface,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        hintText: '搜索歌曲、歌手、专辑',
+                        hintStyle: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w400,
+                          color: hintColor,
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                  ),
-                ),
-              ),
+                    )
+                  : Semantics(
+                      button: true,
+                      label: '搜索音乐',
+                      onTap: widget.onTapLegacy,
+                      child: InkWell(
+                        key: const ValueKey('desktop_title_bar_search'),
+                        onTap: widget.onTapLegacy,
+                        excludeFromSemantics: true,
+                        borderRadius: BorderRadius.circular(12),
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        mouseCursor: SystemMouseCursors.click,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '搜索音乐',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: hintColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            if (!_interactive) ...[
               const SizedBox(width: 6),
               Text(
                 'Ctrl+F',
@@ -293,7 +415,7 @@ class _TitleBarSearchButtonState extends State<_TitleBarSearchButton> {
                 ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
