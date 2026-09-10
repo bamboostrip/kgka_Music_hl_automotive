@@ -242,18 +242,18 @@ mixin _PlayerSettings on _PlayerControllerBase {
     setSleepTimer(duration, finishCurrentSong: true);
   }
 
-  /// Update the sleep timer finish song option dynamically.
+  /// 更新「播完当前歌曲再停止」偏好。
+  ///
+  /// 无定时器运行时也要记住该偏好——用户常先打开开关再选时长；
+  /// 旧实现仅在定时器已激活时写入，导致菜单里点了仍显示「关」。
   void updateSleepTimerOption(bool finishCurrentSong) {
-    if (_sleepTimer != null || _sleepFinishCurrentSong) {
-      _sleepFinishCurrentSongOption = finishCurrentSong;
-      // If the timer has already expired and is waiting for song to finish,
-      // and they turn it OFF, we should stop immediately.
-      if (!finishCurrentSong && _sleepFinishCurrentSong) {
-        _executeSleepTimer();
-      } else {
-        notifyListeners();
-      }
+    _sleepFinishCurrentSongOption = finishCurrentSong;
+    // 定时已到期且在等播完时，关掉开关应立即休眠。
+    if (!finishCurrentSong && _sleepFinishCurrentSong) {
+      _executeSleepTimer();
+      return;
     }
+    notifyListeners();
   }
 
   void cancelSleepTimer() {

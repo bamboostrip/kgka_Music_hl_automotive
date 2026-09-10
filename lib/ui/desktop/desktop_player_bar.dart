@@ -510,7 +510,11 @@ List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
     icon: Icons.schedule_rounded,
     title: label,
     onTap: () {
-      if (finishSong) {
+      // 调用时再读偏好，避免菜单构建时捕获过期的 finishSong。
+      final finish =
+          player.isSleepFinishCurrentSong ||
+          player.sleepFinishCurrentSongOption;
+      if (finish) {
         player.setSleepTimerFinishSong(d);
       } else {
         player.setSleepTimer(d);
@@ -521,8 +525,8 @@ List<SongSheetAction> _sleepTimerSubmenu(PlayerController player) {
   return [
     SongSheetAction(
       icon: Icons.queue_play_next_rounded,
-      title: '播完当前歌曲再停止',
-      subtitle: finishSong ? '开' : '关',
+      title: '播完这首再定时结束',
+      // 勾选表示开启；不写「开/关」副文案，避免与右侧时长项混淆。
       selected: finishSong,
       onTap: () => player.updateSleepTimerOption(!finishSong),
     ),

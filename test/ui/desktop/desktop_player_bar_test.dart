@@ -66,8 +66,16 @@ class _FakePlayerController extends ChangeNotifier implements PlayerController {
   @override
   bool get isSleepFinishCurrentSong => false;
 
+  bool _sleepFinishCurrentSongOption = false;
   @override
-  bool get sleepFinishCurrentSongOption => false;
+  bool get sleepFinishCurrentSongOption => _sleepFinishCurrentSongOption;
+  int updateSleepTimerOptionCalls = 0;
+  @override
+  void updateSleepTimerOption(bool finishCurrentSong) {
+    updateSleepTimerOptionCalls++;
+    _sleepFinishCurrentSongOption = finishCurrentSong;
+    notifyListeners();
+  }
 
   int playClimaxPreviewCalls = 0;
   @override
@@ -817,10 +825,36 @@ void main() {
       await tester.tap(find.text('定时播放'));
       await tester.pumpAndSettle();
 
+      expect(find.text('播完这首再定时结束'), findsOneWidget);
       expect(find.text('15 分钟'), findsOneWidget);
       expect(find.text('30 分钟'), findsOneWidget);
-      expect(find.text('播完当前歌曲再停止'), findsOneWidget);
       expect(find.byType(Dialog), findsNothing);
+    });
+
+    testWidgets('定时二级里勾选「播完这首再定时结束」会记住偏好', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      addTearDown(() => debugDesktopFormFactorOverride = null);
+
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(tester, player);
+
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('定时播放'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('播完这首再定时结束'));
+      await tester.pumpAndSettle();
+
+      expect(player.updateSleepTimerOptionCalls, 1);
+      expect(player.sleepFinishCurrentSongOption, isTrue);
+
+      // 重新打开二级：应显示已勾选
+      await tester.tap(find.byKey(const ValueKey('desktop_song_more_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('定时播放'));
+      await tester.pumpAndSettle();
+      expect(player.sleepFinishCurrentSongOption, isTrue);
     });
 
     testWidgets('点击更多菜单中的"复制歌曲信息"写入剪贴板', (tester) async {
