@@ -200,6 +200,9 @@ Future<void> _pumpBar(
   _FakePlayerController player, {
   _FakeAuthController? auth,
   VoidCallback? onOpenPlayerPage,
+  VoidCallback? onCollapse,
+  bool openPlayerPageEnabled = true,
+  bool overlayDark = false,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1.0;
@@ -213,6 +216,9 @@ Future<void> _pumpBar(
             player: player,
             auth: auth ?? _FakeAuthController(),
             onOpenPlayerPage: onOpenPlayerPage,
+            onCollapse: onCollapse,
+            openPlayerPageEnabled: openPlayerPageEnabled,
+            overlayDark: overlayDark,
           ),
         ),
       ),
@@ -948,6 +954,92 @@ void main() {
       await tester.tapAt(const Offset(4, 860));
       await tester.pump();
       expect(openCalls, 0);
+    });
+  });
+
+  // 播放页底部复用同一条底栏，靠这几个开关切换成「页内态」。
+  group('播放页内嵌模式（收起 / 禁止再进播放页）', () {
+    testWidgets('传 onCollapse 时最左侧渲染收起键且位于歌曲信息左侧，点击触发返回', (tester) async {
+      int collapseCalls = 0;
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(
+        tester,
+        player,
+        onCollapse: () => collapseCalls++,
+      );
+
+      final collapseBtn = find.byTooltip('收起播放页');
+      expect(collapseBtn, findsOneWidget);
+      // 最左：收起键在封面左侧
+      expect(
+        tester.getTopLeft(collapseBtn).dx,
+        lessThan(tester.getTopLeft(find.byType(Artwork)).dx),
+      );
+
+      await tester.tap(collapseBtn);
+      await tester.pump();
+      expect(collapseCalls, 1);
+    });
+
+    testWidgets('openPlayerPageEnabled=false 时点击底栏空白与歌曲信息都不再进入播放页', (tester) async {
+      int openCalls = 0;
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(
+        tester,
+        player,
+        onOpenPlayerPage: () => openCalls++,
+        openPlayerPageEnabled: false,
+      );
+
+      await tester.tapAt(const Offset(4, 860));
+      await tester.pump();
+      await tester.tap(find.byType(MarqueeText));
+      await tester.pump();
+      expect(openCalls, 0);
+      // 不可展开时也不再提示「展开歌曲详情页」
+      expect(find.byTooltip('展开歌曲详情页'), findsNothing);
+    });
+
+    testWidgets('overlayDark 下底栏前景翻为浅色（深底可见），播放键仍点品牌色', (tester) async {
+      final player = _FakePlayerController()..currentSong = _song;
+      await _pumpBar(
+        tester,
+        player,
+        onCollapse: () {},
+        overlayDark: true,
+      );
+
+      // 收起键：显式白色
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byTooltip('收起播放页'),
+                matching: find.byType(Icon),
+              ),
+            )
+            .color,
+        Colors.white,
+      );
+
+      // 相邻控制键：同样拿到浅色前景，证明确保局部主题覆写已下发到子部件
+      // （PlayModeButton / VolumePopoverButton 这些共用件只读 Theme）
+      final prevButton = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('上一首'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(prevButton.color, Colors.white);
+
+      // 播放键仍沿用品牌色：沉浸深色只翻承载色，不整体反转
+      final playButton = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('播放'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(playButton.color, isNot(Colors.white));
     });
   });
 }

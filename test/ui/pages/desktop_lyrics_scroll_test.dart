@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shiyin_music/controllers/auth_controller.dart';
 import 'package:shiyin_music/controllers/player_controller.dart';
 import 'package:shiyin_music/models/music_models.dart';
+import 'package:shiyin_music/ui/desktop/desktop_player_bar.dart';
 import 'package:shiyin_music/ui/form_factor.dart';
 import 'package:shiyin_music/ui/pages/player_page.dart';
 
+import 'package:shiyin_music/ui/player/landscape_player.dart';
 import 'package:shiyin_music/ui/player/player_controls.dart';
 
 class _FakePlayerController extends ChangeNotifier
@@ -57,6 +59,10 @@ class _FakePlayerController extends ChangeNotifier
 
   @override
   SongClimax? climax;
+
+  /// 桌面播放页底部常驻播放栏（DesktopPlayerBar）会读音量。
+  @override
+  double volume = 0.8;
 
   @override
   String get playbackModeLabel => '列表循环';
@@ -208,8 +214,23 @@ void main() {
       // 验证顶栏包含返回按钮
       expect(find.byIcon(Icons.keyboard_arrow_left_rounded), findsOneWidget);
       // 桌面形态下顶栏"更多"按钮已收敛到底部播放栏的更多菜单
-      // （57dbb02：播放页内不再冗余展示），此处应不可见。
-      expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
+      // （57dbb02：播放页内不再冗余展示）。PC 播放页最底复用常驻播放栏后，
+      // 该「更多」（圆形 ···）落在底栏左区，故按归属断言：顶栏内没有，
+      // 且确实存在一份在底部播放栏里。
+      expect(
+        find.descendant(
+          of: find.byType(LandscapeHeader),
+          matching: find.byIcon(Icons.more_horiz_rounded),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(DesktopPlayerBar),
+          matching: find.byIcon(Icons.more_horiz_rounded),
+        ),
+        findsOneWidget,
+      );
 
       // 关键验证：顶栏不出现突兀的音质 Pill
       expect(find.byType(PlayerAudioQualityPill), findsNothing);

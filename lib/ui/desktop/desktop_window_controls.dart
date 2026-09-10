@@ -188,6 +188,11 @@ class _DesktopWindowControlsOverlayState extends State<DesktopWindowControlsOver
             DesktopWindowCaptionButton(
               icon: Icons.close_rounded,
               tooltip: '关闭',
+              // 必须与相邻两键同传 iconColor：漏传会回落到主题
+              // onSurfaceVariant（浅色主题下近黑），叠在播放页黑色背景上
+              // 几乎看不见；关闭键又是三键里唯一带 hover 红底的，视觉权重
+              // 本就不该最弱。
+              iconColor: widget.iconColor,
               hoverColor: const Color(0xFFE81123),
               hoverIconColor: Colors.white,
               onTap: () async {

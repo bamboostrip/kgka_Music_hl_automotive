@@ -205,4 +205,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DesktopWindowControlsOverlay), findsNothing);
   });
+
+  // 回归：关闭键曾漏传 iconColor，回落到主题 onSurfaceVariant（浅色主题下
+  // 近黑），叠在播放页黑色背景上几乎看不见，三键里只有它「消失」。
+  // 断言的是「三键同色」而非某个具体色值：浮层传入什么颜色就该渲染什么。
+  testWidgets('播放页浮层三键同色：关闭键不再比相邻两键更暗', (tester) async {
+    debugDesktopFormFactorOverride = true;
+    addTearDown(() => debugDesktopFormFactorOverride = null);
+    stubWindowManagerChannel(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerPage(
+          player: _FakePlayerController(),
+          auth: _FakeAuthController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Color iconColorOf(String tooltip) {
+      return tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byTooltip(tooltip),
+              matching: find.byType(Icon),
+            ),
+          )
+          .color!;
+    }
+
+    final minimize = iconColorOf('最小化');
+    final maximize = iconColorOf('最大化');
+    final close = iconColorOf('关闭');
+
+    expect(minimize, Colors.white);
+    expect(close, minimize);
+    expect(close, maximize);
+  });
 }

@@ -106,6 +106,10 @@ class _FakePlayerController extends ChangeNotifier
   @override
   SongClimax? climax;
 
+  /// 桌面播放页底部常驻播放栏（DesktopPlayerBar）会读音量。
+  @override
+  double volume = 0.8;
+
   @override
   MusicApi get api => _FakeApi();
 

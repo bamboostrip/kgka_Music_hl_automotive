@@ -42,6 +42,12 @@ const double kPlayerBarLeftWidthCompact = 232;
 /// - 右：音质 + 音效(?) + 桌面词(?) + 队列。
 ///
 /// 无歌曲时保持占位布局（高度稳定，不随播放状态跳变）。
+///
+/// 同一组件同时服务两个入口，靠参数区分：
+/// - 主界面常驻底栏（[DesktopShell]）：默认参数，浅色/深色主题原样。
+/// - 全屏播放页底部（`LandscapePlayerContent`）：[overlayDark] 沉浸深色 +
+///   [openPlayerPageEnabled] 关掉「再进一层播放页」+ [onCollapse] 最左收起键，
+///   即 QQ 音乐 PC 正在播放页那种「内容之上、页面最底仍是那条常驻播放栏」。
 class DesktopPlayerBar extends StatelessWidget {
   const DesktopPlayerBar({
     super.key,
@@ -50,6 +56,9 @@ class DesktopPlayerBar extends StatelessWidget {
     this.onOpenPlayerPage,
     this.onOpenComment,
     this.onOpenArtist,
+    this.onCollapse,
+    this.openPlayerPageEnabled = true,
+    this.overlayDark = false,
   });
 
   final PlayerController player;
@@ -64,7 +73,19 @@ class DesktopPlayerBar extends StatelessWidget {
   /// 未传时退回根 Navigator（全屏）。
   final ValueChanged<ArtistRef>? onOpenArtist;
 
+  /// 最左侧「收起」按钮回调。非空时在最左渲染收起键（播放页用于返回主界面）。
+  final VoidCallback? onCollapse;
+
+  /// 是否允许点底栏空白/歌曲信息进入全屏播放页。
+  ///
+  /// 播放页底部复用本栏时必须置 false：否则点一下会在播放页上再叠一层播放页。
+  final bool openPlayerPageEnabled;
+
+  /// 沉浸深色：半透明黑底 + 浅色前景，用于播放页的黑色封面背景之上。
+  final bool overlayDark;
+
   void _openPlayerPage(BuildContext context) {
+    if (!openPlayerPageEnabled) return;
     if (player.currentSong == null) return;
     if (onOpenPlayerPage != null) {
       onOpenPlayerPage!();
@@ -73,190 +94,277 @@ class DesktopPlayerBar extends StatelessWidget {
     PlayerPageRoute.open(context, player: player, auth: auth);
   }
 
+  /// 底栏空白/歌曲信息是否可点（进播放页）。
+  bool get _barTappable => openPlayerPageEnabled && player.currentSong != null;
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // 沉浸深色走局部 Theme 覆写：本栏内所有部件（含 PlayModeButton /
+    // VolumePopoverButton 这些直接读 Theme 的共用件）都能拿到浅色前景，
+    // 不必逐个透传颜色参数。
+    final theme = overlayDark
+        ? _overlayDarkBarTheme(Theme.of(context))
+        : Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final background = overlayDark
+        ? Colors.black.withValues(alpha: .38)
+        : (isDark ? const Color(0xFF1E2433) : Colors.white);
+    final borderColor = overlayDark
+        ? Colors.white.withValues(alpha: .10)
+        : colorScheme.outlineVariant.withValues(alpha: .5);
 
-    return AnimatedBuilder(
-      animation: player,
-      builder: (context, _) {
-        final song = player.currentSong;
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: song == null ? null : () => _openPlayerPage(context),
-          child: MouseRegion(
-            cursor: song == null
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.click,
-            child: Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E2433) : Colors.white,
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outlineVariant.withValues(alpha: .5),
-                    width: 1,
-                  ),
+    return Theme(
+      data: theme,
+      child: AnimatedBuilder(
+        animation: player,
+        builder: (context, _) {
+          final song = player.currentSong;
+          return GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _barTappable ? () => _openPlayerPage(context) : null,
+            child: MouseRegion(
+              cursor: _barTappable
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.basic,
+              child: Container(
+                height: 80,
+                decoration: BoxDecoration(
+                  color: background,
+                  border: Border(top: BorderSide(color: borderColor, width: 1)),
                 ),
-              ),
-              child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact =
-                  constraints.maxWidth < kPlayerBarCompactBreakpoint;
-              final leftWidth = compact
-                  ? kPlayerBarLeftWidthCompact
-                  : kPlayerBarLeftWidth;
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(width: 12),
-                  // —— 左：歌曲信息 + 操作入口 ——
-                  SizedBox(
-                    width: leftWidth,
-                    child: SongInfo(
-                      player: player,
-                      auth: auth,
-                      song: song,
-                      colorScheme: colorScheme,
-                      onTap: () => _openPlayerPage(context),
-                      onOpenComment: onOpenComment,
-                      onOpenArtist: onOpenArtist,
-                    ),
-                  ),
-                  // —— 中：控制（上）+ 进度（下），Expanded 吃满剩余宽度 ——
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      // 紧凑点击目标：中间列是控制+进度双层叠放，默认 48px
-                      // 点击目标会撑爆 80px 底栏，这里收成桌面鼠标友好的
-                      // 小目标（保留图标尺寸，只收内边距）。
-                      child: IconButtonTheme(
-                        data: IconButtonThemeData(
-                          style: IconButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(32, 32),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact =
+                        constraints.maxWidth < kPlayerBarCompactBreakpoint;
+                    final leftWidth = compact
+                        ? kPlayerBarLeftWidthCompact
+                        : kPlayerBarLeftWidth;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (onCollapse != null) ...[
+                          const SizedBox(width: 6),
+                          _CollapseButton(onPressed: onCollapse!),
+                          const SizedBox(width: 2),
+                        ] else
+                          const SizedBox(width: 12),
+                        // —— 左：歌曲信息 + 操作入口 ——
+                        SizedBox(
+                          width: leftWidth,
+                          child: SongInfo(
+                            player: player,
+                            auth: auth,
+                            song: song,
+                            colorScheme: colorScheme,
+                            onTap: _barTappable
+                                ? () => _openPlayerPage(context)
+                                : null,
+                            onOpenComment: onOpenComment,
+                            onOpenArtist: onOpenArtist,
                           ),
                         ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PlayModeButton(player: player),
-                                const SizedBox(width: 20),
-                                IconButton(
-                                  tooltip: '上一首',
-                                  onPressed: song == null
-                                      ? null
-                                      : player.previous,
-                                  icon: const Icon(
-                                    Icons.skip_previous_rounded,
-                                    size: 28,
-                                  ),
-                                  color: colorScheme.onSurface,
-                                ),
-                                const SizedBox(width: 20),
-                                IconButton(
-                                  tooltip: player.isPlaying ? '暂停' : '播放',
-                                  onPressed: player.isPreparing || song == null
-                                      ? null
-                                      : player.togglePlay,
-                                  icon: Icon(
-                                    player.isPlaying
-                                        ? Icons.pause_circle_rounded
-                                        : Icons.play_circle_rounded,
-                                    size: 36,
-                                  ),
-                                  color: colorScheme.primary,
-                                ),
-                                const SizedBox(width: 20),
-                                IconButton(
-                                  tooltip: '下一首',
-                                  onPressed: song == null ? null : player.next,
-                                  icon: const Icon(
-                                    Icons.skip_next_rounded,
-                                    size: 28,
-                                  ),
-                                  color: colorScheme.onSurface,
-                                ),
-                                const SizedBox(width: 20),
-                                VolumePopoverButton(
-                                  key: const ValueKey(
-                                    'desktop_volume_popover_button',
-                                  ),
-                                  player: player,
-                                ),
-                              ],
-                            ),
-                            // 进度区（拖拽中显示拖拽位置，松手 seek）。
-                            // 无歌时不渲染，但中间列仍由控制行撑住，底栏高度不变。
-                            if (song != null) ...[
-                              Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 440,
-                                  ),
-                                  child: _ProgressBar(player: player),
+                        // —— 中：控制（上）+ 进度（下），Expanded 吃满剩余宽度 ——
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            // 紧凑点击目标：中间列是控制+进度双层叠放，默认 48px
+                            // 点击目标会撑爆 80px 底栏，这里收成桌面鼠标友好的
+                            // 小目标（保留图标尺寸，只收内边距）。
+                            child: IconButtonTheme(
+                              data: IconButtonThemeData(
+                                style: IconButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(32, 32),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
                               ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      PlayModeButton(player: player),
+                                      const SizedBox(width: 20),
+                                      IconButton(
+                                        tooltip: '上一首',
+                                        onPressed: song == null
+                                            ? null
+                                            : player.previous,
+                                        icon: const Icon(
+                                          Icons.skip_previous_rounded,
+                                          size: 28,
+                                        ),
+                                        color: colorScheme.onSurface,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      IconButton(
+                                        tooltip: player.isPlaying ? '暂停' : '播放',
+                                        onPressed:
+                                            player.isPreparing || song == null
+                                            ? null
+                                            : player.togglePlay,
+                                        icon: Icon(
+                                          player.isPlaying
+                                              ? Icons.pause_circle_rounded
+                                              : Icons.play_circle_rounded,
+                                          size: 36,
+                                        ),
+                                        color: colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      IconButton(
+                                        tooltip: '下一首',
+                                        onPressed: song == null
+                                            ? null
+                                            : player.next,
+                                        icon: const Icon(
+                                          Icons.skip_next_rounded,
+                                          size: 28,
+                                        ),
+                                        color: colorScheme.onSurface,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      VolumePopoverButton(
+                                        key: const ValueKey(
+                                          'desktop_volume_popover_button',
+                                        ),
+                                        player: player,
+                                      ),
+                                    ],
+                                  ),
+                                  // 进度区（拖拽中显示拖拽位置，松手 seek）。
+                                  // 无歌时不渲染，但中间列仍由控制行撑住，底栏高度不变。
+                                  if (song != null) ...[
+                                    Center(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 440,
+                                        ),
+                                        child: _ProgressBar(player: player),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // —— 右：功能区 ——
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 音质切换
+                            _AudioQualityButton(
+                              key: const ValueKey(
+                                'desktop_audio_quality_button',
+                              ),
+                              player: player,
+                            ),
+                            const SizedBox(width: 8),
+                            // 音效（仅受支持平台渲染，不支持时不占位）
+                            _EffectsButton(player: player),
+                            // 桌面歌词开关（仅支持桌面歌词的平台渲染）
+                            if (player.isDesktopLyricsSupported) ...[
+                              _DesktopLyricsButton(player: player, song: song),
+                              const SizedBox(width: 4),
                             ],
+                            // 队列（PC：锚定在按钮上方的面板，替代移动端底部弹层）
+                            Builder(
+                              builder: (buttonContext) => IconButton(
+                                tooltip: '播放队列',
+                                onPressed: song == null
+                                    ? null
+                                    : () => showDesktopQueuePanel(
+                                        buttonContext,
+                                        player,
+                                      ),
+                                icon: const Icon(
+                                  Icons.queue_music_rounded,
+                                  size: 26,
+                                ),
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                  // —— 右：功能区 ——
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 音质切换
-                      _AudioQualityButton(
-                        key: const ValueKey('desktop_audio_quality_button'),
-                        player: player,
-                      ),
-                      const SizedBox(width: 8),
-                      // 音效（仅受支持平台渲染，不支持时不占位）
-                      _EffectsButton(player: player),
-                      // 桌面歌词开关（仅支持桌面歌词的平台渲染）
-                      if (player.isDesktopLyricsSupported) ...[
-                        _DesktopLyricsButton(player: player, song: song),
-                        const SizedBox(width: 4),
                       ],
-                      // 队列（PC：锚定在按钮上方的面板，替代移动端底部弹层）
-                      Builder(
-                        builder: (buttonContext) => IconButton(
-                          tooltip: '播放队列',
-                          onPressed: song == null
-                              ? null
-                              : () => showDesktopQueuePanel(
-                                  buttonContext,
-                                  player,
-                                ),
-                          icon: const Icon(Icons.queue_music_rounded, size: 26),
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
-  },
-);
+  }
+}
+
+/// 沉浸深色底栏的局部主题：只把承载色翻成「深底浅字」，其余（primary 品牌色
+/// 等）沿用原主题——播放页底栏仍要点出品牌金，不能整体反转。
+///
+/// 结果按 base 主题身份缓存：`Theme` 靠 `data` 的身份比较决定是否通知依赖，
+/// 每次 copyWith 出新实例会让整条底栏的 Theme 依赖频繁重算；播放页会随播控
+/// 状态重建本栏，这里返回同一实例即可零成本复用。
+ThemeData _overlayDarkBarTheme(ThemeData base) {
+  if (identical(_overlayDarkBaseCache, base) && _overlayDarkResultCache != null) {
+    return _overlayDarkResultCache!;
+  }
+  final scheme = base.colorScheme;
+  final result = base.copyWith(
+    colorScheme: scheme.copyWith(
+      brightness: Brightness.dark,
+      onSurface: Colors.white,
+      onSurfaceVariant: Colors.white.withValues(alpha: .74),
+      outlineVariant: Colors.white.withValues(alpha: .22),
+      surfaceContainerHighest: Colors.white.withValues(alpha: .18),
+      // 进度条悬停时间气泡：深底栏上用浅底深字，与主界面底栏同款。
+      inverseSurface: Colors.white,
+      onInverseSurface: const Color(0xFF1B1B1B),
+    ),
+  );
+  _overlayDarkBaseCache = base;
+  _overlayDarkResultCache = result;
+  return result;
+}
+
+ThemeData? _overlayDarkBaseCache;
+ThemeData? _overlayDarkResultCache;
+
+/// 播放页底栏最左「收起」键：收起播放页返回主界面（QQ 音乐 PC 正在播放页同款）。
+class _CollapseButton extends StatelessWidget {
+  const _CollapseButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: '收起播放页',
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      icon: Icon(
+        Icons.keyboard_arrow_down_rounded,
+        size: 24,
+        // 直接给色而非走 IconButton.color：便于单测断言颜色，
+        // 也避免 IconTheme 解析层级带来的歧义。
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+    );
   }
 }
 
 /// 左区：封面 + 曲名/歌手跑马灯 + 操作按钮行。
 /// 悬停封面时浮出半透明蒙层 + 放大图标提示可进入播放页，点击进入。
+///
+/// [onTap] 为 null 表示当前场景不允许进播放页（如播放页底栏复用本栏时），
+/// 此时封面不浮出放大提示、点击无响应。
 @visibleForTesting
 class SongInfo extends StatefulWidget {
   const SongInfo({
@@ -272,7 +380,7 @@ class SongInfo extends StatefulWidget {
 
   final Song? song;
   final ColorScheme colorScheme;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final PlayerController? player;
   final AuthController? auth;
   final ValueChanged<String>? onOpenComment;
@@ -291,6 +399,8 @@ class _SongInfoState extends State<SongInfo> {
     final song = widget.song;
     final colorScheme = widget.colorScheme;
     final iconColor = colorScheme.onSurfaceVariant;
+    // 不可进播放页时不展示「展开」提示，也不给点击反馈。
+    final openable = song != null && widget.onTap != null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -305,9 +415,9 @@ class _SongInfoState extends State<SongInfo> {
                 if (mounted) setState(() => _coverHovered = false);
               },
               child: Tooltip(
-                message: song == null ? '' : '展开歌曲详情页',
+                message: openable ? '展开歌曲详情页' : '',
                 child: InkWell(
-                  onTap: song == null ? null : widget.onTap,
+                  onTap: openable ? widget.onTap : null,
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
                     width: 48,
@@ -315,7 +425,7 @@ class _SongInfoState extends State<SongInfo> {
                     child: Stack(
                       children: [
                         Artwork(url: song?.coverUrl, size: 48, borderRadius: 8),
-                        if (_coverHovered && song != null)
+                        if (_coverHovered && openable)
                           Positioned.fill(
                             child: DecoratedBox(
                               decoration: BoxDecoration(
@@ -345,11 +455,11 @@ class _SongInfoState extends State<SongInfo> {
                 children: [
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: song == null ? null : widget.onTap,
+                    onTap: openable ? widget.onTap : null,
                     child: MouseRegion(
-                      cursor: song == null
-                          ? SystemMouseCursors.basic
-                          : SystemMouseCursors.click,
+                      cursor: openable
+                          ? SystemMouseCursors.click
+                          : SystemMouseCursors.basic,
                       child: MarqueeText(
                         textSpan: TextSpan(
                           children: [

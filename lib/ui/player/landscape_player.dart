@@ -9,6 +9,7 @@ import '../../controllers/player_controller.dart';
 import '../../models/music_models.dart';
 import '../../services/lyric_converter.dart';
 import '../form_factor.dart';
+import '../desktop/desktop_player_bar.dart';
 import '../pages/desktop_lyrics_settings_page.dart';
 import '../widgets/artwork.dart';
 import '../widgets/audio_effects_sheet.dart';
@@ -41,54 +42,89 @@ class LandscapePlayerContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // PC（QQ 音乐 PC 正在播放页式）：页面最底是那条与主界面同源的常驻播放栏
+    // （封面/歌名/操作 + 控制/进度 + 音质/音效/桌面词/队列），最左「收起」返回。
+    // 车机横屏没有鼠标语义，保持原「右栏内进度+控制」，不套这层。
+    final useBottomBar = isDesktopFormFactor;
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxHeight < 350;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            compact ? 14 : 24,
-            compact ? 4 : 10,
-            compact ? 16 : 30,
-            compact ? 24 : 36,
-          ),
-          child: Column(
-            children: [
-              LandscapeHeader(
-                player: player,
-                auth: auth,
-                song: song,
-                onClose: onClose,
-                compact: compact,
-                onArtistTap: onArtistTap,
+        final content = Column(
+          children: [
+            LandscapeHeader(
+              player: player,
+              auth: auth,
+              song: song,
+              onClose: onClose,
+              compact: compact,
+              onArtistTap: onArtistTap,
+            ),
+            SizedBox(height: compact ? 2 : 10),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 9,
+                    child: LandscapeArtworkShowcase(
+                      player: player,
+                      song: song,
+                      compact: compact,
+                    ),
+                  ),
+                  SizedBox(width: compact ? 18 : 34),
+                  Expanded(
+                    flex: 12,
+                    child: LandscapeRightPanel(
+                      player: player,
+                      auth: auth,
+                      song: song,
+                      onQueue: onQueue,
+                      compact: compact,
+                      // 进度/控制已下沉到页面底部常驻播放栏时，右栏只留歌名 + 歌词，
+                      // 歌词区域顺势吃满剩余高度。
+                      showTransport: !useBottomBar,
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(height: compact ? 2 : 10),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 9,
-                      child: LandscapeArtworkShowcase(
-                        player: player,
-                        song: song,
-                        compact: compact,
-                      ),
-                    ),
-                    SizedBox(width: compact ? 18 : 34),
-                    Expanded(
-                      flex: 12,
-                      child: LandscapeRightPanel(
-                        player: player,
-                        auth: auth,
-                        song: song,
-                        onQueue: onQueue,
-                        compact: compact,
-                      ),
-                    ),
-                  ],
+            ),
+          ],
+        );
+
+        if (!useBottomBar) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 14 : 24,
+              compact ? 4 : 10,
+              compact ? 16 : 30,
+              compact ? 24 : 36,
+            ),
+            child: content,
+          );
+        }
+
+        return Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 14 : 24,
+                  compact ? 4 : 10,
+                  compact ? 16 : 30,
+                  compact ? 8 : 16,
                 ),
+                child: content,
               ),
-            ],
-          ),
+            ),
+            // 播放页内复用常驻底栏：禁止再进一层播放页，最左加「收起」返回主界面。
+            DesktopPlayerBar(
+              player: player,
+              auth: auth,
+              overlayDark: true,
+              openPlayerPageEnabled: false,
+              onCollapse: onClose,
+            ),
+          ],
         );
       },
     );
@@ -462,6 +498,7 @@ class LandscapeRightPanel extends StatelessWidget {
     required this.song,
     required this.onQueue,
     required this.compact,
+    this.showTransport = true,
   });
 
   final PlayerController player;
@@ -469,6 +506,12 @@ class LandscapeRightPanel extends StatelessWidget {
   final Song? song;
   final VoidCallback onQueue;
   final bool compact;
+
+  /// 是否在本栏底部渲染进度条 + 控制行。
+  ///
+  /// PC 播放页已把这些下沉到页面底部的常驻播放栏，故传 false；
+  /// 车机横屏没有常驻播放栏，保持 true。
+  final bool showTransport;
 
   @override
   Widget build(BuildContext context) {
@@ -520,18 +563,20 @@ class LandscapeRightPanel extends StatelessWidget {
                 compact: compact || veryTight,
               ),
             ),
-            SizedBox(height: veryTight ? 2 : 6),
-            Progress(player: player, bright: true, compact: true),
-            SizedBox(height: veryTight ? 0 : 4),
-            Controls(
-              player: player,
-              bright: true,
-              onQueue: onQueue,
-              compactOverride: true,
-              denseOverride: veryTight,
-              likeAuth: auth,
-              likeSong: song,
-            ),
+            if (showTransport) ...[
+              SizedBox(height: veryTight ? 2 : 6),
+              Progress(player: player, bright: true, compact: true),
+              SizedBox(height: veryTight ? 0 : 4),
+              Controls(
+                player: player,
+                bright: true,
+                onQueue: onQueue,
+                compactOverride: true,
+                denseOverride: veryTight,
+                likeAuth: auth,
+                likeSong: song,
+              ),
+            ],
           ],
         );
       },
