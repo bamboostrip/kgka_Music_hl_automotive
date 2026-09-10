@@ -118,6 +118,12 @@ class _HomeSongRowState extends State<HomeSongRow> {
               ? Colors.white.withValues(alpha: 0.07)
               : colorScheme.surfaceContainerHigh.withValues(alpha: 0.7);
 
+          // 正在播放：与桌面表格行同口径的整行底色 + 描边，避免仅靠
+          // 橙色文字在密集列表里“看不清在播哪一首”。
+          final rowBg = active
+              ? activeColor.withValues(alpha: isDesktop ? 0.10 : 0.12)
+              : (isDesktop && _hovered ? hoverBg : Colors.transparent);
+
           return MouseRegion(
             cursor: SystemMouseCursors.click,
             onEnter: isDesktop ? (_) => setState(() => _hovered = true) : null,
@@ -143,8 +149,14 @@ class _HomeSongRowState extends State<HomeSongRow> {
                   horizontal: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: isDesktop && _hovered ? hoverBg : Colors.transparent,
+                  color: rowBg,
                   borderRadius: rowRadius,
+                  border: Border.all(
+                    color: active
+                        ? activeColor.withValues(alpha: 0.28)
+                        : Colors.transparent,
+                    width: 1,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -184,7 +196,7 @@ class _HomeSongRowState extends State<HomeSongRow> {
                                   active: active,
                                   playing: widget.player.isPlaying,
                                   color: activeColor,
-                                  size: 11,
+                                  size: isDesktop ? 12 : 13,
                                 ),
                               ),
                             ),

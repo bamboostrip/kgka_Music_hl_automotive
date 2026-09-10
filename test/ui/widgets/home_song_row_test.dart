@@ -7,6 +7,7 @@ import 'package:shiyin_music/controllers/player_controller.dart';
 import 'package:shiyin_music/models/music_models.dart';
 import 'package:shiyin_music/ui/form_factor.dart';
 import 'package:shiyin_music/ui/widgets/home_song_row.dart';
+import 'package:shiyin_music/ui/widgets/now_playing_badge.dart';
 
 class _FakePlayerController extends ChangeNotifier implements PlayerController {
   @override
@@ -53,6 +54,7 @@ void main() {
 
   Widget buildRow({
     required void Function(Song song, List<Song> queue) onPlay,
+    PlayerController? player,
   }) {
     return HomeSongRow(
       song: _song,
@@ -61,7 +63,7 @@ void main() {
       isLiked: false,
       onLikeTap: () {},
       auth: _FakeAuthController(),
-      player: _FakePlayerController(),
+      player: player ?? _FakePlayerController(),
       onViewArtist: () {},
     );
   }
@@ -169,6 +171,39 @@ void main() {
       await tester.tap(find.text('查看歌手'));
       await tester.pumpAndSettle();
       expect(find.text('下一首播放'), findsNothing);
+    });
+
+    testWidgets('当前播放歌曲显示行底色高亮与 NowPlayingBadge', (tester) async {
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..isPlaying = true;
+
+      await tester.pumpWidget(
+        wrap(buildRow(onPlay: (_, _) {}, player: player)),
+      );
+      // NowPlayingBadge 有持续动画，不能 pumpAndSettle
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(NowPlayingBadge), findsOneWidget);
+
+      final container = tester.widget<AnimatedContainer>(
+        find
+            .ancestor(
+              of: find.byType(NowPlayingBadge),
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      final decoration = container.decoration! as BoxDecoration;
+      expect(decoration.color, isNotNull);
+      expect(decoration.color!.a, greaterThan(0));
+      expect(decoration.border, isNotNull);
+    });
+
+    testWidgets('非当前播放歌曲不渲染高亮底色与 Badge', (tester) async {
+      await tester.pumpWidget(wrap(buildRow(onPlay: (_, _) {})));
+
+      expect(find.byType(NowPlayingBadge), findsNothing);
     });
   });
 

@@ -213,7 +213,7 @@ void main() {
 
       expect(find.text('删除下载'), findsOneWidget);
       expect(find.text('打开文件夹'), findsOneWidget);
-      expect(find.text('查看文件路径'), findsOneWidget);
+      expect(find.text('复制文件路径'), findsOneWidget);
 
       await tester.tap(find.text('删除下载'));
       await tester.pumpAndSettle();

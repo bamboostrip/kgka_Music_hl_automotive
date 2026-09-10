@@ -355,7 +355,7 @@ class _DownloadedList extends StatelessWidget {
     );
   }
 
-  /// 桌面端行内 `...` / 右键菜单：保留删除下载、打开文件夹、查看文件路径。
+  /// 桌面端行内 `...` / 右键菜单：删除下载、打开文件夹、复制文件路径。
   void _showDesktopEntryMenu(
     BuildContext context,
     DownloadEntry entry, {
@@ -380,22 +380,17 @@ class _DownloadedList extends StatelessWidget {
             title: '打开文件夹',
             onTap: () => _openContainingFolder(
               filePath,
-              context,
               downloads: downloads,
               song: song,
             ),
           ),
           SongSheetAction(
-            icon: Icons.info_outline_rounded,
-            title: '查看文件路径',
+            icon: Icons.copy_rounded,
+            title: '复制文件路径',
             onTap: () {
               Clipboard.setData(ClipboardData(text: filePath));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('路径已复制到剪贴板'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              // 全局 Toast：定位在播放栏之上，避免 SnackBar 压住底部播放栏。
+              Toast.show('路径已复制到剪贴板', type: ToastType.success);
             },
           ),
         ],
@@ -547,15 +542,14 @@ class _DownloadedSongRow extends StatelessWidget {
                   Navigator.pop(ctx);
                   _openContainingFolder(
                     filePath,
-                    context,
                     downloads: downloads,
                     song: song,
                   );
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.info_outline_rounded),
-                title: const Text('查看文件路径'),
+                leading: const Icon(Icons.copy_rounded),
+                title: const Text('复制文件路径'),
                 subtitle: Text(
                   filePath,
                   maxLines: 2,
@@ -564,12 +558,8 @@ class _DownloadedSongRow extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(ctx);
                   Clipboard.setData(ClipboardData(text: filePath));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('路径已复制到剪贴板'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                  // 全局 Toast：定位在播放栏之上，避免 SnackBar 压住底部播放栏。
+                  Toast.show('路径已复制到剪贴板', type: ToastType.success);
                 },
               ),
             ],
@@ -590,10 +580,9 @@ class _DownloadedSongRow extends StatelessWidget {
 ///   "在文件夹中显示"一致的现代口径），macOS 用 `open -R` 在 Finder
 ///   中定位；
 /// - 任何一步失败（精简发行版没有 xdg-open、explorer 拉起失败等）都以
-///   Toast/SnackBar 反馈，不产生未捕获异步异常。
+///   全局 Toast 反馈，不产生未捕获异步异常。
 Future<void> _openContainingFolder(
-  String filePath,
-  BuildContext context, {
+  String filePath, {
   required DownloadController downloads,
   required Song song,
 }) async {
@@ -635,22 +624,12 @@ Future<void> _openContainingFolder(
       }
     } else {
       // iOS 无文件管理器直达能力：明确反馈而非静默无响应。
-      if (context.mounted) {
-        _showOpenFolderError(context, '当前平台暂不支持打开所在目录');
-      }
+      Toast.error('当前平台暂不支持打开所在目录');
     }
   } catch (e) {
     debugPrint('[已下载] 打开所在目录失败: $e');
-    if (context.mounted) {
-      _showOpenFolderError(context, '打开目录失败，请手动前往：$dir');
-    }
+    Toast.error('打开目录失败，请手动前往：$dir');
   }
-}
-
-void _showOpenFolderError(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-  );
 }
 
 /// 下载中行（显示进度）。
