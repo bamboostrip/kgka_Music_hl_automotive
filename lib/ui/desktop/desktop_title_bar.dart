@@ -4,6 +4,10 @@ import 'package:window_manager/window_manager.dart';
 
 import 'desktop_window_controls.dart';
 
+/// 顶栏（自定义标题栏）总高。QQ 音乐 PC 同量级：40px 细条 + 30px 搜索胶囊。
+/// 搜索浮层（shell）按此常量贴着顶栏下缘定位。
+const double kDesktopTitleBarHeight = 40;
+
 /// 桌面沉浸式自定义标题栏（QQ 音乐 PC 式）。
 ///
 /// 左侧品牌 Logo/标题（与侧栏 208 对齐），中间居中搜索胶囊（可输入，
@@ -91,7 +95,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      height: 52,
+      height: kDesktopTitleBarHeight,
       color: colorScheme.surface,
       child: Row(
         children: [
@@ -172,14 +176,14 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
 
           // 右侧窗口控制按钮区（与全屏页面浮层共用同一套按钮）。
           // 高度传标题栏全高：按钮贴窗口顶边，与原生 Windows 标题栏一致，
-          // 否则 40 高的按钮垂直居中会在顶部留出 6px 空白。
+          // 否则按钮矮于顶栏垂直居中时会在顶部留出空白。
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               DesktopWindowCaptionButton(
                 icon: Icons.remove_rounded,
                 tooltip: '最小化',
-                height: 52,
+                height: kDesktopTitleBarHeight,
                 onTap: () async {
                   widget.onChromeTap?.call();
                   try {
@@ -192,7 +196,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                     ? Icons.filter_none_rounded
                     : Icons.crop_square_rounded,
                 tooltip: _isMaximized ? '还原' : '最大化',
-                height: 52,
+                height: kDesktopTitleBarHeight,
                 onTap: () async {
                   widget.onChromeTap?.call();
                   try {
@@ -207,7 +211,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
               DesktopWindowCaptionButton(
                 icon: Icons.close_rounded,
                 tooltip: '关闭',
-                height: 52,
+                height: kDesktopTitleBarHeight,
                 hoverColor: const Color(0xFFE81123),
                 hoverIconColor: Colors.white,
                 onTap: () async {
@@ -346,12 +350,12 @@ class _TitleBarSearchFieldState extends State<_TitleBarSearchField> {
       onExit: (_) => setState(() => _hovering = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
-        height: 34,
+        height: 30,
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(15),
           border: Border.all(
             color: borderColor,
             width: 1,

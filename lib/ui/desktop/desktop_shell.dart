@@ -446,7 +446,7 @@ class _DesktopShellState extends State<DesktopShell> {
               // 顶栏搜索浮层：点击内容区收起；标题栏保持可输入。
               if (_searchPanelOpen) ...[
                 Positioned(
-                  top: 53,
+                  top: kDesktopTitleBarHeight + 1,
                   left: 0,
                   right: 0,
                   bottom: 0,
@@ -457,7 +457,7 @@ class _DesktopShellState extends State<DesktopShell> {
                   ),
                 ),
                 Positioned(
-                  top: 52,
+                  top: kDesktopTitleBarHeight,
                   left: 0,
                   right: 0,
                   child: Center(
