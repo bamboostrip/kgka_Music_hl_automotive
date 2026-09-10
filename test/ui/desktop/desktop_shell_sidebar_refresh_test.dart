@@ -22,11 +22,22 @@ class _GateMusicApi implements MusicApi {
 
   List<Song> dailySongs = const [];
 
+  int fmRecommendedCalls = 0;
+  Completer<List<FmStation>>? fmGate;
+  List<FmStation> fmStations = const [];
+
   @override
   Future<DailyRecommend> dailyRecommend() async {
     dailyRecommendCalls++;
     if (gate != null) return gate!.future;
     return DailyRecommend(title: '每日推荐', songs: dailySongs);
+  }
+
+  @override
+  Future<List<FmStation>> fmRecommendedStations() async {
+    fmRecommendedCalls++;
+    if (fmGate != null) return fmGate!.future;
+    return fmStations;
   }
 
   @override
@@ -55,9 +66,6 @@ class _GateMusicApi implements MusicApi {
   @override
   Future<List<Song>> newSongs({int rankId = 0, int page = 1}) async =>
       const [];
-
-  @override
-  Future<List<FmStation>> fmRecommendedStations() async => const [];
 
   @override
   Future<List<FmClassGroup>> fmClassGroups() async => const [];
@@ -261,15 +269,66 @@ void main() {
     expect(_visibleEqualizer(), findsNothing, reason: '刷新完成后均衡器收起');
   });
 
-  testWidgets('桌面端：双击间隔超过 350ms 不触发刷新（仍是两次单击）', (tester) async {
+  testWidgets('桌面端：切到电台后双击侧栏「电台」，电台刷新且顶部均衡器出现后收起', (tester) async {
+    final api = await pumpShell(tester);
+
+    // 电台初始数据（首次直返），让电台 pane 渲染出内容。
+    api.fmStations = const [FmStation(id: 'fm_1', name: '电台一', type: 2)];
+    await tester.tap(find.text('电台').first); // 单击切换到电台（不刷新）
+    await tester.pumpAndSettle();
+    final before = api.fmRecommendedCalls;
+    expect(before, greaterThan(0), reason: '前置：电台初始加载已发生');
+
+    api.fmGate = Completer<List<FmStation>>();
+    await tester.tap(find.text('电台').first); // 第一击
+    await tester.pump();
+    await tester.tap(find.text('电台').first); // 第二击：视为双击
+    // 回顶（已在顶部即回）后的微任务里启动 refresh，多 pump 一帧。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(api.fmRecommendedCalls, greaterThan(before), reason: '双击触发电台刷新');
+    expect(
+      _visibleEqualizer(),
+      findsWidgets,
+      reason: '刷新在途时顶部出现均衡器动画',
+    );
+
+    api.fmGate!.complete(const [FmStation(id: 'fm_1', name: '电台一', type: 2)]);
+    await tester.pumpAndSettle();
+    expect(_visibleEqualizer(), findsNothing, reason: '刷新完成后均衡器收起');
+  });
+
+  testWidgets('桌面端：双击间隔约 400ms（鼠标常见节奏）仍触发刷新', (tester) async {
+    final api = await pumpShell(tester);
+
+    final navItem = find.text('推荐').first;
+    final before = api.dailyRecommendCalls;
+
+    api.gate = Completer<DailyRecommend>();
+    await tester.tap(navItem);
+    advanceClock(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.tap(navItem);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(api.dailyRecommendCalls, greaterThan(before), reason: '400ms 间隔仍视为双击');
+    expect(_visibleEqualizer(), findsWidgets);
+
+    api.gate!.complete(DailyRecommend(title: '每日推荐', songs: const []));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('桌面端：双击间隔超过 500ms 不触发刷新（仍是两次单击）', (tester) async {
     final api = await pumpShell(tester);
 
     final navItem = find.text('推荐').first;
     final before = api.dailyRecommendCalls;
 
     await tester.tap(navItem);
-    // 推进假时钟越过 350ms 双击窗口（与 pump 的帧时钟独立）。
-    advanceClock(const Duration(milliseconds: 500));
+    // 推进假时钟越过 500ms 双击窗口（与 pump 的帧时钟独立）。
+    advanceClock(const Duration(milliseconds: 600));
     await tester.pump();
     await tester.tap(navItem);
     await tester.pump();

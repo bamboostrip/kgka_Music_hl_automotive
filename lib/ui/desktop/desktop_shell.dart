@@ -76,12 +76,13 @@ class _DesktopShellState extends State<DesktopShell> {
   /// 经此调用 [HomePageState.scrollToTopAndRefresh]（含顶部均衡器动画）。
   final _homePageKey = GlobalKey<HomePageState>();
 
-  /// 侧栏双击检测窗口（与移动端底部「首页」双击一致，350ms）。
-  static const _sidebarDoubleClickInterval = Duration(milliseconds: 350);
+  /// 侧栏双击检测窗口。Windows 系统双击时限默认 500ms（GetDoubleClickTime），
+  /// 鼠标双击节奏普遍慢于触屏点按（移动端「首页」用 350ms），故取 500ms。
+  static const _sidebarDoubleClickInterval = Duration(milliseconds: 500);
   int? _lastSidebarTapIndex;
   DateTime? _lastSidebarTapTime;
 
-  /// 侧栏条目点按：单击语义不变（切换分区/回内容根）；350ms 内连点同一
+  /// 侧栏条目点按：单击语义不变（切换分区/回内容根）；窗口时长内连点同一
   /// 条目视为双击当前分区，触发对应页面刷新。检测用手动计时窗口而非
   /// InkWell.onDoubleTap——否则 Flutter 为消歧会把每次单击推迟 ~300ms
   /// 才派发，侧栏切换会明显变钝。
