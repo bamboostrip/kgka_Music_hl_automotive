@@ -197,7 +197,10 @@ void main() {
       final decoration = container.decoration! as BoxDecoration;
       expect(decoration.color, isNotNull);
       expect(decoration.color!.a, greaterThan(0));
-      expect(decoration.border, isNotNull);
+      // 描边画在 foregroundDecoration（不参与布局，保持行高与车机网格
+      // rowCount * 60.0 的预留一致），断言随实现位置走。
+      final foreground = container.foregroundDecoration! as BoxDecoration;
+      expect(foreground.border, isNotNull);
     });
 
     testWidgets('非当前播放歌曲不渲染高亮底色与 Badge', (tester) async {

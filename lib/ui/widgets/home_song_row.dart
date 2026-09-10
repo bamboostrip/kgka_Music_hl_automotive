@@ -151,6 +151,12 @@ class _HomeSongRowState extends State<HomeSongRow> {
                 decoration: BoxDecoration(
                   color: rowBg,
                   borderRadius: rowRadius,
+                ),
+                // 描边画在 foregroundDecoration：不参与布局，行高保持
+                // 48 封面 + 上下 padding（车机网格按 60/行预留高度，见
+                // home_page.dart 的 rowCount * 60.0），否则每行 +2px 会溢出。
+                foregroundDecoration: BoxDecoration(
+                  borderRadius: rowRadius,
                   border: Border.all(
                     color: active
                         ? activeColor.withValues(alpha: 0.28)
