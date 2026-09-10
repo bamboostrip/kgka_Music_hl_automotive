@@ -9,6 +9,10 @@ import '../player/player_route.dart';
 import 'artwork.dart';
 import 'queue_sheet.dart';
 
+/// 迷你播放条本体（悬浮胶囊）。
+///
+/// 页面挂载请使用 [MiniPlayerSlot]——它负责「桌面形态不显示」的门控，
+/// 避免 PC 端内容区底部与常驻 `DesktopPlayerBar` 叠出上下两条播放栏。
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key, required this.player, required this.auth});
 
@@ -228,5 +232,29 @@ class _MiniPlayerContent extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 悬浮迷你播放条的挂载点：统一门控「桌面形态不挂载」。
+///
+/// 桌面形态（Windows/macOS/Linux）内容区底部常驻 `DesktopPlayerBar`，
+/// 详情页再挂 [MiniPlayer] 会在同一竖排叠出上下两条播放栏，而 PC 上只应
+/// 保留底部那一条。判定收敛到本组件，页面只管挂载、无需各自重复写
+/// `if (!isDesktopFormFactor)`（散落判断易漏改，正是本次问题的成因）。
+///
+/// 移动端/车机形态（`isDesktopFormFactor == false`）渲染结果与直接挂
+/// [MiniPlayer] 完全一致，行为零变化。
+class MiniPlayerSlot extends StatelessWidget {
+  const MiniPlayerSlot({super.key, required this.player, required this.auth});
+
+  final PlayerController player;
+  final AuthController auth;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isDesktopFormFactor) {
+      return const SizedBox.shrink();
+    }
+    return MiniPlayer(player: player, auth: auth);
   }
 }

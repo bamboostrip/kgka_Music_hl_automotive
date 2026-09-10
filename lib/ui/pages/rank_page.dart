@@ -1742,7 +1742,7 @@ class _RankDetailPageState extends State<RankDetailPage> {
             left: 0,
             right: 0,
             bottom: bottomInset + 10,
-            child: MiniPlayer(player: widget.player, auth: widget.auth),
+            child: MiniPlayerSlot(player: widget.player, auth: widget.auth),
           ),
         ],
       ),

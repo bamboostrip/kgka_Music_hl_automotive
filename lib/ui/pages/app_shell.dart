@@ -289,7 +289,7 @@ class _AppShellState extends State<AppShell> {
             left: 0,
             right: 0,
             bottom: bottomInset + 16,
-            child: MiniPlayer(player: widget.player, auth: widget.auth),
+            child: MiniPlayerSlot(player: widget.player, auth: widget.auth),
           ),
       ],
     );

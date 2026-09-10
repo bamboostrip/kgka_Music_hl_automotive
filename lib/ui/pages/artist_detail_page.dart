@@ -683,13 +683,14 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
                 ],
               ),
             ),
-            if (!isDesktopFormFactor)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: bottomInset + 16,
-                child: MiniPlayer(player: widget.player, auth: widget.auth),
-              ),
+            // 桌面端内容区已有常驻 DesktopPlayerBar，MiniPlayerSlot 在桌面
+            // 形态下不挂载，避免内容区底部叠两层播放条。
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: bottomInset + 16,
+              child: MiniPlayerSlot(player: widget.player, auth: widget.auth),
+            ),
           ],
         ),
       ),

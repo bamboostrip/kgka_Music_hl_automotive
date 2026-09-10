@@ -333,14 +333,15 @@ class _TopSongsPageState extends State<TopSongsPage> {
                       ),
                     ),
 
-                    // 底部防 MiniPlayer 遮挡留白：MiniPlayer 仅在非车机横屏
-                    // 且正在播放时显示，其余场景退化为普通收尾间距。
+                    // 底部防 MiniPlayer 遮挡留白：MiniPlayer 仅在非车机横屏、
+                    // 非桌面形态且正在播放时显示，其余场景退化为普通收尾间距。
                     SliverToBoxAdapter(
                       child: AnimatedBuilder(
                         animation: widget.player,
                         builder: (context, _) {
-                          final miniPlayerVisible =
-                              !isCarMode && widget.player.currentSong != null;
+                          final miniPlayerVisible = !isCarMode &&
+                              !isDesktopFormFactor &&
+                              widget.player.currentSong != null;
                           return Container(
                             color: bodyBg,
                             height: miniPlayerVisible ? 88 : 24,
@@ -355,12 +356,13 @@ class _TopSongsPageState extends State<TopSongsPage> {
           ),
 
           // 悬浮 MiniPlayer：抬高到底部安全区之上（与 playlist_detail_page
-          // 一致），避免压进 Android 手势/三键导航区。
+          // 一致），避免压进 Android 手势/三键导航区。桌面形态下
+          // MiniPlayerSlot 自动不挂载（内容区底部已有 DesktopPlayerBar）。
           Positioned(
             left: 0,
             right: 0,
             bottom: MediaQuery.paddingOf(context).bottom + 10,
-            child: MiniPlayer(player: widget.player, auth: widget.auth),
+            child: MiniPlayerSlot(player: widget.player, auth: widget.auth),
           ),
         ],
       ),

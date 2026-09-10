@@ -14,7 +14,6 @@ import '../widgets/horizontal_wheel_scroll.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
-import '../form_factor.dart';
 import '../keyboard_focus_guard.dart';
 import '../player/song_tap_handler.dart';
 import 'artist_detail_page.dart';
@@ -639,15 +638,14 @@ class _SearchPageState extends State<SearchPage> {
                 builder: (context, _) => _buildBody(context),
               ),
             ),
-            // 桌面端内容区已有常驻 DesktopPlayerBar，隐藏移动端 MiniPlayer
-            // 避免内容区底部叠两层播放条。
-            if (!isDesktopFormFactor)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: MediaQuery.paddingOf(context).bottom + 10,
-                child: MiniPlayer(player: widget.player, auth: widget.auth),
-              ),
+            // 桌面端内容区已有常驻 DesktopPlayerBar，MiniPlayerSlot 在桌面
+            // 形态下不挂载，避免内容区底部叠两层播放条。
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.paddingOf(context).bottom + 10,
+              child: MiniPlayerSlot(player: widget.player, auth: widget.auth),
+            ),
           ],
         ),
       ),
