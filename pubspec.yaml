@@ -17,9 +17,12 @@ dependencies:
   http: ^1.5.0
   just_audio: ^0.10.4
   just_audio_windows: ^0.2.3
-  # Linux 桌面音频后端：just_audio 官方不出 Linux 实现，社区方案为
-  # media_kit(libmpv) 适配。仅在 main.dart 的 Platform.isLinux 分支注册，
-  # 不影响 Windows 的 just_audio_windows。运行期依赖系统 libmpv2。
+  # 桌面音频后端：just_audio 官方不出 Linux 平台实现；Windows 官方实现
+  # （just_audio_windows，WinRT MediaPlayer）存在高频 setUrl/completed 竞态
+  # 崩溃（见 music_audio_handler 引擎加载串行门注释），统一迁移社区
+  # media_kit(libmpv) 适配，在 main.dart 的 Linux/Windows 分支注册。
+  # Linux 运行期依赖系统 libmpv2；Windows 二进制由
+  # media_kit_libs_windows_audio 构建期提供（见下）。
   # 本地 vendored 副本（packages/just_audio_media_kit），含四处补丁：
   # 1) load() 时清空 _setPosition（上游 2.1.0 跨歌残留 seek 目标 bug）；
   # 2) 构造时设置 volume-max=400（响度均衡 +12dB 余量，配套
@@ -31,6 +34,11 @@ dependencies:
   # 升级上游版本时四处都需确认是否已包含/需重新移植。
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
+  # Windows libmpv 二进制（audio-only 构建，libmpv-2.dll 约 15MB）：构建期
+  # CMake 从 media-kit/libmpv-win32-audio-build 归档（2023-09-24，MD5 校验）
+  # 下载；来源仓库 2024-10 已归档、无升级路径，决策记录见
+  # docs/superpowers/specs/2026-09-11-windows-media-kit-migration-design.md。
+  media_kit_libs_windows_audio: ^1.0.9
   # Linux MPRIS 系统媒体集成：audio_service 的 Linux 平台实现，
   # 依赖后自动接管 AudioService.init（媒体键/GNOME/KDE 媒体控件）。
   # 0.2.1 稳定版不支持相对 Seek（平台接口无对应方法），可接受。

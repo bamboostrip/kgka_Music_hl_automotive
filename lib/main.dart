@@ -105,13 +105,17 @@ Future<void> main(List<String> args) async {
       isAutomotiveDevice: themeController.isAutomotiveDevice,
     );
 
-    // Linux 桌面：just_audio 无官方 Linux 平台实现，注册社区 media_kit(libmpv)
-    // 后端（见 pubspec.yaml 依赖注释）。必须在创建首个 AudioPlayer
-    // （AudioService.init → MusicAudioHandler 字段初始化）之前调用；
-    // 仅在 Linux 分支注册，避免覆盖 Windows 的 just_audio_windows 后端。
-    // kIsWeb 前置：web 上访问 Platform.isLinux 会直接 throw（当前 web 构建
-    // 因 dart:io 无法编译，此为防御性收敛，保持与 form_factor 判定同构）。
-    if (!kIsWeb && Platform.isLinux) {
+    // Linux/Windows 桌面：统一注册社区 media_kit(libmpv) 后端（见
+    // pubspec.yaml 依赖注释）——Linux 无官方实现，Windows 官方实现
+    // （WinRT MediaPlayer）存在高频 setUrl/completed 竞态崩溃。必须在
+    // 创建首个 AudioPlayer（AudioService.init → MusicAudioHandler 字段
+    // 初始化）之前调用。kIsWeb 前置：web 上访问 Platform.* 会直接 throw
+    // （当前 web 构建因 dart:io 无法编译，此为防御性收敛，保持与
+    // form_factor 判定同构）。
+    if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+      // Windows 音量合成器/任务管理器里的进程显示名（mpv 原生侧使用，
+      // Linux 忽略）；不设则显示默认的 "JustAudioMediaKit"。
+      if (Platform.isWindows) JustAudioMediaKit.title = '时音';
       JustAudioMediaKit.ensureInitialized();
     }
 
