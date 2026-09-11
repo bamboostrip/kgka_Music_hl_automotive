@@ -111,7 +111,7 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   static const double _pullMaxDistance = 90.0;
   static const double _pullRefreshHeight = 26.0;
   // 点按/外部切页的飞行目标：PageView 动画落定、onPageChanged 处理完之前，
-  // 顶栏保持只收不展，落地页推到地板高度（见 _updateHeaderShrink）。
+  // 顶栏收折态冻结不变，落地页压到当前收折量防空白（见 _updateHeaderShrink）。
   // 手势滑动不需要它（落地时 page 与 _sectionIndex 不一致即可识别）。
   int? _switchTarget;
 
@@ -236,12 +236,11 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     });
   }
 
-  /// 由三 tab 内容滚动位置推导顶栏收折进度（floating 跟手语义）。
+  /// 由当前 tab 的内容滚动增量驱动顶栏收折进度（floating 跟手语义）。
   ///
   /// 顶栏是页面层固定组件，不再随 PageView 横向平移，是三个 tab 共用的
   /// 同一个行动主体：收折态全局统一，切页不重置——推荐页下滑收起搜索框
-  /// 后切到排行榜/电台时搜索框保持收起，反之任一页上滑展开后其它页也
-  /// 同步展开，不再出现“一个有搜索框、一个没有”的跳变。
+  /// 后切到排行榜/电台时搜索框保持收起，反之亦然。
   ///
   /// 规则（对齐 QQ 音乐 / 网易云等常用软件）：
   /// - 静止单页内：顶栏跟手增量驱动——下滑（offset 增大）等量收起，
@@ -249,12 +248,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
   ///   下滑 48px 再次完全收起。深滚中途同样生效。
   /// - 为避免内容与顶栏之间出现空白，恒保持 shrink <= offset：
   ///   顶部 offset=0 时顶栏强制完全展开。
-  /// - 切页途中（点按动画/手势滑动）与刚落地时：顶栏只许收起不许展开，
-  ///   展开只能由用户在当前页上滑驱动。视角中心页不动（动它会纵跳），
-  ///   其余页推到地板高度（屏外，不可见）；落地页若刚懒加载还顶着 0，
-  ///   在落定帧推上去，不把顶栏拽下来。
-  /// - 尚未懒加载的页面没有挂载：插值时按全局顶栏状态假设，而不是按 0
-  ///   处理，否则跨页跳转（如推荐 0 → 电台 2）途中会被没出生的 0 拽开。
+  /// - 切页途中（点按动画/手势滑动）与刚落地时：顶栏收折态冻结不变，
+  ///   切 tab 与顶栏展示互不影响——展开就保持展开、收起就保持收起
+  ///   （旧逻辑按相邻页 offset 插值联动，深滚页会把展开态顶栏拽关，
+  ///   用户没滚动却看到搜索框消失）。内容侧只做防空白对齐：非中心页/
+  ///   落地页被压到当前收折量（收起态下内容停在顶部会露出空白带），
+  ///   深滚页不动（offset 已大于收折量，无空白）。
   /// 任一 tab 滚动或 PageView 翻页都会触发本函数（listener），只更新
   /// ValueNotifier，不 setState（镜像 jumpTo 期间用 [_syncingHeaderOffsets]
   /// 防重入；[_prevTabOffsets] 记录各 tab 上一帧 offset 用于求增量）。
@@ -273,12 +272,6 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     }
     final i = page.floor().clamp(0, 2);
     final j = (i + 1).clamp(0, 2);
-    final t = (page - i).clamp(0.0, 1.0);
-    double offsetOf(int index) {
-      final controller = _tabControllers[index];
-      if (!controller.hasClients) return _headerShrink.value;
-      return controller.offset;
-    }
 
     void rememberOffsets() {
       for (var k = 0; k < _tabControllers.length; k++) {
@@ -293,17 +286,12 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
       }
     }
 
-    final offset = offsetOf(i) + (offsetOf(j) - offsetOf(i)) * t;
-    final blend = offset.clamp(0.0, _headerCollapseRange);
     final settled = (page - page.round()).abs() < 0.02;
     if (!settled) {
-      // 切页飞行中：视角中心页不动，其余页推到地板，顶栏只收不展。
+      // 切页飞行中：顶栏收折态冻结——切 tab 本身不改变顶栏展示。只把
+      // 非中心页压到当前收折量，防止收起态下飞行途中露出空白带。
       final dominant = page.round().clamp(0, 2);
-      final floor = _headerShrink.value;
-      final keep = blend > floor ? blend : floor;
-      if ((_headerShrink.value - keep).abs() > 0.1) {
-        _headerShrink.value = keep;
-      }
+      final keep = _headerShrink.value;
       if (i != dominant) _alignTabToShrink(i, keep);
       if (j != dominant) _alignTabToShrink(j, keep);
       rememberOffsets();
@@ -320,13 +308,8 @@ class HomePageState extends SwrSectionState<HomePage, HomeData>
     }
     if (arrived != _sectionIndex || _switchTarget != null) {
       // 刚落地、状态还没对齐（手势 index 滞后 / 点按目标刚挂载还顶着 0）：
-      // 把落地页推到地板高度，顶栏不下拉。
-      final floor = _headerShrink.value;
-      final keep = blend > floor ? blend : floor;
-      if ((_headerShrink.value - keep).abs() > 0.1) {
-        _headerShrink.value = keep;
-      }
-      _alignTabToShrink(arrived, keep);
+      // 只把落地页压到当前收折量（防收起态空白），顶栏保持不变。
+      _alignTabToShrink(arrived, _headerShrink.value);
       rememberOffsets();
       return;
     }
