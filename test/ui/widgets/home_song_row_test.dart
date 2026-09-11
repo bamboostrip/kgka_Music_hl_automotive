@@ -224,5 +224,34 @@ void main() {
 
       expect(played, 1);
     });
+
+    testWidgets('当前播放不整行染色，仅保留 Badge', (tester) async {
+      final player = _FakePlayerController()
+        ..currentSong = _song
+        ..isPlaying = true;
+
+      await tester.pumpWidget(
+        wrap(buildRow(onPlay: (_, _) {}, player: player)),
+      );
+      // NowPlayingBadge 有持续动画，不能 pumpAndSettle
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(NowPlayingBadge), findsOneWidget);
+
+      final container = tester.widget<AnimatedContainer>(
+        find
+            .ancestor(
+              of: find.byType(NowPlayingBadge),
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      final decoration = container.decoration! as BoxDecoration;
+      // 移动端整行底色保持透明（仅桌面加强高亮）。
+      expect(decoration.color?.a ?? 0, 0);
+      final foreground = container.foregroundDecoration! as BoxDecoration;
+      final border = foreground.border as Border?;
+      expect(border?.top.color.a ?? 0, 0);
+    });
   });
 }

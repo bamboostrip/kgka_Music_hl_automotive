@@ -118,10 +118,10 @@ class _HomeSongRowState extends State<HomeSongRow> {
               ? Colors.white.withValues(alpha: 0.07)
               : colorScheme.surfaceContainerHigh.withValues(alpha: 0.7);
 
-          // 正在播放：与桌面表格行同口径的整行底色 + 描边，避免仅靠
-          // 橙色文字在密集列表里“看不清在播哪一首”。
-          final rowBg = active
-              ? activeColor.withValues(alpha: isDesktop ? 0.10 : 0.12)
+          // 正在播放：仅桌面与表格行同口径加强整行底色 + 描边，避免密集
+          // 列表里“看不清在播哪一首”；移动端/车机保持透明，不整行染色。
+          final rowBg = active && isDesktop
+              ? activeColor.withValues(alpha: 0.10)
               : (isDesktop && _hovered ? hoverBg : Colors.transparent);
 
           // 指针约定：桌面双击播放 → 整行默认箭头（封面播放键/收藏钮各自
@@ -162,7 +162,7 @@ class _HomeSongRowState extends State<HomeSongRow> {
                 foregroundDecoration: BoxDecoration(
                   borderRadius: rowRadius,
                   border: Border.all(
-                    color: active
+                    color: active && isDesktop
                         ? activeColor.withValues(alpha: 0.28)
                         : Colors.transparent,
                     width: 1,
