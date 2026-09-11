@@ -356,4 +356,25 @@ mixin _PlayerDesktop on _PlayerControllerBase {
 
   Future<void> requestDesktopLyricsPermission() =>
       _desktopLyrics.requestPermission();
+
+  void _setupDesktopLyricsListeners() {
+    _desktopLyrics.setVisibilityChangedHandler(_handleDesktopLyricsVisibility);
+    _desktopLyrics.setPlaybackActionHandler(_handleDesktopLyricsPlaybackAction);
+    _desktopLyrics.setLockChangedHandler(_handleDesktopLyricsLockChanged);
+    _desktopLyrics.setSettingsChangedHandler((settings) async {
+      await updateDesktopLyricsSettings(settings);
+    });
+    _desktopLyrics.setOpenSettingsHandler(_handleDesktopLyricsOpenSettings);
+  }
+
+  void _handleDesktopLyricsOpenSettings() {
+    openDesktopLyricsSettingsPage();
+  }
+
+  /// 请求打开桌面歌词设置页（悬浮窗工具栏调起或外部手动调起）。
+  void openDesktopLyricsSettingsPage() {
+    openLyricsSettingsRequest.value = false;
+    openLyricsSettingsRequest.value = true;
+    onOpenDesktopLyricsSettings?.call();
+  }
 }

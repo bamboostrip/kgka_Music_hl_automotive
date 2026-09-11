@@ -131,9 +131,7 @@ class PlayerController extends _PlayerControllerBase
       },
     );
     _audioHandler.attachTransportControls(onNext: next, onPrevious: previous);
-    _desktopLyrics.setVisibilityChangedHandler(_handleDesktopLyricsVisibility);
-    _desktopLyrics.setPlaybackActionHandler(_handleDesktopLyricsPlaybackAction);
-    _desktopLyrics.setLockChangedHandler(_handleDesktopLyricsLockChanged);
+    _setupDesktopLyricsListeners();
     _positionSub = audioPlayer.positionStream.listen((value) {
       if (_pendingInitialPosition != null) {
         // 音频正在加载且指定了起播偏移量，忽略底层引擎加载音频源时的初始 0 秒回调，
@@ -242,7 +240,10 @@ class PlayerController extends _PlayerControllerBase
     _desktopLyrics.setVisibilityChangedHandler(null);
     _desktopLyrics.setPlaybackActionHandler(null);
     _desktopLyrics.setLockChangedHandler(null);
+    _desktopLyrics.setSettingsChangedHandler(null);
+    _desktopLyrics.setOpenSettingsHandler(null);
     positionListenable.dispose();
+    openLyricsSettingsRequest.dispose();
     unawaited(
       _audioEffects.configureEqualizer(
         audioSessionId:
@@ -370,6 +371,14 @@ abstract class _PlayerControllerBase extends ChangeNotifier {
   final ValueNotifier<Duration> positionListenable = ValueNotifier<Duration>(
     Duration.zero,
   );
+
+  /// 请求主界面打开桌面歌词设置页（悬浮窗工具栏点击设置触发）。
+  final ValueNotifier<bool> openLyricsSettingsRequest = ValueNotifier<bool>(
+    false,
+  );
+
+  /// 外部界面可注册该回调或者监听 [openLyricsSettingsRequest]。
+  VoidCallback? onOpenDesktopLyricsSettings;
 
   bool isPlaying = false;
   bool isBuffering = false;

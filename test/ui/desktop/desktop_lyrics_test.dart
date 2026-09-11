@@ -196,6 +196,20 @@ void main() {
 
       service.setPlaybackActionHandler(null);
     });
+
+    test('支持注册与注销 setSettingsChangedHandler 与 setOpenSettingsHandler', () {
+      final service = DesktopLyricsService();
+      DesktopLyricsSettings? changedSettings;
+      var openSettingsCalled = false;
+
+      service.setSettingsChangedHandler((s) => changedSettings = s);
+      service.setOpenSettingsHandler(() => openSettingsCalled = true);
+
+      service.setSettingsChangedHandler(null);
+      service.setOpenSettingsHandler(null);
+      expect(changedSettings, isNull);
+      expect(openSettingsCalled, isFalse);
+    });
   });
 
   group('isLyricsOverlayWindowArgs', () {
@@ -385,6 +399,97 @@ void main() {
       // 子窗请求解锁同样转发。
       await simulateChildMessage(binding, 'setLyricsLocked', false);
       expect(reported, [true, false]);
+    });
+
+    test('updateKaraokeProgress 就绪时推送 updateProgress，未就绪时缓存并由 overlayReady 补发',
+        () async {
+      final binding = TestDefaultBinaryMessengerBinding.instance;
+      setUpMultiWindowMocks(binding);
+      addTearDown(() => clearMultiWindowMocks(binding));
+
+      final bridge = WindowsDesktopLyricsBridge();
+      await bridge.show(title: '标题', artist: '歌手');
+
+      // 未就绪时调用 updateKaraokeProgress：只更新缓存，不推送
+      await bridge.updateKaraokeProgress(
+        progress: 0.35,
+        lineDuration: const Duration(seconds: 4),
+        isPlaying: true,
+      );
+      expect(pushesOf('updateProgress'), isEmpty);
+
+      // overlayReady 握手后补发缓存进度
+      await simulateChildMessage(binding, 'overlayReady');
+      final progressPushes = pushesOf('updateProgress');
+      expect(progressPushes, hasLength(1));
+      final payload = pushPayload(progressPushes.single);
+      expect(payload['progress'], 0.35);
+      expect(payload['isPlaying'], isTrue);
+
+      // 就绪后再次调用：立即推送
+      await bridge.updateKaraokeProgress(
+        progress: 0.75,
+        lineDuration: const Duration(seconds: 4),
+        isPlaying: false,
+      );
+      expect(pushesOf('updateProgress'), hasLength(2));
+      final nextPayload = pushPayload(pushesOf('updateProgress').last);
+      expect(nextPayload['progress'], 0.75);
+      expect(nextPayload['isPlaying'], isFalse);
+    });
+
+    test('子窗发送 updateOverlaySettings 触发 onSettingsChanged 回调且正确反序列化',
+        () async {
+      final binding = TestDefaultBinaryMessengerBinding.instance;
+      setUpMultiWindowMocks(binding);
+      addTearDown(() => clearMultiWindowMocks(binding));
+
+      final settingsList = <DesktopLyricsSettings>[];
+      final bridge = WindowsDesktopLyricsBridge(
+        onSettingsChanged: settingsList.add,
+      );
+      await bridge.show(title: '标题', artist: '歌手');
+      await simulateChildMessage(binding, 'overlayReady');
+
+      await simulateChildMessage(
+        binding,
+        'updateOverlaySettings',
+        <String, dynamic>{
+          'fontSize': 32.0,
+          'opacity': 0.6,
+          'singleLine': false,
+          'alignment': 'left',
+          'playedTextColor': 0xFFFF0000,
+          'unplayedTextColor': 0xFF00FF00,
+        },
+      );
+
+      expect(settingsList, hasLength(1));
+      final received = settingsList.single;
+      expect(received.fontSize, 32.0);
+      expect(received.opacity, 0.6);
+      expect(received.singleLine, isFalse);
+      expect(received.alignment, 'left');
+      expect(received.playedTextColor, 0xFFFF0000);
+      expect(received.unplayedTextColor, 0xFF00FF00);
+    });
+
+    test('子窗发送 openLyricsSettings 触发 onOpenSettings 回调', () async {
+      final binding = TestDefaultBinaryMessengerBinding.instance;
+      setUpMultiWindowMocks(binding);
+      addTearDown(() => clearMultiWindowMocks(binding));
+
+      var openSettingsTriggered = false;
+      final bridge = WindowsDesktopLyricsBridge(
+        onOpenSettings: () {
+          openSettingsTriggered = true;
+        },
+      );
+      await bridge.show(title: '标题', artist: '歌手');
+      await simulateChildMessage(binding, 'overlayReady');
+
+      await simulateChildMessage(binding, 'openLyricsSettings');
+      expect(openSettingsTriggered, isTrue);
     });
   });
 

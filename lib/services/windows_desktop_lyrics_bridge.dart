@@ -6,15 +6,18 @@
 //
 // 消息协议（与悬浮窗侧约定一致）：
 // - main -> sub：updateLyric {current, next, isPlaying} /
-//   updateSettings {DesktopLyricsSettings.toMap()}
+//   updateSettings {DesktopLyricsSettings.toMap()} /
+//   updateProgress {progress, isPlaying}
 //   （不向子窗发 close：主窗侧关闭直接走原生 window.close）。
 // - sub -> main：windowClosed {}（用户手动关闭，触发可见性回调与就绪门控复位）/
-//   overlayReady {}（子引擎通道就绪：主窗先打开就绪门控，再补发缓存的歌词与
-//   设置；门控打开前所有主->子推送静默跳过，避免子引擎 handler 注册完成前
+//   overlayReady {}（子引擎通道就绪：主窗先打开就绪门控，再补发缓存的歌词、
+//   设置与进度；门控打开前所有主->子推送静默跳过，避免子引擎 handler 注册完成前
 //   invoke 必抛的 MissingPluginException 竞态）/
 //   controlPlayback (action: 'previous' | 'togglePlay' | 'next')（悬停播控条触发主窗播控）/
 //   setLyricsLocked (locked: bool)（子窗工具栏请求切换锁定：主窗侧统一落盘、
-//   通知设置页，并把新 settings 回推子窗，子窗不本地直改锁定状态）。
+//   通知设置页，并把新 settings 回推子窗，子窗不本地直改锁定状态）/
+//   updateOverlaySettings (DesktopLyricsSettings.toMap())（子窗请求更新设置）/
+//   openLyricsSettings {}（子窗请求打开设置页）。
 //
 // API 名以包源码为准（desktop_multi_window 0.2.1）：
 // - DesktopMultiWindow.createWindow([arguments]) -> WindowController
@@ -41,13 +44,19 @@ class WindowsDesktopLyricsBridge {
     DesktopLyricsVisibilityChanged? onVisibilityChanged,
     DesktopLyricsPlaybackAction? onPlaybackAction,
     DesktopLyricsLockChanged? onLockChanged,
+    ValueChanged<DesktopLyricsSettings>? onSettingsChanged,
+    VoidCallback? onOpenSettings,
   }) : _onVisibilityChanged = onVisibilityChanged,
        _onPlaybackAction = onPlaybackAction,
-       _onLockChanged = onLockChanged;
+       _onLockChanged = onLockChanged,
+       _onSettingsChanged = onSettingsChanged,
+       _onOpenSettings = onOpenSettings;
 
   final DesktopLyricsVisibilityChanged? _onVisibilityChanged;
   final DesktopLyricsPlaybackAction? _onPlaybackAction;
   final DesktopLyricsLockChanged? _onLockChanged;
+  final ValueChanged<DesktopLyricsSettings>? _onSettingsChanged;
+  final VoidCallback? _onOpenSettings;
 
   /// 悬浮窗固定尺寸（与悬浮窗侧约定一致；主窗/子窗共用的唯一定义处）。
   static const double overlayWidth = 780;
@@ -76,6 +85,7 @@ class WindowsDesktopLyricsBridge {
   String _current = '';
   String _next = '';
   bool _isPlaying = false;
+  double _progress = 0.0;
   bool _appForeground = true;
 
   /// 悬浮窗是否可见（内部状态，不依赖平台查询）。
@@ -198,12 +208,23 @@ class WindowsDesktopLyricsBridge {
     }
   }
 
-  /// v1 不做卡拉OK逐字进度（悬浮窗按整行展示）。
   Future<void> updateKaraokeProgress({
     required double progress,
     required Duration? lineDuration,
     required bool isPlaying,
-  }) async {}
+  }) async {
+    _progress = progress;
+    _isPlaying = isPlaying;
+    if (!_visible || !_overlayReady) return;
+    try {
+      await _invokeSub('updateProgress', <String, dynamic>{
+        'progress': progress,
+        'isPlaying': isPlaying,
+      });
+    } on Exception catch (e) {
+      debugPrint('[桌面歌词主窗] updateProgress 推送失败: $e');
+    }
+  }
 
   /// 仅内部记录；可见性由 PlayerController 依自身前台状态调度 show/hide。
   Future<void> setAppForeground({required bool isForeground}) async {
@@ -262,6 +283,14 @@ class WindowsDesktopLyricsBridge {
         } on Exception catch (e) {
           debugPrint('[桌面歌词主窗] updateSettings 补发失败: $e');
         }
+        try {
+          await _invokeSub('updateProgress', <String, dynamic>{
+            'progress': _progress,
+            'isPlaying': _isPlaying,
+          });
+        } on Exception catch (e) {
+          debugPrint('[桌面歌词主窗] updateProgress 补发失败: $e');
+        }
       } else if (call.method == 'controlPlayback') {
         final action = call.arguments?.toString();
         if (action != null && action.isNotEmpty) {
@@ -272,6 +301,16 @@ class WindowsDesktopLyricsBridge {
         // 走 updateSettings 完成持久化 + 设置页通知，并经 updateSettings
         // 回推子窗后统一重建（锁定即全穿透）。
         _onLockChanged?.call(call.arguments == true);
+      } else if (call.method == 'updateOverlaySettings') {
+        final args = call.arguments;
+        if (args is Map) {
+          final newSettings = DesktopLyricsSettings.fromMap(
+            args.cast<String, dynamic>(),
+          );
+          _onSettingsChanged?.call(newSettings);
+        }
+      } else if (call.method == 'openLyricsSettings') {
+        _onOpenSettings?.call();
       }
       return null;
     });

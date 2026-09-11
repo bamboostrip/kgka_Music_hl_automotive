@@ -140,16 +140,21 @@ class DesktopLyricsService {
   static DesktopLyricsVisibilityChanged? _visibilityChanged;
   static DesktopLyricsPlaybackAction? _playbackAction;
   static DesktopLyricsLockChanged? _lockChanged;
+  static ValueChanged<DesktopLyricsSettings>? _settingsChanged;
+  static VoidCallback? _openSettingsRequested;
 
   /// 桌面形态的悬浮窗桥接（进程级单例；Android 分支不使用）。
   /// Windows/Linux 共用（实现基于 desktop_multi_window + window_manager，
   /// 平台无关）；可见性、播控与锁定回调经静态转发交给实例级
-  /// [_visibilityChanged] / [_playbackAction] / [_lockChanged]。
+  /// [_visibilityChanged] / [_playbackAction] / [_lockChanged] /
+  /// [_settingsChanged] / [_openSettingsRequested]。
   static final WindowsDesktopLyricsBridge? _windowsBridge = _isDesktopBridge
       ? WindowsDesktopLyricsBridge(
           onVisibilityChanged: _forwardVisibilityChanged,
           onPlaybackAction: _forwardPlaybackAction,
           onLockChanged: _forwardLockChanged,
+          onSettingsChanged: _forwardSettingsChanged,
+          onOpenSettings: _forwardOpenSettings,
         )
       : null;
 
@@ -175,6 +180,14 @@ class DesktopLyricsService {
 
   static void _forwardLockChanged(bool locked) {
     _lockChanged?.call(locked);
+  }
+
+  static void _forwardSettingsChanged(DesktopLyricsSettings settings) {
+    _settingsChanged?.call(settings);
+  }
+
+  static void _forwardOpenSettings() {
+    _openSettingsRequested?.call();
   }
 
   DesktopLyricsService() {
@@ -217,6 +230,14 @@ class DesktopLyricsService {
 
   void setLockChangedHandler(DesktopLyricsLockChanged? handler) {
     _lockChanged = handler;
+  }
+
+  void setSettingsChangedHandler(ValueChanged<DesktopLyricsSettings>? handler) {
+    _settingsChanged = handler;
+  }
+
+  void setOpenSettingsHandler(VoidCallback? handler) {
+    _openSettingsRequested = handler;
   }
 
   static void _attachHandler() {
