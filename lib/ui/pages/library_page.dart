@@ -610,7 +610,18 @@ class _UserProfileHeader extends StatelessWidget {
             ),
             child: profile?.avatarUrl == null
                 ? Icon(Icons.person_rounded, color: colorScheme.primary, size: 30)
-                : Image.network(profile!.avatarUrl!, fit: BoxFit.cover),
+                : RetryableNetworkImage(
+                    url: profile!.avatarUrl!,
+                    fit: BoxFit.cover,
+                    // 54dp 圆形头像按档位解码（128），避免整图解码白占内存。
+                    cacheWidth: decodeSizeFor(54),
+                    cacheHeight: decodeSizeFor(54),
+                    errorBuilder: (_, _, _) => Icon(
+                      Icons.person_rounded,
+                      color: colorScheme.primary,
+                      size: 30,
+                    ),
+                  ),
           ),
           const SizedBox(width: 14),
           Expanded(

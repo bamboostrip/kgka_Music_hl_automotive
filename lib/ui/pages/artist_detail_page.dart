@@ -716,8 +716,8 @@ class _ArtistHeader extends StatelessWidget {
         if (avatar == null)
           const _ArtistPosterFallback()
         else
-          Image.network(
-            avatar,
+          RetryableNetworkImage(
+            url: avatar,
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
             cacheWidth: 800,

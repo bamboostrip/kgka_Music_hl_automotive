@@ -1434,8 +1434,8 @@ class _RankDetailPageState extends State<RankDetailPage> {
           fit: StackFit.expand,
           children: [
             if (widget.rank.imageUrl != null)
-              Image.network(
-                widget.rank.imageUrl!,
+              RetryableNetworkImage(
+                url: widget.rank.imageUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),

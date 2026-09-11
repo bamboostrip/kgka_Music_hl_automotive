@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/music_models.dart';
 import '../form_factor.dart';
+import '../widgets/artwork.dart';
 
 class ArtworkBackground extends StatefulWidget {
   const ArtworkBackground({super.key, required this.song});
@@ -59,8 +60,11 @@ class _ArtworkBackgroundState extends State<ArtworkBackground>
                 imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                 child: RotationTransition(
                   turns: _rotationController,
-                  child: Image.network(
-                    coverUrl,
+                  // 走磁盘缓存链路：重进播放页时背景从本地字节秒出，
+                  // 不再等网络往返（重模糊 + 渐变兜底下网络闪烁原本就不明显，
+                  // 磁盘命中后这一帧也不再有）。
+                  child: RetryableNetworkImage(
+                    url: coverUrl,
                     fit: BoxFit.cover,
                     cacheWidth: 100,
                     cacheHeight: 100,
