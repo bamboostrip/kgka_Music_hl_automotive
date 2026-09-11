@@ -531,7 +531,9 @@ void main() {
   });
 
   group('桌面歌词按钮', () {
-    testWidgets('桌面歌词开启且锁定时展示锁定图标与一键解锁 tooltip，点击触发解锁', (tester) async {
+    testWidgets('桌面歌词开启且锁定时仍展示歌词图标，点击可隐藏且不改锁定状态', (
+      tester,
+    ) async {
       final player = _FakePlayerController()
         ..currentSong = _song
         ..isDesktopLyricsSupported = true
@@ -539,16 +541,18 @@ void main() {
         ..desktopLyricsLocked = true;
       await _pumpBar(tester, player);
 
-      expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
-      expect(find.byTooltip('桌面歌词已锁定，点击一键解锁'), findsOneWidget);
-
-      await tester.tap(find.byTooltip('桌面歌词已锁定，点击一键解锁'));
-      await tester.pump();
-
-      expect(player.unlockDesktopLyricsCalls, 1);
-      expect(player.desktopLyricsLocked, isFalse);
       expect(find.byIcon(Icons.lyrics_rounded), findsOneWidget);
       expect(find.byTooltip('关闭桌面歌词'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('关闭桌面歌词'));
+      await tester.pump();
+
+      expect(player.setDesktopLyricsEnabledCalls, 1);
+      expect(player.desktopLyricsEnabled, isFalse);
+      expect(player.desktopLyricsLocked, isTrue);
+      expect(player.unlockDesktopLyricsCalls, 0);
+      expect(find.byIcon(Icons.lyrics_outlined), findsOneWidget);
+      expect(find.byTooltip('开启桌面歌词'), findsOneWidget);
     });
 
     testWidgets('桌面歌词未开启时展示空心图标，点击开启', (tester) async {
@@ -568,7 +572,7 @@ void main() {
       expect(player.desktopLyricsEnabled, isTrue);
     });
 
-    testWidgets('桌面歌词开启且未锁定时展示实心图标，点击关闭', (tester) async {
+    testWidgets('桌面歌词开启时展示实心图标，点击关闭', (tester) async {
       final player = _FakePlayerController()
         ..currentSong = _song
         ..isDesktopLyricsSupported = true
@@ -595,7 +599,7 @@ void main() {
       await _pumpBar(tester, player);
 
       final button = tester.widget<IconButton>(
-        find.widgetWithIcon(IconButton, Icons.lock_rounded),
+        find.widgetWithIcon(IconButton, Icons.lyrics_rounded),
       );
       expect(button.onPressed, isNull);
     });
@@ -608,7 +612,8 @@ void main() {
 
       expect(find.byTooltip('开启桌面歌词'), findsNothing);
       expect(find.byTooltip('关闭桌面歌词'), findsNothing);
-      expect(find.byTooltip('桌面歌词已锁定，点击一键解锁'), findsNothing);
+      expect(find.byIcon(Icons.lyrics_rounded), findsNothing);
+      expect(find.byIcon(Icons.lyrics_outlined), findsNothing);
     });
   });
 

@@ -1172,7 +1172,9 @@ class _EffectsButton extends StatelessWidget {
   }
 }
 
-/// 右区：桌面歌词开关（三态：锁定/开启/关闭）。
+/// 右区：桌面歌词显隐开关（二态：开启/关闭）。
+/// 锁定/解锁由悬浮窗胶囊、托盘或设置页负责；锁定时也可在此隐藏歌词，
+/// 重新开启时沿用已持久化的锁定状态。
 class _DesktopLyricsButton extends StatelessWidget {
   const _DesktopLyricsButton({required this.player, required this.song});
 
@@ -1186,18 +1188,12 @@ class _DesktopLyricsButton extends StatelessWidget {
       animation: player,
       builder: (context, _) {
         final enabled = player.desktopLyricsEnabled;
-        final locked = player.desktopLyricsLocked;
         final String tooltip;
         final IconData iconData;
         final Color color;
         final VoidCallback? onPressed;
 
-        if (enabled && locked) {
-          tooltip = '桌面歌词已锁定，点击一键解锁';
-          iconData = Icons.lock_rounded;
-          color = colorScheme.primary;
-          onPressed = song == null ? null : () => player.unlockDesktopLyrics();
-        } else if (enabled) {
+        if (enabled) {
           tooltip = '关闭桌面歌词';
           iconData = Icons.lyrics_rounded;
           color = colorScheme.primary;
