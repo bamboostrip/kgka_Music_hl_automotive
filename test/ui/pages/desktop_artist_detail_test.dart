@@ -203,6 +203,29 @@ void main() {
       expect(find.text('共 2 首热门单曲 · 1 张专辑'), findsOneWidget);
       expect(find.text('播放热门单曲'), findsOneWidget);
 
+      // 【播放热门单曲】按钮光标为 pointer，且在 PC 上使用 w700 规范字体权重（避免 DirectWrite 字体回退导致“门”字形变）
+      final playBtn = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('播放热门单曲'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(
+        playBtn.style?.mouseCursor?.resolve({}) ?? SystemMouseCursors.click,
+        SystemMouseCursors.click,
+      );
+      final playText = tester.widget<Text>(find.text('播放热门单曲'));
+      expect(playText.style?.fontWeight, FontWeight.w700);
+
+      // 【精选单曲】与【所有专辑】Tab 的 InkWell 光标为 click
+      final tabInkWells = tester.widgetList<InkWell>(
+        find.ancestor(
+          of: find.text('精选单曲'),
+          matching: find.byType(InkWell),
+        ),
+      );
+      expect(tabInkWells.first.mouseCursor, SystemMouseCursors.click);
+
       // 表格表头存在
       expect(find.byType(DesktopSongTableHeader), findsOneWidget);
       expect(find.text('#'), findsOneWidget);

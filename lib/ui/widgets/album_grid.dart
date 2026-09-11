@@ -200,6 +200,7 @@ class AlbumGridCard extends StatelessWidget {
 
     final ink = InkWell(
       onTap: onTap,
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(isDesktop ? 10.0 : AppRadius.md),
       child: padded,
     );

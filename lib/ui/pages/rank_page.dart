@@ -560,9 +560,11 @@ class _NewSongCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: 108,
         decoration: BoxDecoration(
@@ -655,7 +657,8 @@ class _NewSongCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -716,6 +719,7 @@ class _RankCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: EdgeInsets.all(cardPadding),
@@ -909,6 +913,7 @@ class _RankCoverPlayButton extends StatelessWidget {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onPlay,
+        mouseCursor: SystemMouseCursors.click,
         child: SizedBox.square(
           dimension: 32,
           child: Center(
@@ -1897,6 +1902,7 @@ class _RankSongRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               child: InkWell(
                 onTap: onTap,
+                mouseCursor: SystemMouseCursors.click,
                 onLongPress: () => _showActions(context),
                 borderRadius: BorderRadius.circular(16),
                 child: Padding(

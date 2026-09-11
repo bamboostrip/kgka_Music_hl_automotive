@@ -532,6 +532,7 @@ class _HoverTimeBubbleState extends State<HoverTimeBubble> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onHover: _onHover,
       onExit: (_) => setState(() => _hoverX = null),
       child: Stack(

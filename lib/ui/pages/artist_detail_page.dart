@@ -841,7 +841,11 @@ class _SongSectionHeader extends StatelessWidget {
               count == 0 ? '歌曲' : '热门歌曲 $count',
               style: Theme.of(
                 context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+              ).textTheme.titleMedium?.copyWith(
+                fontWeight: isDesktopFormFactor
+                    ? FontWeight.w700
+                    : FontWeight.w900,
+              ),
             ),
           ),
           if (!isDesktopFormFactor)
@@ -884,6 +888,7 @@ class _ArtistSongRow extends StatelessWidget {
         final activeColor = colorScheme.primary;
 
         return InkWell(
+          mouseCursor: isDesktopFormFactor ? SystemMouseCursors.click : null,
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: AnimatedContainer(
@@ -1294,14 +1299,19 @@ class _DesktopArtistHeroHeader extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: onPlayAll,
                       icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                      label: const Text(
+                      label: Text(
                         '播放热门单曲',
                         style: TextStyle(
-                          fontWeight: FontWeight.w800,
+                          fontWeight: isDesktopFormFactor
+                              ? FontWeight.w700
+                              : FontWeight.w800,
                           fontSize: 13.5,
                         ),
                       ),
                       style: FilledButton.styleFrom(
+                        enabledMouseCursor: isDesktopFormFactor
+                            ? SystemMouseCursors.click
+                            : null,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 9,
@@ -1472,6 +1482,7 @@ class _ArtistTabItemState extends State<_ArtistTabItem> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: widget.onTap,
         borderRadius: BorderRadius.circular(10),
         hoverColor: colorScheme.primary.withValues(alpha: .06),

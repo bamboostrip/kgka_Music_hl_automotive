@@ -188,6 +188,12 @@ class DesktopPlayerBar extends StatelessWidget {
                                   minimumSize: const Size(32, 32),
                                   tapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
+                                ).copyWith(
+                                  mouseCursor: WidgetStateProperty.resolveWith(
+                                    (states) => states.contains(WidgetState.disabled)
+                                        ? SystemMouseCursors.basic
+                                        : SystemMouseCursors.click,
+                                  ),
                                 ),
                               ),
                               child: Column(
@@ -1269,6 +1275,9 @@ class _ProgressBarState extends State<_ProgressBar> {
                   formatDuration: formatDuration,
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
+                      mouseCursor: const WidgetStatePropertyAll(
+                        SystemMouseCursors.click,
+                      ),
                       trackHeight: 3,
                       thumbShape: const RoundSliderThumbShape(
                         enabledThumbRadius: 6,

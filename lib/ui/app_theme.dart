@@ -90,6 +90,7 @@ class AppTheme {
       fontFamilyFallback: const [
         'Microsoft YaHei UI',
         'Microsoft YaHei',
+        'SimHei',
         'PingFang SC',
         'Hiragino Sans GB',
         'Noto Sans CJK SC',
@@ -114,6 +115,14 @@ class AppTheme {
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
           highlightColor: scheme.primary.withValues(alpha: .08),
+        ).copyWith(
+          mouseCursor: desktop
+              ? WidgetStateProperty.resolveWith<MouseCursor>(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                )
+              : null,
         ),
       ),
       cardTheme: CardThemeData(
@@ -141,8 +150,18 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(48, 44),
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          textStyle: TextStyle(
+            fontWeight: desktop ? FontWeight.w700 : FontWeight.w800,
+          ),
           shape: const StadiumBorder(),
+        ).copyWith(
+          mouseCursor: desktop
+              ? WidgetStateProperty.resolveWith<MouseCursor>(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                )
+              : null,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -165,6 +184,39 @@ class AppTheme {
       ),
       // —— 桌面形态专属主题层 ——
       // 移动端/车机对应项为 null（= Flutter 默认），主题逐项不变。
+      elevatedButtonTheme: desktop
+          ? ElevatedButtonThemeData(
+              style: ButtonStyle(
+                mouseCursor: WidgetStateProperty.resolveWith<MouseCursor>(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                ),
+              ),
+            )
+          : null,
+      outlinedButtonTheme: desktop
+          ? OutlinedButtonThemeData(
+              style: ButtonStyle(
+                mouseCursor: WidgetStateProperty.resolveWith<MouseCursor>(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                ),
+              ),
+            )
+          : null,
+      textButtonTheme: desktop
+          ? TextButtonThemeData(
+              style: ButtonStyle(
+                mouseCursor: WidgetStateProperty.resolveWith<MouseCursor>(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                ),
+              ),
+            )
+          : null,
       scrollbarTheme: desktop ? _desktopScrollbarTheme(scheme) : null,
       tooltipTheme: desktop
           ? const TooltipThemeData(

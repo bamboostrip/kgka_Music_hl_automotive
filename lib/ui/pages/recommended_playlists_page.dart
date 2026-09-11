@@ -397,6 +397,7 @@ class _RecommendedPlaylistsPageState extends State<RecommendedPlaylistsPage> {
 
     return InkWell(
       onTap: () => _openPlaylist(playlist),
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(cardRadius),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

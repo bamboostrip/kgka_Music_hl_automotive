@@ -1866,6 +1866,7 @@ class _FeatureCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
           child: Padding(
             padding: cardPadding,
             child: Row(
@@ -2352,6 +2353,7 @@ class _TopSongCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(cardRadius),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -2648,6 +2650,7 @@ class _CirclePlayButton extends StatelessWidget {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
+        mouseCursor: SystemMouseCursors.click,
         child: button,
       ),
     );
@@ -2781,6 +2784,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
     final inkCard = InkWell(
       borderRadius: BorderRadius.circular(hoverRadius),
       onTap: widget.onTap,
+      mouseCursor: SystemMouseCursors.click,
       child: content,
     );
 
@@ -3188,6 +3192,9 @@ class _RadioHeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: loading ? null : onTap,
+          mouseCursor: loading
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: cardPadding,
@@ -3419,6 +3426,9 @@ class _RadioStationCard extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: loading ? null : onTap,
+            mouseCursor: loading
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
             child: Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
@@ -3999,6 +4009,7 @@ class _PillCard extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(28),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

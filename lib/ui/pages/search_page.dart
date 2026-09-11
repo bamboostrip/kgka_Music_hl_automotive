@@ -19,6 +19,7 @@ import '../player/song_tap_handler.dart';
 import 'artist_detail_page.dart';
 import 'playlist_detail_page.dart';
 import 'dart:math' as math;
+import '../form_factor.dart';
 import 'search_song_results.dart';
 
 class SearchPage extends StatefulWidget {
@@ -771,31 +772,41 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                   const SizedBox(width: 8),
                   if (_searchHistory.length > 6) ...[
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() => _historyExpanded = !_historyExpanded),
-                      child: Icon(
-                        _historyExpanded
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        size: 20,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    MouseRegion(
+                      cursor: isDesktopFormFactor
+                          ? SystemMouseCursors.click
+                          : MouseCursor.defer,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _historyExpanded = !_historyExpanded),
+                        child: Icon(
+                          _historyExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                   ],
-                  GestureDetector(
-                    onTap: () async {
-                      await _historyService.clear();
-                      _loadSearchHistory();
-                      if (mounted) {
-                        Toast.show('已清空搜索历史', type: ToastType.info);
-                      }
-                    },
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  MouseRegion(
+                    cursor: isDesktopFormFactor
+                        ? SystemMouseCursors.click
+                        : MouseCursor.defer,
+                    child: GestureDetector(
+                      onTap: () async {
+                        await _historyService.clear();
+                        _loadSearchHistory();
+                        if (mounted) {
+                          Toast.show('已清空搜索历史', type: ToastType.info);
+                        }
+                      },
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ],
@@ -894,43 +905,53 @@ class _SearchPageState extends State<SearchPage> {
                         ),
                       ),
                       if (_searchHistory.length > 6) ...[
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _historyExpanded = !_historyExpanded),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: .08)
-                                  : colorScheme.surfaceContainerHighest.withValues(alpha: .9),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              _historyExpanded
-                                  ? Icons.keyboard_arrow_up_rounded
-                                  : Icons.keyboard_arrow_down_rounded,
-                              size: 16,
-                              color: colorScheme.onSurfaceVariant,
+                        MouseRegion(
+                          cursor: isDesktopFormFactor
+                              ? SystemMouseCursors.click
+                              : MouseCursor.defer,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => setState(() => _historyExpanded = !_historyExpanded),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: .08)
+                                    : colorScheme.surfaceContainerHighest.withValues(alpha: .9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _historyExpanded
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                size: 16,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                       ],
-                      GestureDetector(
-                        onTap: () async {
-                          await _historyService.clear();
-                          _loadSearchHistory();
-                          if (mounted) {
-                            Toast.show('已清空搜索历史', type: ToastType.info);
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withValues(alpha: .08) : colorScheme.surfaceContainerHighest.withValues(alpha: .9),
-                            shape: BoxShape.circle,
+                      MouseRegion(
+                        cursor: isDesktopFormFactor
+                            ? SystemMouseCursors.click
+                            : MouseCursor.defer,
+                        child: GestureDetector(
+                          onTap: () async {
+                            await _historyService.clear();
+                            _loadSearchHistory();
+                            if (mounted) {
+                              Toast.show('已清空搜索历史', type: ToastType.info);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withValues(alpha: .08) : colorScheme.surfaceContainerHighest.withValues(alpha: .9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.delete_outline_rounded, size: 16, color: colorScheme.onSurfaceVariant),
                           ),
-                          child: Icon(Icons.delete_outline_rounded, size: 16, color: colorScheme.onSurfaceVariant),
                         ),
                       ),
                     ],
@@ -1011,31 +1032,38 @@ class _PlatformSelector extends StatelessWidget {
       child: Row(
         children: [
           for (final p in _SearchPlatform.values) ...[
-            GestureDetector(
-              onTap: () => onChanged(p),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: platform == p
-                      ? colorScheme.primary
-                      : colorScheme.surfaceContainerHighest.withValues(
-                          alpha: .5,
-                        ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  p == _SearchPlatform.kugou ? '酷狗' : '网易云',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            MouseRegion(
+              cursor: isDesktopFormFactor
+                  ? SystemMouseCursors.click
+                  : MouseCursor.defer,
+              child: GestureDetector(
+                onTap: () => onChanged(p),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
                     color: platform == p
-                        ? colorScheme.onPrimary
-                        : colorScheme.onSurfaceVariant,
-                    fontWeight: platform == p
-                        ? FontWeight.w800
-                        : FontWeight.w600,
+                        ? colorScheme.primary
+                        : colorScheme.surfaceContainerHighest.withValues(
+                            alpha: .5,
+                          ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    p == _SearchPlatform.kugou ? '酷狗' : '网易云',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: platform == p
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: platform == p
+                          ? (isDesktopFormFactor
+                              ? FontWeight.w700
+                              : FontWeight.w800)
+                          : FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -1311,6 +1339,9 @@ class _HotPageArrow extends StatelessWidget {
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(9),
       child: InkWell(
+        mouseCursor: enabled
+            ? (isDesktopFormFactor ? SystemMouseCursors.click : null)
+            : SystemMouseCursors.basic,
         borderRadius: BorderRadius.circular(9),
         onTap: enabled ? onTap : null,
         child: Container(
@@ -1365,6 +1396,7 @@ class _CategoryTab extends StatelessWidget {
             : null,
       ),
       child: InkWell(
+        mouseCursor: isDesktopFormFactor ? SystemMouseCursors.click : null,
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: Padding(
@@ -1400,6 +1432,7 @@ class _CategoryKeywordList extends StatelessWidget {
         final item = keywords[index];
         final rank = index + 1;
         return InkWell(
+          mouseCursor: isDesktopFormFactor ? SystemMouseCursors.click : null,
           onTap: () => onTap(item.keyword),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1514,6 +1547,8 @@ class _SuggestionList extends StatelessWidget {
             itemBuilder: (context, index) {
               final keyword = suggestions[index];
               return ListTile(
+                mouseCursor:
+                    isDesktopFormFactor ? SystemMouseCursors.click : null,
                 dense: true,
                 leading: Container(
                   width: 32,
@@ -1661,6 +1696,7 @@ class _HistoryChip extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
+          mouseCursor: isDesktopFormFactor ? SystemMouseCursors.click : null,
           borderRadius: BorderRadius.circular(20),
           onTap: onTap,
           child: Padding(
@@ -1673,15 +1709,20 @@ class _HistoryChip extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, fontSize: 13),
                 ),
                 const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: onDelete,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: .10) : colorScheme.surfaceContainerHighest.withValues(alpha: .9),
-                      shape: BoxShape.circle,
+                MouseRegion(
+                  cursor: isDesktopFormFactor
+                      ? SystemMouseCursors.click
+                      : MouseCursor.defer,
+                  child: GestureDetector(
+                    onTap: onDelete,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withValues(alpha: .10) : colorScheme.surfaceContainerHighest.withValues(alpha: .9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.close_rounded, size: 12, color: colorScheme.onSurfaceVariant),
                     ),
-                    child: Icon(Icons.close_rounded, size: 12, color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               ],
@@ -1784,34 +1825,42 @@ class _SearchTypeSelector extends StatelessWidget {
       child: Row(
         children: [
           for (final t in _SearchType.values) ...[
-            GestureDetector(
-              onTap: () => onChanged(t),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: type == t
-                      ? colorScheme.primary.withValues(alpha: .12)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: type == t
-                        ? colorScheme.primary.withValues(alpha: .4)
-                        : colorScheme.outlineVariant.withValues(alpha: .5),
+            MouseRegion(
+              cursor: isDesktopFormFactor
+                  ? SystemMouseCursors.click
+                  : MouseCursor.defer,
+              child: GestureDetector(
+                onTap: () => onChanged(t),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 5,
                   ),
-                ),
-                child: Text(
-                  _labels[t]!,
-                  style: TextStyle(
-                    fontSize: 13,
+                  decoration: BoxDecoration(
                     color: type == t
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                    fontWeight:
-                        type == t ? FontWeight.w800 : FontWeight.w500,
+                        ? colorScheme.primary.withValues(alpha: .12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: type == t
+                          ? colorScheme.primary.withValues(alpha: .4)
+                          : colorScheme.outlineVariant.withValues(alpha: .5),
+                    ),
+                  ),
+                  child: Text(
+                    _labels[t]!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: type == t
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: type == t
+                          ? (isDesktopFormFactor
+                              ? FontWeight.w700
+                              : FontWeight.w800)
+                          : FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -1849,9 +1898,13 @@ class _ArtistResults extends StatelessWidget {
       itemCount: artists.length,
       itemBuilder: (context, index) {
         final artist = artists[index];
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
+        return MouseRegion(
+          cursor: isDesktopFormFactor
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => ArtistDetailPage(
@@ -1908,8 +1961,9 @@ class _ArtistResults extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 }
@@ -1939,9 +1993,13 @@ class _AlbumResults extends StatelessWidget {
       itemCount: albums.length,
       itemBuilder: (context, index) {
         final album = albums[index];
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
+        return MouseRegion(
+          cursor: isDesktopFormFactor
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
             final playlist = PlaylistSummary(
               id: album.albumId,
               title: album.albumName,
@@ -2002,8 +2060,9 @@ class _AlbumResults extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 }

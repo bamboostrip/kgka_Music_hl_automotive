@@ -27,6 +27,7 @@ class LocateCurrentSongButton extends StatelessWidget {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onPressed,
+            mouseCursor: SystemMouseCursors.click,
             child: SizedBox(
               width: 46,
               height: 46,

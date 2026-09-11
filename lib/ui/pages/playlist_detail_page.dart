@@ -2213,6 +2213,9 @@ class _SelectionActionButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        mouseCursor: isEnabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
         borderRadius: BorderRadius.circular(14),
         splashColor: (danger ? colorScheme.error : colorScheme.primary)
             .withValues(alpha: .12),
@@ -2282,6 +2285,7 @@ class _ActionOptionTile extends StatelessWidget {
         Navigator.of(context).pop();
         option.onTap();
       },
+      mouseCursor: SystemMouseCursors.click,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
@@ -2637,6 +2641,9 @@ class _HeroCircleAction extends StatelessWidget {
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: onTap,
+              mouseCursor: enabled
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.basic,
               child: Padding(
                 padding: const EdgeInsets.all(11),
                 child: Icon(icon, size: 22, color: fg),
@@ -2693,6 +2700,9 @@ class _HeroPillAction extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: onTap,
+          mouseCursor: enabled
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Row(
@@ -2974,6 +2984,7 @@ class ListStickyBar extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: onDone,
+                    mouseCursor: SystemMouseCursors.click,
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       height: 32,
@@ -3002,6 +3013,9 @@ class ListStickyBar extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: canPlay ? onPlay : null,
+                    mouseCursor: canPlay
+                        ? SystemMouseCursors.click
+                        : SystemMouseCursors.basic,
                     customBorder: const CircleBorder(),
                     child: const SizedBox.square(
                       dimension: 40,
@@ -3101,6 +3115,9 @@ class _StickyHeaderIconButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
+          mouseCursor: onTap != null
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           customBorder: const CircleBorder(),
           child: SizedBox.square(
             dimension: 36,

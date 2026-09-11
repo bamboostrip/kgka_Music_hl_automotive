@@ -118,7 +118,7 @@ class _DesktopSearchSuggestPanelState extends State<DesktopSearchSuggestPanel> {
         Text(
           '热门搜索',
           style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 8),
@@ -283,6 +283,7 @@ class _SuggestRowState extends State<_SuggestRow> {
                 : const Color(0xFFF2C14E));
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: widget.onTap,
       onHover: (h) => setState(() => _hovering = h),
       borderRadius: BorderRadius.circular(6),
