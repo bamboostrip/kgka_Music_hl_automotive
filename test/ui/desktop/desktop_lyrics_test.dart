@@ -1434,6 +1434,44 @@ void main() {
       expect(tester.widget<AnimatedOpacity>(opacityFinder).opacity, 1.0);
     });
 
+    testWidgets('胶囊位置上提至 top: 2.0，高度 24.0 且防遮挡', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LockedLyricsBody(
+              settings: const DesktopLyricsSettings(locked: true),
+              current: '当前歌词',
+              next: '下一句歌词',
+              onToggleLock: (_) {},
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+      final positionedFinder = find.descendant(
+        of: find.byType(LockedLyricsBody),
+        matching: find.byType(Positioned),
+      );
+      expect(positionedFinder, findsOneWidget);
+      final positioned = tester.widget<Positioned>(positionedFinder);
+      expect(positioned.top, 2.0);
+
+      final containerFinder = find.descendant(
+        of: find.byType(LockedLyricsBody),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              (w.decoration as BoxDecoration?)?.borderRadius ==
+                  BorderRadius.circular(12.0),
+        ),
+      );
+      expect(containerFinder, findsOneWidget);
+      final container = tester.widget<Container>(containerFinder);
+      expect(container.constraints?.maxHeight, 24.0);
+      expect(container.constraints?.maxWidth, 84.0);
+    });
+
     testWidgets('光标悬浮在胶囊上时触发 setIgnoreMouseEvents(false)', (tester) async {
       Offset? cursorPos = const Offset(200, 120);
       const windowPos = Offset(100, 100);
@@ -1459,17 +1497,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 80));
       expect(mouseEventsCalls, isEmpty);
 
-      // 胶囊水平居中：pillLeft = 100 + (780 - 84)/2 = 448, pillTop = 100 + 6 = 106
-      // 光标移入胶囊矩形内 (450, 110)
-      cursorPos = const Offset(450, 110);
+      // 胶囊水平居中：pillLeft = 100 + (780 - 84)/2 = 448, pillTop = 100 + 2 = 102, pillHeight = 24 (bottom = 126)
+      // 光标移入胶囊矩形内 (450, 103)
+      cursorPos = const Offset(450, 103);
       await tester.pump(const Duration(milliseconds: 80));
 
       expect(mouseEventsCalls, contains(false));
       expect(mouseEventsCalls.last, isFalse);
+
+      // 光标在胶囊上方但在窗口内 (450, 101) 恢复穿透 (windowPos.dy = 100 <= 101 < pillTop = 102)
+      cursorPos = const Offset(450, 101);
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(mouseEventsCalls.last, isTrue);
     });
 
     testWidgets('点击胶囊触发 onToggleLock(false)', (tester) async {
-      Offset? cursorPos = const Offset(450, 110);
+      Offset? cursorPos = const Offset(450, 103);
       const windowPos = Offset(100, 100);
       bool? toggledLock;
 
@@ -1500,7 +1543,7 @@ void main() {
     });
 
     testWidgets('光标离开窗口时胶囊淡出且恢复 setIgnoreMouseEvents(true)', (tester) async {
-      Offset? cursorPos = const Offset(450, 110);
+      Offset? cursorPos = const Offset(450, 103);
       const windowPos = Offset(100, 100);
       final mouseEventsCalls = <bool>[];
 

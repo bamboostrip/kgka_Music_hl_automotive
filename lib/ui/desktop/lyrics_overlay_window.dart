@@ -722,10 +722,10 @@ class _LockedLyricsBodyState extends State<LockedLyricsBody> {
         WindowsDesktopLyricsBridge.overlayHeight,
       );
       const pillWidth = 84.0;
-      const pillHeight = 26.0;
+      const pillHeight = 24.0;
       final pillLeft = windowPos.dx +
           (WindowsDesktopLyricsBridge.overlayWidth - pillWidth) / 2;
-      final pillTop = windowPos.dy + 6.0;
+      final pillTop = windowPos.dy + 2.0;
       final pillRect = Rect.fromLTWH(pillLeft, pillTop, pillWidth, pillHeight);
 
       if (winRect.contains(cursorPos)) {
@@ -776,7 +776,7 @@ class _LockedLyricsBodyState extends State<LockedLyricsBody> {
           progress: widget.progress,
         ),
         Positioned(
-          top: 6.0,
+          top: 2.0,
           left: 0.0,
           right: 0.0,
           child: Center(
@@ -792,10 +792,10 @@ class _LockedLyricsBodyState extends State<LockedLyricsBody> {
                     cursor: SystemMouseCursors.click,
                     child: Container(
                       width: 84.0,
-                      height: 26.0,
+                      height: 24.0,
                       decoration: BoxDecoration(
                         color: const Color(0xCC333333),
-                        borderRadius: BorderRadius.circular(13.0),
+                        borderRadius: BorderRadius.circular(12.0),
                         border: Border.all(
                           color: Colors.white.withValues(
                             alpha: _isHoveringPill ? 0.35 : 0.15,
@@ -1172,7 +1172,12 @@ Widget buildOverlayLyricsBody({
     width: WindowsDesktopLyricsBridge.overlayWidth,
     height: WindowsDesktopLyricsBridge.overlayHeight,
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
+      padding: const EdgeInsets.only(
+        top: 8.0,
+        bottom: 2.0,
+        left: horizontalPadding,
+        right: horizontalPadding,
+      ),
       child: Center(
         child: FittedBox(
           fit: BoxFit.scaleDown,
