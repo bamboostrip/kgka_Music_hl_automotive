@@ -67,6 +67,13 @@ const _desktopLyricsSettingsKey = 'settings.desktop_lyrics_settings';
 const _desktopLyricsSettingsVersionKey =
     'settings.desktop_lyrics_settings_version';
 const _desktopLyricsSettingsVersion = 2;
+// 对齐方式一次性迁移标记：新增 split（左右分离）取值时，历史版本里
+// alignment 对双行**完全无效**（双行恒为左右分离），所以存量 'center'
+// 不可能是用户为双行做的选择，而单行下 split 与 center 渲染一致 ——
+// 把 center 改写成 split 是行为等价的重写，避免升级后双行观感从
+// "对角交错"突变成"两行居中"。
+const _desktopLyricsAlignmentMigratedKey =
+    'settings.desktop_lyrics_alignment_migrated';
 const _smartQualitySettingKey = 'settings.smart_quality_enabled';
 const _allowCellularPrecacheSettingKey = 'settings.allow_cellular_precache';
 const _autoPlayOnStartupSettingKey = 'settings.auto_play_on_startup';

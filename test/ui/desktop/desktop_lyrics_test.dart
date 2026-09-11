@@ -11,9 +11,17 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('WindowsDesktopLyricsBridge dimensions', () {
-    test('悬浮窗尺寸更新为宽 780、高 88', () {
+    test('悬浮窗尺寸为宽 780、高 124（工具栏带 36 + 歌词带 88）', () {
       expect(WindowsDesktopLyricsBridge.overlayWidth, 780);
-      expect(WindowsDesktopLyricsBridge.overlayHeight, 88);
+      // 历史 88 高度下 30px 按钮（y2~36）与双行歌词（约 y20~74）恒重叠
+      // 约 16px，故顶部辟出工具栏专属带，窗口加高到 124。
+      expect(WindowsDesktopLyricsBridge.lyricsTopInset, 36);
+      expect(WindowsDesktopLyricsBridge.overlayLyricsHeight, 88);
+      expect(WindowsDesktopLyricsBridge.overlayHeight, 124);
+      // 派生常量：展开高度 = 歌词带 + 菜单面板。
+      expect(WindowsDesktopLyricsBridge.overlayMenuPanelHeight, 172);
+      expect(WindowsDesktopLyricsBridge.overlayExpandedHeight, 296);
+      expect(WindowsDesktopLyricsBridge.overlayMenuUpwardMinTop, 180);
     });
   });
 
@@ -28,7 +36,8 @@ void main() {
       expect(settings.playedTextColor, 0xFFFFD700);
       expect(settings.fontSize, 24.0);
       expect(settings.singleLine, isTrue);
-      expect(settings.alignment, 'center');
+      // 默认左右分离：单行下与居中渲染一致，双行下即 QQ 音乐经典对角交错。
+      expect(settings.alignment, DesktopLyricsAlignment.split);
       expect(settings.textOpacity, 1.0);
       expect(settings.backgroundColor, 0xFF1A1A2E);
     });
@@ -84,7 +93,7 @@ void main() {
       expect(legacy.opacity, 0.5);
       expect(legacy.fontSize, 20.0);
       expect(legacy.singleLine, isTrue);
-      expect(legacy.alignment, 'center');
+      expect(legacy.alignment, DesktopLyricsAlignment.split);
       expect(legacy.textOpacity, 1.0);
       expect(legacy.playedTextColor, 0xFFFFD700);
       expect(legacy.unplayedTextColor, 0xFF00BFFF);
@@ -111,7 +120,7 @@ void main() {
       expect(minimal.opacity, 0.0);
       expect(minimal.fontSize, 24.0);
       expect(minimal.singleLine, isTrue);
-      expect(minimal.alignment, 'center');
+      expect(minimal.alignment, DesktopLyricsAlignment.split);
       expect(minimal.textOpacity, 1.0);
       expect(minimal.playedTextColor, 0xFFFFD700);
       expect(minimal.unplayedTextColor, 0xFF00BFFF);
@@ -296,7 +305,11 @@ void main() {
 
       // 冷启动窗口期（子引擎未上报 overlayReady）：推送只更新缓存，
       // 不产生任何通道调用，不再触发 MissingPluginException。
-      await bridge.updateLyrics(current: '第一句', next: '第二句');
+      await bridge.updateLyrics(
+        current: '第一句',
+        next: '第二句',
+        activeOnBottom: true,
+      );
       await bridge.updatePlayState(isPlaying: true);
       await bridge.updateSettings(const DesktopLyricsSettings(fontSize: 28.0));
       expect(pushesOf('updateLyric'), isEmpty);
@@ -312,6 +325,8 @@ void main() {
       expect(lyricPayload['current'], '第一句');
       expect(lyricPayload['next'], '第二句');
       expect(lyricPayload['isPlaying'], isTrue);
+      // 双行交替高亮标志随歌词一起下发（子窗据此决定哪一行带动画进度）。
+      expect(lyricPayload['activeOnBottom'], isTrue);
 
       final settingsPushes = pushesOf('updateSettings');
       expect(settingsPushes, hasLength(1));
@@ -328,7 +343,7 @@ void main() {
       await bridge.show(title: '标题', artist: '歌手');
 
       // 首轮握手前：推送只更新缓存，不产生通道调用。
-      await bridge.updateLyrics(current: 'A', next: 'B');
+      await bridge.updateLyrics(current: 'A', next: 'B', activeOnBottom: false);
       expect(pushesOf('updateLyric'), isEmpty);
 
       // 首轮握手：补发当时缓存。
@@ -343,7 +358,7 @@ void main() {
       // 重新展示（重建子窗）：新引擎握手前推送仍被门控（缓存已更新为 C）。
       final reshow = await bridge.show(title: '标题', artist: '歌手');
       expect(reshow, isTrue);
-      await bridge.updateLyrics(current: 'C', next: 'D');
+      await bridge.updateLyrics(current: 'C', next: 'D', activeOnBottom: false);
       expect(pushesOf('updateLyric'), hasLength(1));
 
       // 新一轮握手后补发最新缓存。
@@ -365,7 +380,11 @@ void main() {
       final baseline = pushesOf('updateLyric').length;
       expect(baseline, 1);
 
-      await bridge.updateLyrics(current: '第一句', next: '第二句');
+      await bridge.updateLyrics(
+        current: '第一句',
+        next: '第二句',
+        activeOnBottom: true,
+      );
       expect(pushesOf('updateLyric').length, baseline + 1);
 
       // 重复 show：走复用分支并直接推送（若误重置门控，此处不会再推送）。
@@ -740,6 +759,7 @@ void main() {
       required String current,
       required String next,
       double progress = 0.0,
+      bool activeOnBottom = false,
     }) async {
       tester.view.physicalSize = const Size(
         WindowsDesktopLyricsBridge.overlayWidth,
@@ -756,6 +776,7 @@ void main() {
             next: next,
             isPlaying: true,
             progress: progress,
+            activeOnBottom: activeOnBottom,
             onControlPlayback: (_) {},
             onToggleLock: (_) {},
             onClose: () {},
@@ -831,9 +852,154 @@ void main() {
       expect(nextLine.fontWeight, FontWeight.bold);
       expect(currentLine.fontSize, nextLine.fontSize);
       expect(currentLine.fontSize, closeTo(fontSize * 0.82, 0.001));
-      // 上行变色高亮，下行未播天蓝色，但基础 unplayedColor 与 textOpacity 一致
-      expect(currentLine.unplayedColor, nextLine.unplayedColor);
-      expect(currentLine.textOpacity, nextLine.textOpacity);
+      // 基础（未播放）色 RGB 一致，"下一句"那行整体降透明度（0.65）以弱化
+      expect(currentLine.unplayedColor.r, nextLine.unplayedColor.r);
+      expect(currentLine.unplayedColor.g, nextLine.unplayedColor.g);
+      expect(currentLine.unplayedColor.b, nextLine.unplayedColor.b);
+      expect(currentLine.unplayedColor.a, closeTo(1.0, 0.001));
+      expect(nextLine.unplayedColor.a, closeTo(0.65, 0.001));
+      expect(currentLine.textOpacity, 1.0);
+      expect(nextLine.textOpacity, closeTo(0.65, 0.001));
+    });
+
+    testWidgets('双行交替高亮：当前句在下行时，上行让位给下一句（文字不搬家）',
+        (tester) async {
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: false),
+        current: '当前句歌词内容',
+        next: '下一句歌词内容',
+        progress: 0.5,
+        activeOnBottom: true,
+      );
+
+      final karaokeLines =
+          tester.widgetList<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine))
+              .toList();
+      expect(karaokeLines.length, 2);
+
+      // 上行 = 下一句（未播放、降透明度、无进度），下行 = 当前句（带动画进度）
+      final topLine = karaokeLines[0];
+      final bottomLine = karaokeLines[1];
+      expect(topLine.text, '下一句歌词内容');
+      expect(topLine.progress, 0.0);
+      expect(topLine.unplayedColor.a, closeTo(0.65, 0.001));
+      expect(bottomLine.text, '当前句歌词内容');
+      expect(bottomLine.progress, 0.5);
+      expect(bottomLine.unplayedColor.a, closeTo(1.0, 0.001));
+
+      // 交错锚点不随高亮位置变化：上行恒居左、下行恒居右
+      final column = tester.widget<Column>(find.byType(Column).first);
+      expect((column.children[0] as Align).alignment, Alignment.centerLeft);
+      expect((column.children[2] as Align).alignment, Alignment.centerRight);
+
+      // 高亮交替而文字位置不变：两次换句后"当前句"仍在下行同一位置
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: false),
+        current: '当前句歌词内容',
+        next: '下一句歌词内容',
+        progress: 0.9,
+        activeOnBottom: true,
+      );
+      final afterScroll =
+          tester.widgetList<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine))
+              .toList();
+      expect(afterScroll.length, 2);
+      expect(afterScroll[1].text, '当前句歌词内容');
+      expect(afterScroll[1].progress, 0.9);
+    });
+
+    testWidgets('双行对齐：居中/左/右时两行同侧锚点；split 时上下分居两侧',
+        (tester) async {
+      Future<void> expectDualAnchors({
+        required String alignment,
+        required Alignment expectedTop,
+        required Alignment expectedBottom,
+        required TextAlign expectedTopText,
+        required TextAlign expectedBottomText,
+      }) async {
+        await pumpCustomOverlay(
+          tester,
+          settings: DesktopLyricsSettings(
+            singleLine: false,
+            alignment: alignment,
+          ),
+          current: '当前句歌词内容',
+          next: '下一句歌词内容',
+        );
+        final lines =
+            tester.widgetList<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine))
+                .toList();
+        expect(lines.length, 2);
+        expect(lines[0].alignment, expectedTopText);
+        expect(lines[1].alignment, expectedBottomText);
+        final column = tester.widget<Column>(find.byType(Column).first);
+        expect((column.children[0] as Align).alignment, expectedTop);
+        expect((column.children[2] as Align).alignment, expectedBottom);
+      }
+
+      await expectDualAnchors(
+        alignment: DesktopLyricsAlignment.split,
+        expectedTop: Alignment.centerLeft,
+        expectedBottom: Alignment.centerRight,
+        expectedTopText: TextAlign.left,
+        expectedBottomText: TextAlign.right,
+      );
+      await expectDualAnchors(
+        alignment: DesktopLyricsAlignment.center,
+        expectedTop: Alignment.center,
+        expectedBottom: Alignment.center,
+        expectedTopText: TextAlign.center,
+        expectedBottomText: TextAlign.center,
+      );
+      await expectDualAnchors(
+        alignment: DesktopLyricsAlignment.left,
+        expectedTop: Alignment.centerLeft,
+        expectedBottom: Alignment.centerLeft,
+        expectedTopText: TextAlign.left,
+        expectedBottomText: TextAlign.left,
+      );
+      await expectDualAnchors(
+        alignment: DesktopLyricsAlignment.right,
+        expectedTop: Alignment.centerRight,
+        expectedBottom: Alignment.centerRight,
+        expectedTopText: TextAlign.right,
+        expectedBottomText: TextAlign.right,
+      );
+    });
+
+    testWidgets('歌词带顶部预留工具栏专属带：padding.top == lyricsTopInset，按钮区与歌词不重叠',
+        (tester) async {
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: false),
+        current: '当前句歌词内容',
+        next: '下一句歌词内容',
+      );
+
+      // 歌词主体最外层的 Padding 必须预留顶部工具栏带高度
+      final bodyPaddingFinder = find.byWidgetPredicate(
+        (w) =>
+            w is Padding &&
+            w.padding ==
+                const EdgeInsets.only(
+                  top: WindowsDesktopLyricsBridge.lyricsTopInset,
+                  bottom: 2.0,
+                  left: 24.0,
+                  right: 24.0,
+                ),
+      );
+      expect(bodyPaddingFinder, findsOneWidget);
+
+      // 工具栏按钮（30px 高、top 2）底边 32 < 歌词带顶边 36 → 不重叠
+      const toolbarButtonSize = 30.0;
+      const toolbarTop = 2.0;
+      expect(
+        toolbarTop + toolbarButtonSize <=
+            WindowsDesktopLyricsBridge.lyricsTopInset,
+        isTrue,
+      );
     });
 
     testWidgets('修改 progress 更新 DesktopLyricsOverlayContent 变色进度', (tester) async {
@@ -924,7 +1090,7 @@ void main() {
   });
 
   group('悬浮工具栏快捷调节菜单（字号、配色、单双行）', () {
-    Future<void> pumpQuickSettings(
+    Future<TestGesture> pumpQuickSettings(
       WidgetTester tester, {
       required Widget child,
       Future<dynamic>? Function(MethodCall call)? windowManagerHandler,
@@ -978,6 +1144,7 @@ void main() {
       addTearDown(gesture.removePointer);
       await gesture.moveTo(const Offset(390, 44));
       await tester.pumpAndSettle();
+      return gesture;
     }
 
     testWidgets('工具栏包含设置按钮 (Icons.settings_rounded)', (tester) async {
@@ -1250,7 +1417,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('展开快捷菜单时动态调整原生窗口高度为 260，收起或销毁时复位为 88', (tester) async {
+    testWidgets('展开快捷菜单时动态调整原生窗口高度为 296（124 + 菜单面板），收起或销毁时复位为 124', (tester) async {
       final windowSizes = <Size>[];
 
       await pumpQuickSettings(
@@ -1279,16 +1446,19 @@ void main() {
       // 初始未展开菜单，未触发快捷菜单引起的 setSize
       expect(windowSizes, isEmpty);
 
-      // 1. 点击设置按钮展开菜单 -> 窗口高度调整为 260
+      // 1. 点击设置按钮展开菜单 -> 窗口高度扩展为歌词带 + 菜单面板
       await tester.tap(find.byIcon(Icons.settings_rounded));
       await tester.pumpAndSettle();
       expect(windowSizes.isNotEmpty, isTrue);
       expect(
         windowSizes.last,
-        const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayExpandedHeight,
+        ),
       );
 
-      // 2. 点击空白遮罩收起菜单 -> 窗口高度恢复为 88
+      // 2. 点击空白遮罩收起菜单 -> 窗口高度复位为歌词带高度
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
       expect(
@@ -1304,10 +1474,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         windowSizes.last,
-        const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayExpandedHeight,
+        ),
       );
 
-      // 4. 菜单展开状态下组件销毁（如被移除或关闭）-> dispose 防御性重置窗口尺寸回 88
+      // 4. 菜单展开状态下组件销毁（如被移除或关闭）-> dispose 防御性重置窗口尺寸
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
       expect(
@@ -1320,9 +1493,12 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('当窗口顶部 >= 180 时快捷菜单向上弹出：窗口上移 172、高度扩展至 260、菜单位于 bottom 92；收起时位置与尺寸恢复', (tester) async {
+    testWidgets('当窗口顶部 >= 180 时快捷菜单向上弹出：窗口上移一个菜单面板高度、高度扩展、菜单位于卡片上方；收起时位置与尺寸恢复', (tester) async {
       Offset currentPos = const Offset(100, 500);
-      Size currentSize = const Size(WindowsDesktopLyricsBridge.overlayWidth, 88.0);
+      Size currentSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
       final positionLogs = <Offset>[];
       final sizeLogs = <Size>[];
 
@@ -1337,13 +1513,15 @@ void main() {
           onToggleLock: (_) {},
           onClose: () {},
           windowPositionGetter: () async => currentPos,
-          windowPositionSetter: (offset) async {
-            currentPos = offset;
-            positionLogs.add(offset);
-          },
-          windowSizeSetter: (size) async {
-            currentSize = size;
-            sizeLogs.add(size);
+          windowBoundsSetter: (bounds) async {
+            if (bounds.topLeft != currentPos) {
+              currentPos = bounds.topLeft;
+              positionLogs.add(bounds.topLeft);
+            }
+            if (bounds.size != currentSize) {
+              currentSize = bounds.size;
+              sizeLogs.add(bounds.size);
+            }
           },
         ),
       );
@@ -1356,11 +1534,26 @@ void main() {
       expect(positionLogs, [const Offset(100, 328)]);
       expect(currentPos, const Offset(100, 328));
 
-      // 窗口高度扩展至 260
-      expect(sizeLogs, [const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0)]);
-      expect(currentSize, const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0));
+      // 窗口高度扩展为歌词带 + 菜单面板（向上弹出时窗口同时上移面板高度）
+      expect(
+        sizeLogs,
+        [
+          const Size(
+            WindowsDesktopLyricsBridge.overlayWidth,
+            WindowsDesktopLyricsBridge.overlayExpandedHeight,
+          ),
+        ],
+      );
+      expect(
+        currentSize,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayExpandedHeight,
+        ),
+      );
 
-      // 快捷菜单渲染在工具栏上方 (bottom: 92)
+      // 快捷菜单渲染在卡片上方（卡片贴窗口底，故 bottom 偏移恒为
+      // 歌词带高度 + 4px 间隙，与窗口实际高度无关）
       final menuFinder = find.descendant(
         of: find.byType(HoverableOverlay),
         matching: find.byWidgetPredicate(
@@ -1369,7 +1562,10 @@ void main() {
       );
       expect(menuFinder, findsOneWidget);
       final menuPositioned = tester.widget<Positioned>(menuFinder);
-      expect(menuPositioned.bottom, 92.0);
+      expect(
+        menuPositioned.bottom,
+        WindowsDesktopLyricsBridge.overlayHeight + 4,
+      );
       expect(menuPositioned.top, isNull);
 
       // 歌词卡片渲染在底部 (bottom: 0)
@@ -1384,7 +1580,7 @@ void main() {
       );
       expect(lyricsCardFinder, findsOneWidget);
 
-      // 2. 点击空白遮罩收起菜单 -> 恢复原始位置与高度 88
+      // 2. 点击空白遮罩收起菜单 -> 恢复原始位置与歌词带高度
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 
@@ -1400,9 +1596,12 @@ void main() {
       expect(find.byType(OverlayQuickSettingsMenu), findsNothing);
     });
 
-    testWidgets('当窗口顶部 < 180 时快捷菜单向下弹出：窗口位置保持、高度扩展至 260、菜单位于 top 38；收起时尺寸恢复', (tester) async {
+    testWidgets('当窗口顶部 < 180 时快捷菜单向下弹出：窗口位置保持、高度扩展、菜单位于工具栏下方；收起时尺寸恢复', (tester) async {
       Offset currentPos = const Offset(100, 50);
-      Size currentSize = const Size(WindowsDesktopLyricsBridge.overlayWidth, 88.0);
+      Size currentSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
       final positionLogs = <Offset>[];
       final sizeLogs = <Size>[];
 
@@ -1417,13 +1616,15 @@ void main() {
           onToggleLock: (_) {},
           onClose: () {},
           windowPositionGetter: () async => currentPos,
-          windowPositionSetter: (offset) async {
-            currentPos = offset;
-            positionLogs.add(offset);
-          },
-          windowSizeSetter: (size) async {
-            currentSize = size;
-            sizeLogs.add(size);
+          windowBoundsSetter: (bounds) async {
+            if (bounds.topLeft != currentPos) {
+              currentPos = bounds.topLeft;
+              positionLogs.add(bounds.topLeft);
+            }
+            if (bounds.size != currentSize) {
+              currentSize = bounds.size;
+              sizeLogs.add(bounds.size);
+            }
           },
         ),
       );
@@ -1436,11 +1637,25 @@ void main() {
       expect(positionLogs, isEmpty);
       expect(currentPos, const Offset(100, 50));
 
-      // 窗口高度扩展至 260
-      expect(sizeLogs, [const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0)]);
-      expect(currentSize, const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0));
+      // 窗口高度扩展为歌词带 + 菜单面板（位置不动）
+      expect(
+        sizeLogs,
+        [
+          const Size(
+            WindowsDesktopLyricsBridge.overlayWidth,
+            WindowsDesktopLyricsBridge.overlayExpandedHeight,
+          ),
+        ],
+      );
+      expect(
+        currentSize,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayExpandedHeight,
+        ),
+      );
 
-      // 快捷菜单渲染在工具栏下方 (top: 38)
+      // 快捷菜单挂在工具栏下方（歌词带上沿 + 2）
       final menuFinder = find.descendant(
         of: find.byType(HoverableOverlay),
         matching: find.byWidgetPredicate(
@@ -1449,7 +1664,10 @@ void main() {
       );
       expect(menuFinder, findsOneWidget);
       final menuPositioned = tester.widget<Positioned>(menuFinder);
-      expect(menuPositioned.top, 38.0);
+      expect(
+        menuPositioned.top,
+        WindowsDesktopLyricsBridge.lyricsTopInset + 2,
+      );
       expect(menuPositioned.bottom, isNull);
 
       // 歌词卡片渲染在顶部 (top: 0)
@@ -1464,7 +1682,7 @@ void main() {
       );
       expect(lyricsCardFinder, findsOneWidget);
 
-      // 2. 点击空白遮罩收起菜单 -> 尺寸恢复为 88，位置未调整
+      // 2. 点击空白遮罩收起菜单 -> 尺寸复位，位置未调整
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 
@@ -1481,7 +1699,10 @@ void main() {
 
     testWidgets('快捷菜单向上弹出状态下组件销毁时，dispose 防御性恢复窗口位置与尺寸', (tester) async {
       Offset currentPos = const Offset(100, 500);
-      Size currentSize = const Size(WindowsDesktopLyricsBridge.overlayWidth, 88.0);
+      Size currentSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
       final positionLogs = <Offset>[];
       final sizeLogs = <Size>[];
 
@@ -1496,13 +1717,15 @@ void main() {
           onToggleLock: (_) {},
           onClose: () {},
           windowPositionGetter: () async => currentPos,
-          windowPositionSetter: (offset) async {
-            currentPos = offset;
-            positionLogs.add(offset);
-          },
-          windowSizeSetter: (size) async {
-            currentSize = size;
-            sizeLogs.add(size);
+          windowBoundsSetter: (bounds) async {
+            if (bounds.topLeft != currentPos) {
+              currentPos = bounds.topLeft;
+              positionLogs.add(bounds.topLeft);
+            }
+            if (bounds.size != currentSize) {
+              currentSize = bounds.size;
+              sizeLogs.add(bounds.size);
+            }
           },
         ),
       );
@@ -1512,7 +1735,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(currentPos, const Offset(100, 328));
-      expect(currentSize, const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0));
+      expect(
+        currentSize,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayExpandedHeight,
+        ),
+      );
 
       // 组件销毁
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1527,6 +1756,101 @@ void main() {
       );
       expect(positionLogs.last, const Offset(100, 500));
       expect(currentPos, const Offset(100, 500));
+    });
+
+    testWidgets('菜单展开后本窗失去前台焦点（点击别的软件）自动收起并复位窗口', (tester) async {
+      Offset currentPos = const Offset(100, 500);
+      Size currentSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
+      final sizeLogs = <Size>[];
+      var focused = true;
+
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+          windowPositionGetter: () async => currentPos,
+          windowBoundsSetter: (bounds) async {
+            currentPos = bounds.topLeft;
+            if (bounds.size != currentSize) {
+              currentSize = bounds.size;
+              sizeLogs.add(bounds.size);
+            }
+          },
+          appFocusedProvider: () async => focused,
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+      expect(find.byType(OverlayQuickSettingsMenu), findsOneWidget);
+
+      // 第一轮轮询观察到"本窗是前台窗口"→ 武装失焦判定。
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.byType(OverlayQuickSettingsMenu), findsOneWidget);
+
+      // 用户点了别的软件：本窗不再是前台窗口 → 菜单自动收起。
+      focused = false;
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(OverlayQuickSettingsMenu), findsNothing);
+      expect(
+        sizeLogs.last,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+      expect(currentPos, const Offset(100, 500));
+    });
+
+    testWidgets('窗口从未获得前台焦点时不被误关，鼠标离开窗口超时后兜底收起', (tester) async {
+      Offset currentPos = const Offset(100, 500);
+
+      final gesture = await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+          windowPositionGetter: () async => currentPos,
+          windowBoundsSetter: (bounds) async {
+            currentPos = bounds.topLeft;
+          },
+          // 恒为 false：悬浮窗在不抢焦点的环境下 isFocused 永远不成立。
+          appFocusedProvider: () async => false,
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      // 多轮轮询后菜单仍在（没有被误判为"已失焦"而立刻关掉）。
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.byType(OverlayQuickSettingsMenu), findsOneWidget);
+
+      // 鼠标移出整个窗口：兜底计时器 800ms 后收起。
+      await gesture.moveTo(const Offset(1500, 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(OverlayQuickSettingsMenu), findsNothing);
     });
   });
 

@@ -103,9 +103,11 @@ void main() {
     ) async {
       await pumpSettingsPage(tester);
 
-      expect(find.text('居中对齐'), findsOneWidget);
+      // 四种对齐：居中/左/右 = 双行两行同侧；左右分离 = 上行居左、下行居右。
+      expect(find.text('居中'), findsOneWidget);
       expect(find.text('左对齐'), findsOneWidget);
       expect(find.text('右对齐'), findsOneWidget);
+      expect(find.text('左右分离'), findsOneWidget);
 
       // Tap left align
       await tester.tap(find.text('左对齐'));
@@ -118,9 +120,17 @@ void main() {
       expect(player.desktopLyricsSettings.alignment, 'right');
 
       // Tap center align
-      await tester.tap(find.text('居中对齐'));
+      await tester.tap(find.text('居中'));
       await tester.pumpAndSettle();
       expect(player.desktopLyricsSettings.alignment, 'center');
+
+      // Tap split（左右分离）
+      await tester.tap(find.text('左右分离'));
+      await tester.pumpAndSettle();
+      expect(
+        player.desktopLyricsSettings.alignment,
+        DesktopLyricsAlignment.split,
+      );
     });
 
     testWidgets('renders text opacity slider and updates textOpacity', (
@@ -212,7 +222,11 @@ void main() {
     ) async {
       await pumpSettingsPage(tester);
 
-      expect(find.text('居中对齐'), findsOneWidget);
+      // 默认对齐为「左右分离」(split)
+      final alignmentSelector = tester.widget<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      );
+      expect(alignmentSelector.selected, {DesktopLyricsAlignment.split});
 
       // Externally update player settings
       await player.updateDesktopLyricsSettings(
@@ -225,6 +239,10 @@ void main() {
 
       // Should reflect in preview with dual lines
       expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
+      final updatedSelector = tester.widget<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      );
+      expect(updatedSelector.selected, {'right'});
     });
 
     testWidgets(

@@ -78,9 +78,22 @@ class _DesktopLyricsSettingsPageState
               title: '对齐方式',
               selected: _settings.alignment,
               segments: const [
-                ButtonSegment(value: 'left', label: Text('左对齐')),
-                ButtonSegment(value: 'center', label: Text('居中对齐')),
-                ButtonSegment(value: 'right', label: Text('右对齐')),
+                ButtonSegment(
+                  value: DesktopLyricsAlignment.center,
+                  label: Text('居中'),
+                ),
+                ButtonSegment(
+                  value: DesktopLyricsAlignment.left,
+                  label: Text('左对齐'),
+                ),
+                ButtonSegment(
+                  value: DesktopLyricsAlignment.right,
+                  label: Text('右对齐'),
+                ),
+                ButtonSegment(
+                  value: DesktopLyricsAlignment.split,
+                  label: Text('左右分离'),
+                ),
               ],
               onChanged: (v) => _update((s) => s.copyWith(alignment: v)),
             ),
@@ -240,7 +253,9 @@ class _DesktopLyricsSettingsPageState
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '桌面歌词窗口支持自由拖拽缩放与锁定穿透。悬浮工具栏支持快捷调节播放和进入设置。',
+              '桌面歌词窗口支持自由拖拽缩放与锁定穿透，悬浮工具栏可快捷调节播放并进入设置。'
+              '双行显示时高亮会在上下两行交替：正在唱的那句始终留在原地，'
+              '另一行换成下一句；对齐可选两行同侧（居中/左/右）或左右分离（上行居左、下行居右）。',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     height: 1.4,
@@ -637,14 +652,15 @@ class _LyricsPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final playedColor = Color(settings.playedTextColor);
     final unplayedColor = Color(settings.unplayedTextColor);
+    final isSplit = DesktopLyricsAlignment.isSplit(settings.alignment);
     final textAlign = switch (settings.alignment) {
-      'left' => TextAlign.left,
-      'right' => TextAlign.right,
+      DesktopLyricsAlignment.left => TextAlign.left,
+      DesktopLyricsAlignment.right => TextAlign.right,
       _ => TextAlign.center,
     };
     final lineAlignment = switch (settings.alignment) {
-      'left' => Alignment.centerLeft,
-      'right' => Alignment.centerRight,
+      DesktopLyricsAlignment.left => Alignment.centerLeft,
+      DesktopLyricsAlignment.right => Alignment.centerRight,
       _ => Alignment.center,
     };
 
@@ -691,38 +707,51 @@ class _LyricsPreviewCard extends StatelessWidget {
               final effectiveDualWidth =
                   dualLineWidth > 0 ? dualLineWidth : availableWidth;
               final dualFontSize = settings.fontSize * 0.82;
+
+              // 与悬浮窗双行渲染同一套规则：正在唱的那行带逐字进度，
+              // 另一行是未播放色的下一句；横向锚点按 alignment 分流。
+              Widget previewLine({
+                required String text,
+                required bool active,
+                required Alignment align,
+                required TextAlign align2,
+              }) {
+                return Align(
+                  alignment: align,
+                  child: LyricsKaraokeLine(
+                    text: text,
+                    fontSize: dualFontSize,
+                    playedColor: playedColor,
+                    unplayedColor: active
+                        ? unplayedColor
+                        : unplayedColor.withValues(alpha: 0.65),
+                    progress: active ? 0.45 : 0.0,
+                    availableWidth: effectiveDualWidth,
+                    alignment: align2,
+                    textOpacity: active
+                        ? settings.textOpacity
+                        : settings.textOpacity * 0.65,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              }
+
               body = Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: LyricsKaraokeLine(
-                      text: '时音 听我想听',
-                      fontSize: dualFontSize,
-                      playedColor: playedColor,
-                      unplayedColor: unplayedColor,
-                      progress: 0.45,
-                      availableWidth: effectiveDualWidth,
-                      alignment: TextAlign.left,
-                      textOpacity: settings.textOpacity,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  previewLine(
+                    text: '时音 听我想听',
+                    active: true,
+                    align: isSplit ? Alignment.centerLeft : lineAlignment,
+                    align2: isSplit ? TextAlign.left : textAlign,
                   ),
                   const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: LyricsKaraokeLine(
-                      text: '让音乐更自由',
-                      fontSize: dualFontSize,
-                      playedColor: playedColor,
-                      unplayedColor: unplayedColor.withValues(alpha: 0.65),
-                      progress: 0.0,
-                      availableWidth: effectiveDualWidth,
-                      alignment: TextAlign.right,
-                      textOpacity: settings.textOpacity * 0.65,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  previewLine(
+                    text: '让音乐更自由',
+                    active: false,
+                    align: isSplit ? Alignment.centerRight : lineAlignment,
+                    align2: isSplit ? TextAlign.right : textAlign,
                   ),
                 ],
               );

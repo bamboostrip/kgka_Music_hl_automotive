@@ -91,6 +91,7 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
   var next = '';
   var isPlaying = false;
   var progress = 0.0;
+  var activeOnBottom = false;
   if (args.length > 2 && args[2].isNotEmpty) {
     try {
       // 包 0.2.1 的 WindowController 无 arguments getter，
@@ -104,6 +105,7 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
       next = initialArgs['next'] as String? ?? '';
       isPlaying = initialArgs['isPlaying'] as bool? ?? false;
       progress = (initialArgs['progress'] as num?)?.toDouble() ?? 0.0;
+      activeOnBottom = initialArgs['activeOnBottom'] as bool? ?? false;
     } catch (e) {
       debugPrint('[桌面歌词悬浮窗] 解析初始参数失败，使用默认值: $e');
     }
@@ -201,6 +203,7 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
     next: next,
     isPlaying: isPlaying,
     progress: progress,
+    activeOnBottom: activeOnBottom,
   );
 
   // 尽早注册消息处理，缩短主窗早期消息的丢失窗口期
@@ -215,6 +218,10 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
               ..current = message['current'] as String? ?? model.current
               ..next = message['next'] as String? ?? model.next
               ..isPlaying = message['isPlaying'] as bool? ?? model.isPlaying
+              ..activeOnBottom =
+                  message['activeOnBottom'] as bool? ?? false
+              // 换句即重置逐字进度：新句从 0 开始（进度由随后的
+              // updateProgress 帧驱动）。
               ..progress = 0.0;
           }
         case 'updateProgress':
@@ -386,23 +393,29 @@ class _OverlayModel extends ChangeNotifier {
     required String next,
     required bool isPlaying,
     double progress = 0.0,
+    bool activeOnBottom = false,
   }) : _settings = settings,
        _current = current,
        _next = next,
        _isPlaying = isPlaying,
-       _progress = progress;
+       _progress = progress,
+       _activeOnBottom = activeOnBottom;
 
   DesktopLyricsSettings _settings;
   String _current;
   String _next;
   bool _isPlaying;
   double _progress;
+  bool _activeOnBottom;
 
   DesktopLyricsSettings get settings => _settings;
   String get current => _current;
   String get next => _next;
   bool get isPlaying => _isPlaying;
   double get progress => _progress;
+
+  /// 双行交替高亮：当前句是否落在下行（主窗按歌词行下标奇偶下发）。
+  bool get activeOnBottom => _activeOnBottom;
 
   set settings(DesktopLyricsSettings value) {
     if (_settings == value) return;
@@ -431,6 +444,12 @@ class _OverlayModel extends ChangeNotifier {
   set progress(double value) {
     if (_progress == value) return;
     _progress = value;
+    notifyListeners();
+  }
+
+  set activeOnBottom(bool value) {
+    if (_activeOnBottom == value) return;
+    _activeOnBottom = value;
     notifyListeners();
   }
 }
@@ -552,6 +571,7 @@ class _LyricsOverlayHomeState extends State<_LyricsOverlayHome>
           next: model.next,
           isPlaying: model.isPlaying,
           progress: model.progress,
+          activeOnBottom: model.activeOnBottom,
           onControlPlayback: (action) => unawaited(_controlPlayback(action)),
           onToggleLock: (locked) => unawaited(_setLocked(locked)),
           onClose: () => unawaited(closeLyricsOverlayWindow()),
@@ -577,6 +597,7 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
     required this.next,
     required this.isPlaying,
     this.progress = 0.0,
+    this.activeOnBottom = false,
     required this.onControlPlayback,
     required this.onToggleLock,
     required this.onClose,
@@ -586,8 +607,8 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
     this.windowPositionProvider,
     this.ignoreMouseEventsSetter,
     this.windowPositionGetter,
-    this.windowPositionSetter,
-    this.windowSizeSetter,
+    this.windowBoundsSetter,
+    this.appFocusedProvider,
   });
 
   final DesktopLyricsSettings settings;
@@ -595,6 +616,9 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   final String next;
   final bool isPlaying;
   final double progress;
+
+  /// 双行交替高亮：当前句是否落在下行（主窗按歌词行下标奇偶下发）。
+  final bool activeOnBottom;
   final ValueChanged<String> onControlPlayback;
 
   /// 参数为目标锁定状态（true=锁定）。
@@ -606,8 +630,8 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   final Future<Offset?> Function()? windowPositionProvider;
   final Future<void> Function(bool ignore)? ignoreMouseEventsSetter;
   final Future<Offset> Function()? windowPositionGetter;
-  final Future<void> Function(Offset offset)? windowPositionSetter;
-  final Future<void> Function(Size size)? windowSizeSetter;
+  final Future<void> Function(Rect bounds)? windowBoundsSetter;
+  final Future<bool> Function()? appFocusedProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -617,6 +641,7 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
             current: current,
             next: next,
             progress: progress,
+            activeOnBottom: activeOnBottom,
             onToggleLock: onToggleLock,
             cursorPositionProvider: cursorPositionProvider,
             windowPositionProvider: windowPositionProvider,
@@ -628,14 +653,15 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
             next: next,
             isPlaying: isPlaying,
             progress: progress,
+            activeOnBottom: activeOnBottom,
             onControlPlayback: onControlPlayback,
             onToggleLock: onToggleLock,
             onClose: onClose,
             onUpdateSettings: onUpdateSettings,
             onOpenDetailedSettings: onOpenDetailedSettings,
             windowPositionGetter: windowPositionGetter,
-            windowPositionSetter: windowPositionSetter,
-            windowSizeSetter: windowSizeSetter,
+            windowBoundsSetter: windowBoundsSetter,
+            appFocusedProvider: appFocusedProvider,
           );
     return Material(
       type: MaterialType.transparency,
@@ -653,6 +679,7 @@ class LockedLyricsBody extends StatefulWidget {
     required this.current,
     required this.next,
     this.progress = 0.0,
+    this.activeOnBottom = false,
     required this.onToggleLock,
     this.cursorPositionProvider,
     this.windowPositionProvider,
@@ -663,6 +690,7 @@ class LockedLyricsBody extends StatefulWidget {
   final String current;
   final String next;
   final double progress;
+  final bool activeOnBottom;
   final ValueChanged<bool> onToggleLock;
   final Future<Offset?> Function()? cursorPositionProvider;
   final Future<Offset?> Function()? windowPositionProvider;
@@ -783,6 +811,7 @@ class _LockedLyricsBodyState extends State<LockedLyricsBody> {
           current: widget.current,
           next: widget.next,
           progress: widget.progress,
+          activeOnBottom: widget.activeOnBottom,
         ),
         Positioned(
           top: 2.0,
@@ -856,14 +885,15 @@ class _HoverableOverlay extends StatefulWidget {
     required this.next,
     required this.isPlaying,
     this.progress = 0.0,
+    this.activeOnBottom = false,
     required this.onControlPlayback,
     required this.onToggleLock,
     required this.onClose,
     this.onUpdateSettings,
     this.onOpenDetailedSettings,
     this.windowPositionGetter,
-    this.windowPositionSetter,
-    this.windowSizeSetter,
+    this.windowBoundsSetter,
+    this.appFocusedProvider,
   });
 
   final DesktopLyricsSettings settings;
@@ -871,14 +901,20 @@ class _HoverableOverlay extends StatefulWidget {
   final String next;
   final bool isPlaying;
   final double progress;
+  final bool activeOnBottom;
   final ValueChanged<String> onControlPlayback;
   final ValueChanged<bool> onToggleLock;
   final VoidCallback onClose;
   final ValueChanged<DesktopLyricsSettings>? onUpdateSettings;
   final VoidCallback? onOpenDetailedSettings;
   final Future<Offset> Function()? windowPositionGetter;
-  final Future<void> Function(Offset offset)? windowPositionSetter;
-  final Future<void> Function(Size size)? windowSizeSetter;
+
+  /// 一次性修改窗口位置+尺寸。必须原子（底层 setBounds → 单次 SetWindowPos）：
+  /// 拆成"先移动再改高"会多出一个中间帧，卡片按新位置+旧高度渲染 → 肉眼可见闪跳。
+  final Future<void> Function(Rect bounds)? windowBoundsSetter;
+
+  /// 本窗口是否为系统前台窗口（默认 windowManager.isFocused()）。
+  final Future<bool> Function()? appFocusedProvider;
 
   @override
   State<_HoverableOverlay> createState() => _HoverableOverlayState();
@@ -891,16 +927,21 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
   double? _originalWindowTop;
   bool _isTogglingSettingsMenu = false;
 
+  /// 菜单展开期间是否至少观察到一次"本窗是前台窗口"。
+  /// 悬浮窗在不抢焦点的环境下 isFocused 恒为 false，不能据此直接关菜单，
+  /// 否则菜单一开就被立刻收起。
+  bool _menuSawFocus = false;
+  Timer? _menuFocusTimer;
+  Timer? _mouseOutCloseTimer;
+
   Future<Offset> Function()? windowPositionGetter;
-  Future<void> Function(Offset offset)? windowPositionSetter;
-  Future<void> Function(Size size)? windowSizeSetter;
+  Future<void> Function(Rect bounds)? windowBoundsSetter;
 
   @override
   void initState() {
     super.initState();
     windowPositionGetter = widget.windowPositionGetter;
-    windowPositionSetter = widget.windowPositionSetter;
-    windowSizeSetter = widget.windowSizeSetter;
+    windowBoundsSetter = widget.windowBoundsSetter;
   }
 
   @override
@@ -909,11 +950,8 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
     if (widget.windowPositionGetter != null) {
       windowPositionGetter = widget.windowPositionGetter;
     }
-    if (widget.windowPositionSetter != null) {
-      windowPositionSetter = widget.windowPositionSetter;
-    }
-    if (widget.windowSizeSetter != null) {
-      windowSizeSetter = widget.windowSizeSetter;
+    if (widget.windowBoundsSetter != null) {
+      windowBoundsSetter = widget.windowBoundsSetter;
     }
   }
 
@@ -930,29 +968,18 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
     }
   }
 
-  Future<void> _setWindowPosition(Offset offset) async {
+  /// 原子更新窗口位置与尺寸（底层 setBounds：单次 SetWindowPos 同时带
+  /// SWP 移动+尺寸，不存在"已移动但未改高"的中间态）。
+  Future<void> _setWindowBounds(Rect bounds) async {
     try {
-      final setter = windowPositionSetter ?? widget.windowPositionSetter;
+      final setter = windowBoundsSetter ?? widget.windowBoundsSetter;
       if (setter != null) {
-        await setter(offset);
+        await setter(bounds);
       } else {
-        await windowManager.setPosition(offset);
+        await windowManager.setBounds(bounds);
       }
     } catch (e) {
-      debugPrint('[桌面歌词悬浮窗] 调整窗口位置失败: $e');
-    }
-  }
-
-  Future<void> _setWindowSize(Size size) async {
-    try {
-      final setter = windowSizeSetter ?? widget.windowSizeSetter;
-      if (setter != null) {
-        await setter(size);
-      } else {
-        await windowManager.setSize(size);
-      }
-    } catch (e) {
-      debugPrint('[桌面歌词悬浮窗] 调整菜单窗口尺寸失败: $e');
+      debugPrint('[桌面歌词悬浮窗] 调整窗口几何失败: $e');
     }
   }
 
@@ -963,40 +990,60 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
       if (visible) {
         final pos = await _getWindowPosition();
         _originalWindowTop = pos.dy;
-
-        if (pos.dy >= 180.0) {
-          _menuPopsUpward = true;
-          final newTop = pos.dy - 172.0;
-          await _setWindowPosition(Offset(pos.dx, newTop));
-          await _setWindowSize(
-            const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+        final popsUpward = pos.dy >=
+            WindowsDesktopLyricsBridge.overlayMenuUpwardMinTop;
+        if (popsUpward) {
+          // 向上弹出：先切"贴窗口底"锚点。此时窗口还是歌词带高度，
+          // 卡片贴底 == 原位，视觉零变化；再一次性平移+加高窗口，
+          // 原生 resize 落地后卡片自然停在原屏幕位置（不闪、不跳）。
+          if (!mounted) return;
+          setState(() {
+            _menuPopsUpward = true;
+            _showSettingsMenu = true;
+          });
+          await WidgetsBinding.instance.endOfFrame;
+          await _setWindowBounds(
+            Rect.fromLTWH(
+              pos.dx,
+              pos.dy - WindowsDesktopLyricsBridge.overlayMenuPanelHeight,
+              WindowsDesktopLyricsBridge.overlayWidth,
+              WindowsDesktopLyricsBridge.overlayExpandedHeight,
+            ),
           );
         } else {
-          _menuPopsUpward = false;
-          await _setWindowSize(
-            const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+          // 向下弹出：卡片锚点不变，先把窗口加高再显示菜单，
+          // 否则菜单会在旧高度里露出一截被裁掉的边。
+          await _setWindowBounds(
+            Rect.fromLTWH(
+              pos.dx,
+              pos.dy,
+              WindowsDesktopLyricsBridge.overlayWidth,
+              WindowsDesktopLyricsBridge.overlayExpandedHeight,
+            ),
           );
+          if (!mounted) return;
+          setState(() {
+            _menuPopsUpward = false;
+            _showSettingsMenu = true;
+          });
         }
-        if (!mounted) return;
-        setState(() => _showSettingsMenu = true);
+        _startMenuDismissWatch();
       } else {
-        if (_menuPopsUpward && _originalWindowTop != null) {
-          await _setWindowSize(
-            const Size(
-              WindowsDesktopLyricsBridge.overlayWidth,
-              WindowsDesktopLyricsBridge.overlayHeight,
-            ),
-          );
-          final pos = await _getWindowPosition();
-          await _setWindowPosition(Offset(pos.dx, _originalWindowTop!));
-        } else {
-          await _setWindowSize(
-            const Size(
-              WindowsDesktopLyricsBridge.overlayWidth,
-              WindowsDesktopLyricsBridge.overlayHeight,
-            ),
-          );
-        }
+        final restoreTop = _originalWindowTop;
+        final popsUpward = _menuPopsUpward;
+        _stopMenuDismissWatch();
+        // 收起：先按原锚点还原几何（向上弹出时卡片仍贴底 → 视觉不跳），
+        // 再翻状态位把锚点切回"贴顶"，此时窗口已回到歌词带高度，
+        // 两种锚点渲染完全一致。
+        final pos = await _getWindowPosition();
+        await _setWindowBounds(
+          Rect.fromLTWH(
+            pos.dx,
+            popsUpward && restoreTop != null ? restoreTop : pos.dy,
+            WindowsDesktopLyricsBridge.overlayWidth,
+            WindowsDesktopLyricsBridge.overlayHeight,
+          ),
+        );
         _menuPopsUpward = false;
         _originalWindowTop = null;
         if (!mounted) return;
@@ -1007,22 +1054,93 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
     }
   }
 
+  /// 菜单展开期间的关闭看门狗：
+  /// 1) 轮询本窗是否仍是系统前台窗口 —— 用户点了别的软件即刻收起；
+  /// 2) 鼠标移出整个窗口并停留 800ms —— 覆盖"窗口从不被激活、isFocused
+  ///    恒为 false"的环境（此时第 1 条永远无法判定）。
+  void _startMenuDismissWatch() {
+    _menuSawFocus = false;
+    _menuFocusTimer?.cancel();
+    _menuFocusTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      unawaited(_checkMenuFocus());
+    });
+  }
+
+  void _stopMenuDismissWatch() {
+    _menuFocusTimer?.cancel();
+    _menuFocusTimer = null;
+    _mouseOutCloseTimer?.cancel();
+    _mouseOutCloseTimer = null;
+    _menuSawFocus = false;
+  }
+
+  Future<void> _checkMenuFocus() async {
+    if (!_showSettingsMenu) {
+      _stopMenuDismissWatch();
+      return;
+    }
+    final focused = await _isAppFocused();
+    if (!mounted || !_showSettingsMenu) return;
+    if (focused) {
+      _menuSawFocus = true;
+      return;
+    }
+    if (_menuSawFocus) {
+      unawaited(_setSettingsMenuVisible(false));
+    }
+  }
+
+  Future<bool> _isAppFocused() async {
+    try {
+      final provider = widget.appFocusedProvider;
+      if (provider != null) return await provider();
+      return await windowManager.isFocused();
+    } catch (e) {
+      // 查询失败（插件未就绪等）：保守认为仍在前台，绝不误关菜单。
+      debugPrint('[桌面歌词悬浮窗] 前台状态查询失败: $e');
+      return true;
+    }
+  }
+
+  void _handleMouseEnter() {
+    _mouseOutCloseTimer?.cancel();
+    _mouseOutCloseTimer = null;
+    if (!_hovering) {
+      setState(() => _hovering = true);
+    }
+  }
+
+  void _handleMouseExit() {
+    if (_hovering) {
+      setState(() => _hovering = false);
+    }
+    if (!_showSettingsMenu) return;
+    _mouseOutCloseTimer?.cancel();
+    _mouseOutCloseTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted || _hovering || !_showSettingsMenu) return;
+      unawaited(_setSettingsMenuVisible(false));
+    });
+  }
+
   @override
   void dispose() {
+    _stopMenuDismissWatch();
     if (_showSettingsMenu) {
-      _setWindowSize(
-        const Size(
-          WindowsDesktopLyricsBridge.overlayWidth,
-          WindowsDesktopLyricsBridge.overlayHeight,
-        ),
-      );
-      if (_menuPopsUpward && _originalWindowTop != null) {
-        final originalTop = _originalWindowTop!;
-        () async {
-          final pos = await _getWindowPosition();
-          await _setWindowPosition(Offset(pos.dx, originalTop));
-        }();
-      }
+      // 防御性还原：菜单展开时窗口是加高态，直接销毁会留下一个
+      // 透明的加高置顶窗继续吃掉下方点击。
+      final restoreTop = _originalWindowTop;
+      final popsUpward = _menuPopsUpward;
+      () async {
+        final pos = await _getWindowPosition();
+        await _setWindowBounds(
+          Rect.fromLTWH(
+            pos.dx,
+            popsUpward && restoreTop != null ? restoreTop : pos.dy,
+            WindowsDesktopLyricsBridge.overlayWidth,
+            WindowsDesktopLyricsBridge.overlayHeight,
+          ),
+        );
+      }();
     }
     super.dispose();
   }
@@ -1064,15 +1182,30 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
         : null;
 
     final showToolbar = _hovering || _showSettingsMenu;
-    final totalHeight = _showSettingsMenu ? 260.0 : WindowsDesktopLyricsBridge.overlayHeight;
+
+    // 容器高度 == 真实窗口高度（原生 resize 后 MediaQuery 立即跟随）。
+    // 这是"展开/收起不闪"的关键：菜单展开时窗口被原生加高，卡片贴底
+    // 就能跟着涨高，不会出现"卡片换了锚点、窗口却还没长高"的错位帧
+    // （历史实现用 `_showSettingsMenu ? 260 : 88` 推导容器高度，配合
+    // "先移动+改尺寸、最后才 setState"，中间帧会把整条歌词抛上去再落下）。
+    final double boxHeight =
+        MediaQuery.sizeOf(context).height.clamp(
+          0.0,
+          double.infinity,
+        ).toDouble();
+    final double cardTop = _menuPopsUpward
+        ? (boxHeight - WindowsDesktopLyricsBridge.overlayHeight)
+            .clamp(0.0, double.infinity)
+            .toDouble()
+        : 0.0;
 
     return SizedBox(
       width: WindowsDesktopLyricsBridge.overlayWidth,
-      height: totalHeight,
+      height: boxHeight,
       child: MouseRegion(
         hitTestBehavior: HitTestBehavior.opaque,
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
+        onEnter: (_) => _handleMouseEnter(),
+        onExit: (_) => _handleMouseExit(),
         child: Material(
           type: MaterialType.transparency,
           child: Stack(
@@ -1103,6 +1236,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                           current: widget.current,
                           next: widget.next,
                           progress: widget.progress,
+                          activeOnBottom: widget.activeOnBottom,
                         ),
                       ),
                     ),
@@ -1117,7 +1251,8 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                   ),
                 ),
               Positioned(
-                top: _menuPopsUpward ? 174 : 2,
+                // 工具栏恒位于卡片顶部的专属带内（卡片顶部 + 2）。
+                top: cardTop + 2,
                 right: 8,
                 child: AnimatedOpacity(
                   opacity: showToolbar ? 1.0 : 0.0,
@@ -1131,8 +1266,15 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
               ),
               if (_showSettingsMenu)
                 Positioned(
-                  top: _menuPopsUpward ? null : 38,
-                  bottom: _menuPopsUpward ? 92 : null,
+                  // 向下弹出：菜单挂在工具栏下方（歌词带上沿 + 2）；
+                  // 向上弹出：菜单底边距卡片顶边 4px —— 卡片贴窗口底时
+                  // 该偏移恒等于 overlayHeight + 4，与窗口实际高度无关。
+                  top: _menuPopsUpward
+                      ? null
+                      : WindowsDesktopLyricsBridge.lyricsTopInset + 2,
+                  bottom: _menuPopsUpward
+                      ? WindowsDesktopLyricsBridge.overlayHeight + 4
+                      : null,
                   right: 8,
                   child: _OverlayQuickSettingsMenu(
                     settings: settings,
@@ -1217,23 +1359,49 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
   }
 }
 
-/// 歌词主体（锁定/未锁定两套子树共用）：默认单行居中或 QQ 音乐经典双行交错排版。
+/// 歌词主体（锁定/未锁定两套子树共用）：单行居中或双行交替（乒乓）高亮排版。
 ///
-/// 布局契约：紧约束 SizedBox(780x88) + 水平 24 Padding + FittedBox(scaleDown)
+/// 布局契约：紧约束 SizedBox(780x124) + 顶部 [WindowsDesktopLyricsBridge
+/// .lyricsTopInset] 留给工具栏/解锁胶囊 + 水平 24 Padding + FittedBox(scaleDown)
 /// + 固定宽度（悬浮窗宽 - 48）的容器。
-/// 紧约束保证内容超过 88px 窗高（系统字体缩放/48sp 大字号）时整体等比
+/// 顶部留白是"按钮不再压住歌词"的关键：历史 88px 单带布局下 30px 按钮
+/// （y2~36）与双行歌词渲染区（约 y20~74）恒重叠约 16px，调位置无解。
+/// 紧约束保证内容超过歌词带高度（系统字体缩放/48sp 大字号）时整体等比
 /// 缩小，而不是 RenderFlex 垂直溢出（溢出黄黑条纹会常驻窗口底部）。
+///
+/// 双行排布（[activeOnBottom] 由主窗按"当前句下标奇偶"下发）：
+/// - 正在唱的那行带动画进度（已播放色逐字变色 + 跑马灯），另一行是下一句
+///   （未播放色降透明度、progress 0）；
+/// - 高亮在上下两行之间**交替**：唱到下行时上行换成下一句、唱到上行时下行
+///   换成下一句 —— 正在唱的那句文字永远留在原地，消除历史实现里
+///   "每句都要从下行搬到上行"的跳行观感；
+/// - 横向锚点由 alignment 决定：split = 上行居左/下行居右（对角交错），
+///   center/left/right = 上下两行同侧（此时交替完全没有位移）。
 Widget buildOverlayLyricsBody({
   required DesktopLyricsSettings settings,
   required String current,
   required String next,
   double progress = 0.0,
+  bool activeOnBottom = false,
 }) {
   final playedColor = Color(settings.playedTextColor);
   final unplayedColor = Color(settings.unplayedTextColor);
-  final textAlign = switch (settings.alignment) {
-    'left' => TextAlign.left,
-    'right' => TextAlign.right,
+  final isSplit = DesktopLyricsAlignment.isSplit(settings.alignment);
+  // 单行下 split 无"上下两行"可分，渲染等价居中。
+  final singleLineAlign = switch (settings.alignment) {
+    DesktopLyricsAlignment.left => TextAlign.left,
+    DesktopLyricsAlignment.right => TextAlign.right,
+    _ => TextAlign.center,
+  };
+  // 双行同侧对齐时的共享锚点（split 走各自的对角锚点，不取此值）。
+  final sharedAlign = switch (settings.alignment) {
+    DesktopLyricsAlignment.left => Alignment.centerLeft,
+    DesktopLyricsAlignment.right => Alignment.centerRight,
+    _ => Alignment.center,
+  };
+  final sharedTextAlign = switch (settings.alignment) {
+    DesktopLyricsAlignment.left => TextAlign.left,
+    DesktopLyricsAlignment.right => TextAlign.right,
     _ => TextAlign.center,
   };
 
@@ -1243,7 +1411,7 @@ Widget buildOverlayLyricsBody({
 
   final Widget body;
   if (settings.singleLine) {
-    // 默认单行模式：垂直居中展示单行逐字变色/跑马灯歌词
+    // 单行模式：歌词带内垂直居中展示单行逐字变色/跑马灯歌词
     body = LyricsKaraokeLine(
       text: current.isEmpty ? '暂无歌词' : current,
       fontSize: settings.fontSize,
@@ -1251,47 +1419,58 @@ Widget buildOverlayLyricsBody({
       unplayedColor: unplayedColor,
       progress: progress,
       availableWidth: contentWidth,
-      alignment: textAlign,
+      alignment: singleLineAlign,
       textOpacity: settings.textOpacity,
       fontWeight: FontWeight.bold,
     );
   } else {
-    // QQ 音乐经典双行交错排版：
-    // 上下两行统一字号（settings.fontSize * 0.82）与 bold 字重；
-    // 上行居左交错（当前句，变色+跑马灯），下行居右交错（下一句，未播天蓝+跑马灯）。
+    // 双行交替排版：上下两行统一字号（settings.fontSize * 0.82）与 bold 字重，
+    // 仅用"已播放金黄高亮 / 未播放天蓝降透明度"区分正在唱与下一句。
     final dualLineWidth = contentWidth - 60.0;
     final dualFontSize = settings.fontSize * 0.82;
+    final activeText = current.isEmpty ? '暂无歌词' : current;
+
+    Widget dualLine({
+      required String text,
+      required bool active,
+      required Alignment align,
+      required TextAlign textAlign,
+    }) {
+      return Align(
+        alignment: align,
+        child: LyricsKaraokeLine(
+          text: text,
+          fontSize: dualFontSize,
+          playedColor: playedColor,
+          unplayedColor: active
+              ? unplayedColor
+              : unplayedColor.withValues(alpha: 0.65),
+          progress: active ? progress : 0.0,
+          availableWidth: dualLineWidth,
+          alignment: textAlign,
+          textOpacity: active
+              ? settings.textOpacity
+              : settings.textOpacity * 0.65,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
+
     body = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: LyricsKaraokeLine(
-            text: current.isEmpty ? '暂无歌词' : current,
-            fontSize: dualFontSize,
-            playedColor: playedColor,
-            unplayedColor: unplayedColor,
-            progress: progress,
-            availableWidth: dualLineWidth,
-            alignment: TextAlign.left,
-            textOpacity: settings.textOpacity,
-            fontWeight: FontWeight.bold,
-          ),
+        dualLine(
+          text: activeOnBottom ? next : activeText,
+          active: !activeOnBottom,
+          align: isSplit ? Alignment.centerLeft : sharedAlign,
+          textAlign: isSplit ? TextAlign.left : sharedTextAlign,
         ),
         const SizedBox(height: 4),
-        Align(
-          alignment: Alignment.centerRight,
-          child: LyricsKaraokeLine(
-            text: next.isEmpty ? '' : next,
-            fontSize: dualFontSize,
-            playedColor: playedColor,
-            unplayedColor: unplayedColor,
-            progress: 0.0,
-            availableWidth: dualLineWidth,
-            alignment: TextAlign.right,
-            textOpacity: settings.textOpacity,
-            fontWeight: FontWeight.bold,
-          ),
+        dualLine(
+          text: activeOnBottom ? activeText : next,
+          active: activeOnBottom,
+          align: isSplit ? Alignment.centerRight : sharedAlign,
+          textAlign: isSplit ? TextAlign.right : sharedTextAlign,
         ),
       ],
     );
@@ -1301,8 +1480,10 @@ Widget buildOverlayLyricsBody({
     width: WindowsDesktopLyricsBridge.overlayWidth,
     height: WindowsDesktopLyricsBridge.overlayHeight,
     child: Padding(
+      // 顶部 lyricsTopInset 是工具栏/解锁胶囊的专属带（锁定态为负空间）：
+      // 歌词只在下方歌词带内居中，与按钮彻底脱开。
       padding: const EdgeInsets.only(
-        top: 8.0,
+        top: WindowsDesktopLyricsBridge.lyricsTopInset,
         bottom: 2.0,
         left: horizontalPadding,
         right: horizontalPadding,

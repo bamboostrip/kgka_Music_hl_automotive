@@ -5,7 +5,7 @@
 // Android 路径不经此类。
 //
 // 消息协议（与悬浮窗侧约定一致）：
-// - main -> sub：updateLyric {current, next, isPlaying} /
+// - main -> sub：updateLyric {current, next, isPlaying, activeOnBottom} /
 //   updateSettings {DesktopLyricsSettings.toMap()} /
 //   updateProgress {progress, isPlaying}
 //   （不向子窗发 close：主窗侧关闭直接走原生 window.close）。
@@ -59,13 +59,40 @@ class WindowsDesktopLyricsBridge {
   final VoidCallback? _onOpenSettings;
 
   /// 悬浮窗固定尺寸（与悬浮窗侧约定一致；主窗/子窗共用的唯一定义处）。
+  ///
+  /// 窗口纵向分两带：[0, lyricsTopInset] 是工具栏/解锁胶囊的**专属带**，
+  /// [lyricsTopInset, overlayHeight] 是歌词带（== 历史 88px 窗口的高度）。
+  /// 历史版本只有 88px 单带，30px 按钮（top:2 → y2~36）与双行歌词实际渲染区
+  /// （约 y20~74）重叠约 16px，无论怎么调按钮位置都躲不开——加高 36px 让两者
+  /// 各占一带，是"按钮不再压歌词"的唯一解（不动高度就只能压缩歌词带，
+  /// 双行大字号会被 FittedBox 等比缩小）。
+  /// 默认停靠位置公式（[_initialFrame]）同步前移 lyricsTopInset，
+  /// 歌词视觉位置与历史版本完全一致。
   static const double overlayWidth = 780;
-  static const double overlayHeight = 88;
+  static const double lyricsTopInset = 36;
+  static const double overlayLyricsHeight = 88;
+  static const double overlayHeight = lyricsTopInset + overlayLyricsHeight;
+
+  /// 快捷设置菜单面板高度：展开时窗口向上/向下扩展这么多（历史 172）。
+  static const double overlayMenuPanelHeight = 172;
+
+  /// 展开态窗口高度（歌词带 + 菜单面板）。
+  static const double overlayExpandedHeight =
+      overlayHeight + overlayMenuPanelHeight;
+
+  /// 向上弹出所需的最小上方空间（面板高度 + 8px 余量；历史 180）。
+  static const double overlayMenuUpwardMinTop = overlayMenuPanelHeight + 8;
 
   /// 悬浮窗拖动位置的持久化键（子窗 window_manager 逻辑坐标；
   /// 主窗侧钳制后回写，子窗启动时读取恢复）。
   static const String windowLeftPrefKey = 'desktop_lyrics.window.left';
   static const String windowTopPrefKey = 'desktop_lyrics.window.top';
+
+  /// 位置语义迁移标记：124 高度之前，窗口顶边 == 歌词带顶边；
+  /// 现在窗口顶边之上多了 [lyricsTopInset] 的工具栏带，存量位置必须
+  /// 一次性减去该偏移，否则升级后歌词整体下沉 36px。
+  static const String windowInsetMigratedPrefKey =
+      'desktop_lyrics.window.inset_migrated';
 
   /// 钳制时至少保留的可见像素（与主窗 kMinVisibleEdge 语义一致）。
   static const double _kMinVisibleEdge = 80;
@@ -87,6 +114,11 @@ class WindowsDesktopLyricsBridge {
   bool _isPlaying = false;
   double _progress = 0.0;
   bool _appForeground = true;
+
+  /// 双行交替高亮：当前句是否落在**下行**（= 歌词行下标为奇数）。
+  /// 子窗据此决定哪个字行带动画进度：正在唱的那一行文字不移动，
+  /// 只让另一行换成下一句（见 buildOverlayLyricsBody）。
+  bool _activeOnBottom = false;
 
   /// 悬浮窗是否可见（内部状态，不依赖平台查询）。
   bool get isVisible => _visible;
@@ -132,6 +164,7 @@ class WindowsDesktopLyricsBridge {
           'current': _current,
           'next': _next,
           'isPlaying': _isPlaying,
+          'activeOnBottom': _activeOnBottom,
           'title': title,
           'artist': artist,
         }),
@@ -184,9 +217,11 @@ class WindowsDesktopLyricsBridge {
   Future<void> updateLyrics({
     required String current,
     required String next,
+    required bool activeOnBottom,
   }) async {
     _current = current;
     _next = next;
+    _activeOnBottom = activeOnBottom;
     if (!_visible) return;
     await _pushLyric();
   }
@@ -240,6 +275,7 @@ class WindowsDesktopLyricsBridge {
         'current': _current,
         'next': _next,
         'isPlaying': _isPlaying,
+        'activeOnBottom': _activeOnBottom,
       });
     } on Exception catch (e) {
       // 最后防线：握手后的意外竞态（如窗口恰在销毁）。缓存待下次补发。
@@ -354,12 +390,22 @@ class WindowsDesktopLyricsBridge {
       final left = prefs.getDouble(windowLeftPrefKey);
       final top = prefs.getDouble(windowTopPrefKey);
       if (left != null && top != null) {
+        // 一次性语义迁移：88px 高时代窗口顶边 == 歌词带顶边；现在顶边之上
+        // 多了 [lyricsTopInset] 的工具栏带，存量值需减去该偏移，否则升级后
+        // 歌词整体下沉。必须先于 createWindow 落盘——子窗启动时直接读 prefs。
+        final insetMigrated =
+            prefs.getBool(windowInsetMigratedPrefKey) ?? false;
+        final restoredTop = insetMigrated ? top : top - lyricsTopInset;
+        if (!insetMigrated) {
+          await prefs.setBool(windowInsetMigratedPrefKey, true);
+          await prefs.setDouble(windowTopPrefKey, restoredTop);
+        }
         final clamped = clampOverlayOriginToVisibleAreas(
-          Offset(left, top),
+          Offset(left, restoredTop),
           visibleAreas,
           fallback: origin,
         );
-        if (clamped.dx != left || clamped.dy != top) {
+        if (clamped.dx != left || clamped.dy != restoredTop) {
           await prefs.setDouble(windowLeftPrefKey, clamped.dx);
           await prefs.setDouble(windowTopPrefKey, clamped.dy);
         }

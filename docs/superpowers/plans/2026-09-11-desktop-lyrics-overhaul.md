@@ -372,3 +372,72 @@ test/
 - [x] **Step 2: Run flutter test on all desktop & pages suites**
 - [x] **Step 3: Final verification and commit**
 
+---
+
+## Phase 3: 双行交替高亮、对齐可配与悬浮窗几何/交互修复（用户实机走查反馈）
+
+**背景（4 个实测问题）：**
+1. 双行模式下高亮恒在上行：每换一句，"正在唱的那句"都要从下行搬到上行，观感是"文字跳行"；
+2. 对齐方式只对单行生效（双行写死左右分离），用户无法为双行选择居中/左/右；
+3. 悬浮窗只有 88px 高，30px 工具栏按钮（top:2 → y2~36）与双行歌词渲染区（约 y20~74）
+   恒重叠约 16px，解锁胶囊同理 —— 调按钮位置无解；
+4. 展开"桌面歌词设置"快捷菜单时整条歌词会闪跳一下；且点击其它软件菜单不消失
+   （透明置顶窗还会继续吃掉下方点击）。
+
+**核心决策：**
+- 双行改为**交替（乒乓）高亮**：正在唱的那一行文字留在原地，另一行换成下一句；
+  横向锚点不随高亮位置变化（split：上行恒居左、下行恒居右）。
+  主窗只多下发一个 `activeOnBottom = (当前句下标.isOdd)`，子窗按此决定哪一行带动画进度。
+- 对齐新增第 4 个取值 `split`（左右分离，设为默认）：单行下与 `center` 渲染等价，
+  双行下即 QQ 音乐经典对角交错；`center/left/right` 三种为"两行同侧"。
+  存量 `center` 做一次性行为等价迁移（历史版本 alignment 对双行无效）。
+- 悬浮窗高度 88 → **124**（顶部 36px 工具栏专属带 + 下方 88px 歌词带）；
+  所有菜单/工具栏魔数（260/172/174/92/38/180）改为由常量推导；
+  存量窗口位置一次性 -36 迁移（默认停靠位置公式同步前移，歌词视觉位置不变）。
+- 展开/收起不再自己推导容器高度：容器高度 == 真实窗口高度（MediaQuery），
+  卡片贴底/贴顶随之自然成立；几何变更改用**一次 `windowManager.setBounds`**
+  （单次 SetWindowPos），并按弹出方向选择"先改状态再改几何 / 先改几何再改状态"，
+  消除中间帧错位。菜单关闭新增前台焦点轮询 + 鼠标离开窗口兜底。
+
+**Files:**
+- Modify: `lib/services/windows_desktop_lyrics_bridge.dart`（常量、协议、位置迁移）
+- Modify: `lib/services/desktop_lyrics_service.dart`（`DesktopLyricsAlignment`、默认值、updateLyrics）
+- Modify: `lib/controllers/player_controller.desktop.dart`（下发 activeOnBottom）
+- Modify: `lib/controllers/player_controller.settings.dart` / `player_controller.dart`（对齐迁移）
+- Modify: `lib/ui/desktop/lyrics_overlay_window.dart`（排版、几何、菜单时序与收起）
+- Modify: `lib/ui/pages/desktop_lyrics_settings_page.dart`（第 4 项对齐、预览同步、提示文案）
+- Test: `test/ui/desktop/desktop_lyrics_test.dart` / `test/ui/pages/desktop_lyrics_settings_test.dart`
+
+### Task 15: 悬浮窗几何重构（工具栏专属带）
+
+- [x] **Step 1: Write failing test for 124 高度与派生常量、按钮与歌词不重叠**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: 常量与布局实现（lyricsTopInset / overlayExpandedHeight / 位置迁移）**
+- [x] **Step 4: Run test to verify pass**
+
+### Task 16: 双行交替高亮 + 对齐可配
+
+- [x] **Step 1: Write failing test for activeOnBottom 交替排版与四种对齐锚点**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: 实现 buildOverlayLyricsBody 交替排版 + alignment 分支 + 协议打通**
+- [x] **Step 4: Run test to verify pass**
+
+### Task 17: 快捷菜单不闪跳 + 点击外部消失
+
+- [x] **Step 1: Write failing test for setBounds 原子几何、失焦自动收起、鼠标离开兜底**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: 实现菜单时序（setBounds + 按方向排序）与关闭看门狗**
+- [x] **Step 4: Run test to verify pass**
+
+### Task 18: Phase 3 全量回归验证与静态分析
+
+- [x] **Step 1: Run flutter analyze**
+- [x] **Step 2: Run flutter test（全量）**
+- [x] **Step 3: Final verification and commit**
+
+**已知取舍：**
+- 悬浮窗在非悬停态的可点击区域增高 36px（整窗本就是 opaque MouseRegion）。
+  替代方案是压缩歌词带，会让双行大字号被 FittedBox 等比缩小，故不采用。
+- 快捷菜单展开期间窗口是 296px 高的透明置顶窗，那一块区域会吃掉一次点击
+  （标准 popover 行为）；关闭时必定还原几何（含 dispose 防御性还原）。
+

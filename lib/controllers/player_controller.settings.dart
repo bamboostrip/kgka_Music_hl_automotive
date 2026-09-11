@@ -361,6 +361,24 @@ mixin _PlayerSettings on _PlayerControllerBase {
           final map = jsonDecode(dlSettingsRaw);
           if (map is Map<String, dynamic>) {
             desktopLyricsSettings = DesktopLyricsSettings.fromMap(map);
+            // 一次性把存量 'center' 迁到新的默认 'split'（左右分离）。
+            // 行为等价：单行下 split 渲染与 center 完全一致；双行历史上
+            // 忽略 alignment，'center' 不可能是用户对双行的选择。
+            final alignmentMigrated =
+                prefs.getBool(_desktopLyricsAlignmentMigratedKey) ?? false;
+            if (!alignmentMigrated) {
+              if (desktopLyricsSettings.alignment ==
+                  DesktopLyricsAlignment.center) {
+                desktopLyricsSettings = desktopLyricsSettings.copyWith(
+                  alignment: DesktopLyricsAlignment.split,
+                );
+                await prefs.setString(
+                  _desktopLyricsSettingsKey,
+                  jsonEncode(desktopLyricsSettings.toMap()),
+                );
+              }
+              await prefs.setBool(_desktopLyricsAlignmentMigratedKey, true);
+            }
           }
         } catch (_) {}
       }

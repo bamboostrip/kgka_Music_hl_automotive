@@ -200,13 +200,21 @@ mixin _PlayerDesktop on _PlayerControllerBase {
     if (!_shouldShowDesktopLyrics) return;
     final index = activeLyricIndex;
     if (lyrics.isEmpty) {
-      _desktopLyrics.updateLyrics(current: '', next: '');
+      _desktopLyrics.updateLyrics(current: '', next: '', activeOnBottom: false);
       return;
     }
-    final current = lyrics[index.clamp(0, lyrics.length - 1)].text;
-    final nextIndex = index + 1;
+    final clamped = index.clamp(0, lyrics.length - 1);
+    final current = lyrics[clamped].text;
+    final nextIndex = clamped + 1;
     final next = nextIndex < lyrics.length ? lyrics[nextIndex].text : '';
-    _desktopLyrics.updateLyrics(current: current, next: next);
+    _desktopLyrics.updateLyrics(
+      current: current,
+      next: next,
+      // 双行交替（乒乓）高亮：偶数句落在上行、奇数句落在下行。子窗据此把
+      // 逐字进度交给"正在唱的那一行"，另一行换成下一句 —— 正在唱的那句
+      // 文字始终不移动（历史实现里它每句都要从下行跳到上行）。
+      activeOnBottom: clamped.isOdd,
+    );
   }
 
   void _syncDesktopPlayState() {

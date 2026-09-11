@@ -12,10 +12,35 @@ typedef DesktopLyricsPlaybackAction = void Function(String action);
 /// 锁定语义 = QQ 音乐式全穿透，锁定/解锁统一由主窗落盘并回推子窗。
 typedef DesktopLyricsLockChanged = void Function(bool locked);
 
+/// 歌词对齐方式取值（[DesktopLyricsSettings.alignment]）。
+///
+/// - [split]（默认）：双行交错 —— 上行居左、下行居右（QQ 音乐经典对角排版）；
+///   单行下与 [center] 渲染完全一致（无左右两行可分）。
+/// - [center] / [left] / [right]：单行与双行统一锚点（双行两行同侧）。
+///
+/// 历史版本里 alignment 对双行**无效**（双行恒为左右分离），[split] 是本次
+/// 新增的第 4 种取值；存量 `center` 由 settings 加载路径做一次性行为等价
+/// 迁移（单行下两者渲染相同、双行下 `center` 不可能是用户的选择）。
+class DesktopLyricsAlignment {
+  const DesktopLyricsAlignment._();
+
+  static const String split = 'split';
+  static const String center = 'center';
+  static const String left = 'left';
+  static const String right = 'right';
+
+  /// 全部合法取值（设置页选项与断言共用）。
+  static const List<String> values = [center, left, right, split];
+
+  /// 双行排布的左右锚点：交错（split）时上下行分居两侧。
+  static bool isSplit(String alignment) => alignment == split;
+}
+
 class DesktopLyricsSettings {
   // 默认 QQ 音乐式透明悬浮：无底色（透明度 0），靠文字阴影保证可读性；
-  // 字号 24 在 780x88 悬浮窗内展示效果最佳。用户可在设置页调回底色。
-  // 默认经典金黄（已播放 0xFFFFD700）与天蓝（未播放 0xFF00BFFF）卡拉OK双色，单行居中。
+  // 字号 24 在 780x124 悬浮窗内展示效果最佳。用户可在设置页调回底色。
+  // 默认经典金黄（已播放 0xFFFFD700）与天蓝（未播放 0xFF00BFFF）卡拉OK双色，
+  // 双行默认左右分离（split）、单行等价居中。
   const DesktopLyricsSettings({
     this.opacity = 0.0,
     this.locked = false,
@@ -24,7 +49,7 @@ class DesktopLyricsSettings {
     this.backgroundColor = 0xFF1A1A2E,
     this.fontSize = 24.0,
     this.singleLine = true,
-    this.alignment = 'center',
+    this.alignment = DesktopLyricsAlignment.split,
     this.textOpacity = 1.0,
     this.playedTextColor = 0xFFFFD700,
     int? unplayedTextColor,
@@ -122,7 +147,7 @@ class DesktopLyricsSettings {
       backgroundColor: (map['backgroundColor'] as num?)?.toInt() ?? 0xFF1A1A2E,
       fontSize: (map['fontSize'] as num?)?.toDouble() ?? 24.0,
       singleLine: map['singleLine'] as bool? ?? true,
-      alignment: map['alignment'] as String? ?? 'center',
+      alignment: map['alignment'] as String? ?? DesktopLyricsAlignment.split,
       textOpacity: (map['textOpacity'] as num?)?.toDouble() ?? 1.0,
       playedTextColor:
           (map['playedTextColor'] as num?)?.toInt() ?? 0xFFFFD700,
@@ -319,16 +344,22 @@ class DesktopLyricsService {
   Future<void> updateLyrics({
     required String current,
     required String next,
+    required bool activeOnBottom,
   }) async {
     if (!isSupportedPlatform) return;
     if (_isDesktopBridge) {
-      await _windowsBridge?.updateLyrics(current: current, next: next);
+      await _windowsBridge?.updateLyrics(
+        current: current,
+        next: next,
+        activeOnBottom: activeOnBottom,
+      );
       return;
     }
     try {
       await _channel.invokeMethod<void>('updateLyrics', {
         'current': current,
         'next': next,
+        'activeOnBottom': activeOnBottom,
       });
     } on MissingPluginException {
       // ignore
