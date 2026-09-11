@@ -368,7 +368,7 @@ test/
 
 ### Task 14: Phase 2 全量回归验证与静态分析
 
-- [ ] **Step 1: Run flutter analyze**
-- [ ] **Step 2: Run flutter test on all desktop & pages suites**
-- [ ] **Step 3: Final verification and commit**
+- [x] **Step 1: Run flutter analyze**
+- [x] **Step 2: Run flutter test on all desktop & pages suites**
+- [x] **Step 3: Final verification and commit**
 
