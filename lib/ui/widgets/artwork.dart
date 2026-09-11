@@ -4,20 +4,50 @@ import 'dart:math' show cos, pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/disk_cached_image_provider.dart';
 import '../../services/network_monitor.dart';
+
+/// 图片解码尺寸档位。
+///
+/// `Artwork` 的尺寸来自布局（网格列宽、卡片宽度等），直接拿它当解码尺寸
+/// 会让**同一个封面在不同布局尺寸下产生多条 ImageCache 条目**，互相挤兑
+/// 淘汰（桌面宽窗一次铺开的封面数本就远超上限，条目再被放大就更容易淘汰，
+/// 淘汰后只能重新走网络）。吸附到固定档位后，同一封面跨布局复用同一条
+/// 缓存。代价是解码尺寸只升不降——内存按**面积**计：相邻档位线性比最大
+/// 1.5×（64→96），单张最坏约 2.2×；常见 1.25× 档位约 1.56×。换来的是条目
+/// 数下降与跨布局复用，整体仍显著优于"淘汰后重新走网络"。
+const _decodeSizeSteps = <int>[64, 96, 128, 160, 200, 256, 320, 400, 480, 600];
+
+/// 把布局尺寸换算为量化后的解码边长（含 2x 屏幕密度余量，上限 600）。
+int decodeSizeFor(double size) {
+  if (!size.isFinite) return 600;
+  final target = (size * 2.0).ceil();
+  for (final step in _decodeSizeSteps) {
+    if (target <= step) return step;
+  }
+  return 600;
+}
 
 /// 网络图片，断网恢复后自动重试。
 ///
 /// Flutter 的 [Image] 在 provider 不变时 rebuild 不会重新发起请求，
 /// 断网期间失败的图片会一直停留在 errorBuilder 上，直到该 widget
 /// 被销毁重建。这里监听 [NetworkMonitor] 的网络恢复事件，通过更换
-/// key 强制重建内部 [Image] 重新加载；已成功的图片命中内存
-/// ImageCache，重建无闪烁。
+/// key 强制重建内部 [Image] 重新加载。
+///
+/// 两处刻意的克制：
+/// - **只重建真正失败过的图**（[_failed]）。历史上这里对任何网络恢复事件都
+///   无条件换代，一次瞬时抖动就会把全 App 的图片 Element 全部重建并重新
+///   解析；在缓存吃紧的页面上（桌面推荐页一次铺开几百张）就表现为整页封面
+///   变白再逐张重下。成功过的图无需求重试，换代纯属自伤。
+/// - 取图走 [DiskCachedImageProvider]：内存条目被淘汰时先从磁盘取字节，
+///   不必等网络往返，用户看不到"空白"这一帧。
 class RetryableNetworkImage extends StatefulWidget {
   const RetryableNetworkImage({
     super.key,
     required this.url,
     this.fit,
+    this.alignment = Alignment.center,
     this.cacheWidth,
     this.cacheHeight,
     this.loadingBuilder,
@@ -26,6 +56,9 @@ class RetryableNetworkImage extends StatefulWidget {
 
   final String url;
   final BoxFit? fit;
+
+  /// 对齐方式（如歌手头图 bottom 铺满 SliverAppBar 时需要 topCenter）。
+  final Alignment alignment;
   final int? cacheWidth;
   final int? cacheHeight;
   final ImageLoadingBuilder? loadingBuilder;
@@ -37,6 +70,9 @@ class RetryableNetworkImage extends StatefulWidget {
 
 class _RetryableNetworkImageState extends State<RetryableNetworkImage> {
   int _generation = 0;
+
+  /// 当前这一代是否失败过（errorBuilder 被调用过）。只有失败态才值得重试。
+  bool _failed = false;
   StreamSubscription<void>? _networkRestoredSub;
 
   @override
@@ -44,7 +80,11 @@ class _RetryableNetworkImageState extends State<RetryableNetworkImage> {
     super.initState();
     _networkRestoredSub = NetworkMonitor.instance.onConnectivityRestored.listen(
       (_) {
-        if (mounted) setState(() => _generation++);
+        if (!mounted || !_failed) return;
+        setState(() {
+          _failed = false;
+          _generation++;
+        });
       },
     );
   }
@@ -57,15 +97,24 @@ class _RetryableNetworkImageState extends State<RetryableNetworkImage> {
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      widget.url,
+    return Image(
+      image: ResizeImage.resizeIfNeeded(
+        widget.cacheWidth,
+        widget.cacheHeight,
+        DiskCachedImageProvider(widget.url),
+      ),
       // key 变化会让 Element 整体重建（而非复用 _ImageState），
-      // 从而重新 resolve 图片、重新发起网络请求。
+      // 从而重新 resolve 图片；此时磁盘/内存缓存里已有字节，无闪烁。
       key: ValueKey('retry-$_generation'),
       fit: widget.fit,
-      cacheWidth: widget.cacheWidth,
-      cacheHeight: widget.cacheHeight,
-      errorBuilder: widget.errorBuilder,
+      alignment: widget.alignment,
+      // errorBuilder 在 build 期间被调用，此处不能 setState；只登记失败态，
+      // 换代重建交给下一个网络恢复事件（也不需要本帧就重建）。
+      errorBuilder: (context, error, stackTrace) {
+        _failed = true;
+        return widget.errorBuilder?.call(context, error, stackTrace) ??
+            const SizedBox.shrink();
+      },
       loadingBuilder: widget.loadingBuilder,
     );
   }
@@ -104,14 +153,10 @@ class _ArtworkState extends State<Artwork> {
               )
             : RetryableNetworkImage(
                 url: imageUrl,
-                cacheWidth:
-                    widget.size.isFinite
-                        ? (widget.size * 2.0).ceil().clamp(1, 600)
-                        : 600,
-                cacheHeight:
-                    widget.size.isFinite
-                        ? (widget.size * 2.0).ceil().clamp(1, 600)
-                        : 600,
+                // 解码尺寸吸附到固定档位（见 [decodeSizeFor]）：同一封面在不同
+                // 布局尺寸下复用同一条 ImageCache 条目，条目数下降、重复下载变少。
+                cacheWidth: decodeSizeFor(widget.size),
+                cacheHeight: decodeSizeFor(widget.size),
                 fit: BoxFit.cover,
                 errorBuilder:
                     (context, error, stackTrace) => _Fallback(icon: widget.icon),
@@ -199,8 +244,8 @@ class _ContentUriImageState extends State<_ContentUriImage> {
     return Image.memory(
       _bytes!,
       fit: BoxFit.cover,
-      cacheWidth: widget.size.isFinite ? (widget.size * 2.0).ceil().clamp(1, 600) : 600,
-      cacheHeight: widget.size.isFinite ? (widget.size * 2.0).ceil().clamp(1, 600) : 600,
+      cacheWidth: decodeSizeFor(widget.size),
+      cacheHeight: decodeSizeFor(widget.size),
     );
   }
 }

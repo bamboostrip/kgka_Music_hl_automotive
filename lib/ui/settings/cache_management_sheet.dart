@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../services/cache_service.dart';
+import '../../services/image_disk_cache.dart';
 import '../widgets/toast.dart';
 
 /// 缓存管理 BottomSheet。
@@ -28,6 +29,7 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
   int? _dataCacheSize;
   int? _downloadSize;
   int? _playCacheSize;
+  int? _imageCacheSize;
   bool _clearing = false;
 
   @override
@@ -37,7 +39,7 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
   }
 
   Future<void> _loadSizes() async {
-    int? dataCache, download, playCache;
+    int? dataCache, download, playCache, imageCache;
     if (widget.cache != null) {
       try {
         dataCache = await widget.cache!.getCacheSize();
@@ -51,11 +53,20 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
         playCache = await widget.downloads!.getPlayCacheDirSize();
       } catch (_) {}
     }
+    // 封面磁盘缓存：上限按平台默认（桌面 200MB / 移动与车机 50MB），
+    // 不提供上限调节——它和"播放缓存上限"是两类资源，混在一起会让用户
+    // 误以为一个数字能兜住全部占用。这里只报大小 + 支持清理。
+    if (ImageDiskCache.instance.enabled) {
+      try {
+        imageCache = await ImageDiskCache.instance.totalSize();
+      } catch (_) {}
+    }
     if (mounted) {
       setState(() {
         _dataCacheSize = dataCache;
         _downloadSize = download;
         _playCacheSize = playCache;
+        _imageCacheSize = imageCache;
       });
     }
   }
@@ -316,6 +327,35 @@ class _CacheManagementSheetState extends State<CacheManagementSheet> {
             ],
           ),
         ),
+        if (_imageCacheSize != null) ...[
+          const SizedBox(height: 10),
+          CacheItem(
+            icon: Icons.image_rounded,
+            title: '图片缓存',
+            size: _formatSize(_imageCacheSize),
+            onClear: _imageCacheSize! > 0
+                ? () async {
+                    // 清理进行中忽略重复点击，避免并发清理。
+                    if (_clearing) return;
+                    setState(() => _clearing = true);
+                    try {
+                      await ImageDiskCache.instance.clear();
+                      await _loadSizes();
+                      if (mounted) {
+                        Toast.success('图片缓存已清理');
+                      }
+                    } catch (_) {
+                      if (mounted) {
+                        Toast.error('清理失败');
+                      }
+                    }
+                    if (mounted) {
+                      setState(() => _clearing = false);
+                    }
+                  }
+                : null,
+          ),
+        ],
         if (widget.player != null &&
             widget.player!.isLoudnessAnalysisSupported) ...[
           const SizedBox(height: 10),

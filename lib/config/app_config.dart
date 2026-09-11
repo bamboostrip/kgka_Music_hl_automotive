@@ -34,6 +34,9 @@ class AppConfig {
   /// 数据缓存目录名 / 下载目录名 / 播放缓存目录名。
   /// 旧名（ka_music_*）由 services/legacy_migration.dart 在启动时自动迁移，
   /// 改动这里的值必须同步维护迁移映射，否则老用户下载/缓存"消失"。
+  ///
+  /// [cacheDirName] 目前是封面磁盘缓存的根目录（临时目录之下，
+  /// 见 services/image_disk_cache.dart）；数据缓存本身存在 SharedPreferences。
   static const cacheDirName = 'shiyin_cache';
   static const downloadDirName = 'shiyin_downloads';
   static const playCacheDirName = 'shiyin_play_cache';
@@ -52,6 +55,30 @@ class AppConfig {
 
   /// 播放缓存大小上限（超过则按 LRU 清理），下载不设上限（用户主动管理）
   static const playCacheMaxBytes = 300 * 1024 * 1024; // 300MB
+
+  // ===== 图片（封面）缓存配置 =====
+  /// 内存 ImageCache 上限。
+  ///
+  /// 移动端/车机口径不变（200 张 / 64MB）：车机 2-4GB RAM，内存必须克制，
+  /// 且车机一屏铺开的封面数远低于该上限，命中率本来就够。
+  static const imageMemoryCacheMaxCount = 200;
+  static const imageMemoryCacheMaxBytes = 64 * 1024 * 1024; // 64MB
+
+  /// 桌面端内存上限：宽窗一屏能铺开几百张封面（推荐页桌面端把当天全部
+  /// 歌曲/歌单转成网格），沿用移动端口径会长期处于 LRU 淘汰状态——条目
+  /// 被淘汰后再次解析只能重新走网络，表现为"进出播放页后整页封面变白
+  /// 再逐张回来"。桌面内存充裕，单独放宽，Android 不读这两个值。
+  static const desktopImageMemoryCacheMaxCount = 600;
+  static const desktopImageMemoryCacheMaxBytes = 256 * 1024 * 1024; // 256MB
+
+  /// 封面磁盘缓存上限（0 = 关闭）。只占存储不占 RAM：
+  /// 内存条目被淘汰或 App 冷启动时，命中磁盘即可直接解码，不必等网络往返。
+  /// 封面平均 20~60KB，50MB 可容纳上千张，对车机存储也无压力。
+  static const imageDiskCacheMaxBytes = 50 * 1024 * 1024; // 50MB
+  static const desktopImageDiskCacheMaxBytes = 200 * 1024 * 1024; // 200MB
+
+  /// 封面磁盘缓存目录名（挂在 [cacheDirName] 之下）。
+  static const imageCacheDirName = 'image';
 
   /// 下载并发数
   static const maxConcurrentDownloads = 3;

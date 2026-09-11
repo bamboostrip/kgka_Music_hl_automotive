@@ -22,6 +22,7 @@ import 'services/desktop_system_integration.dart';
 import 'services/desktop_system_media.dart';
 import 'services/device_info_service.dart';
 import 'services/download_service.dart';
+import 'services/image_disk_cache.dart';
 import 'services/legacy_migration.dart';
 import 'services/music_audio_handler.dart';
 import 'services/music_api.dart';
@@ -57,15 +58,31 @@ Future<void> main(List<String> args) async {
     debugPrint('[时音][fatal] 未捕获异步异常: $error\n$stack');
     return true;
   };
-  // 图片缓存策略（车机 2-4GB RAM，内存有限但不宜过小）：
-  // - maximumSizeBytes = 64MB：封面经 Artwork 解码后最大 600×600×4B ≈ 1.4MB/张，
-  //   64MB 约可容纳 44 张满尺寸封面或数百张列表小图，来回切页基本全部命中缓存，
-  //   不再反复下载；对 2-4GB 设备约占内存 2~3%，低于 Flutter 手机默认 100MB。
-  // - maximumSize = 200：张数兜底，防止大量极小缩略图塞满条目数。
-  // 超限后由 ImageCache 按 LRU 自动淘汰，避免手动全清导致切页重下。
+  // 图片缓存策略：
+  // - 移动端/车机（2-4GB RAM，内存必须克制）：沿用 200 张 / 64MB。封面经
+  //   Artwork 解码后最大 600×600×4B ≈ 1.4MB/张，64MB 约可容纳 44 张满尺寸
+  //   封面或数百张列表小图，对 2-4GB 设备约占内存 2~3%，且一屏铺开的封面
+  //   数远低于该上限，命中率本来够用。
+  // - 桌面端：宽窗一屏能铺开几百张封面（推荐页在桌面端把当天全部歌曲/歌单
+  //   转成网格），沿用移动端上限会长期处于 LRU 淘汰状态——条目被淘汰后再次
+  //   解析只能重新走网络，表现为"进出播放页后整页封面变白再逐张回来"。
+  //   桌面内存充裕，单独放宽（Android 不读这一支，车机 RAM 零回归）。
   final cache = PaintingBinding.instance.imageCache;
-  cache.maximumSize = 200;
-  cache.maximumSizeBytes = 64 << 20;
+  if (isDesktopFormFactor) {
+    cache.maximumSize = AppConfig.desktopImageMemoryCacheMaxCount;
+    cache.maximumSizeBytes = AppConfig.desktopImageMemoryCacheMaxBytes;
+  } else {
+    cache.maximumSize = AppConfig.imageMemoryCacheMaxCount;
+    cache.maximumSizeBytes = AppConfig.imageMemoryCacheMaxBytes;
+  }
+  // 封面磁盘缓存：只占存储不占 RAM，作为内存淘汰/冷启动时的第二道保险。
+  // configure 只登记上限（不做 IO），目录按需惰性创建、裁剪放到首帧之后，
+  // 不拖慢冷启动。
+  ImageDiskCache.instance.configure(
+    isDesktopFormFactor
+        ? AppConfig.desktopImageDiskCacheMaxBytes
+        : AppConfig.imageDiskCacheMaxBytes,
+  );
   // 旧标识（ka_music_* 键与目录、Windows com.example / Linux 旧 app id
   // 数据目录）→ 时音命名的一次性迁移。必须先于 RustApiClient.getInstance()
   // 与首次 SharedPreferences 访问：支持目录路径取决于 CompanyName/app id，
@@ -239,6 +256,9 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
     _auth.restore();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _downloads.initialize();
+      // 封面磁盘缓存的裁剪放到首帧之后：全量扫目录要读大量 stat，放在启动前
+      // 会拖慢冷启动（车机 eMMC 尤其明显），首帧后再跑用户无感。
+      unawaited(ImageDiskCache.instance.prune());
     });
     // Windows 桌面：托盘常驻（左键切换窗口、右键菜单、退出）。
     if (isDesktopFormFactor) {
