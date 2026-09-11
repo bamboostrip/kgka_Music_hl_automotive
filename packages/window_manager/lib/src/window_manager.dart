@@ -700,12 +700,13 @@ class WindowManager {
   }
 
   /// Returns `Offset` - Contains the cursor's current screen position.
-  Future<Offset> getCursorScreenPoint() async {
+  Future<Offset> getCursorScreenPoint({double? devicePixelRatio}) async {
     final Map<dynamic, dynamic> result =
         await _channel.invokeMethod('getCursorScreenPoint');
+    final double ratio = devicePixelRatio ?? getDevicePixelRatio();
     return Offset(
-      (result['dx'] as num).toDouble(),
-      (result['dy'] as num).toDouble(),
+      (result['dx'] as num).toDouble() / ratio,
+      (result['dy'] as num).toDouble() / ratio,
     );
   }
 

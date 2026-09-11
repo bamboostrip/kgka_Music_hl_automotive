@@ -565,7 +565,7 @@ void WindowManagerPlugin::HandleMethodCall(
     window_manager->SetIgnoreMouseEvents(args);
     result->Success(flutter::EncodableValue(true));
   } else if (method_name.compare("getCursorScreenPoint") == 0) {
-    POINT cursorPos;
+    POINT cursorPos = {0, 0};
     GetCursorPos(&cursorPos);
     flutter::EncodableMap result_map;
     result_map[flutter::EncodableValue("dx")] =
