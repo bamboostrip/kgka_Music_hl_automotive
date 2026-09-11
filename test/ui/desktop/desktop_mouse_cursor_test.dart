@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shiyin_music/controllers/auth_controller.dart';
 import 'package:shiyin_music/controllers/player_controller.dart';
 import 'package:shiyin_music/models/music_models.dart';
-import 'package:shiyin_music/models/playlist.dart';
 import 'package:shiyin_music/services/music_api.dart';
 import 'package:shiyin_music/ui/app_theme.dart';
 import 'package:shiyin_music/ui/form_factor.dart';
@@ -77,7 +76,7 @@ void main() {
                   icon: const Icon(Icons.play_arrow),
                 ),
                 const IconButton(
-                  key: const ValueKey('disabled_icon_btn'),
+                  key: ValueKey('disabled_icon_btn'),
                   onPressed: null,
                   icon: Icon(Icons.play_arrow),
                 ),
@@ -113,7 +112,7 @@ void main() {
                   child: const Text('播放全部'),
                 ),
                 const FilledButton(
-                  key: const ValueKey('disabled_filled_btn'),
+                  key: ValueKey('disabled_filled_btn'),
                   onPressed: null,
                   child: Text('播放全部'),
                 ),

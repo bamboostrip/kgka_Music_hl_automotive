@@ -373,6 +373,7 @@ mixin _PlayerDesktop on _PlayerControllerBase {
 
   /// 请求打开桌面歌词设置页（悬浮窗工具栏调起或外部手动调起）。
   void openDesktopLyricsSettingsPage() {
+    if (_disposed) return;
     openLyricsSettingsRequest.value = false;
     openLyricsSettingsRequest.value = true;
     onOpenDesktopLyricsSettings?.call();
