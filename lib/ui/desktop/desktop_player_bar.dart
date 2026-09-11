@@ -478,7 +478,7 @@ class _SongInfoState extends State<SongInfo> {
             ],
             // 右侧纵向居中 Column：
             // Row 1: MarqueeText（歌名粗体 onSurface - 歌手常规 onSurfaceVariant）
-            // Row 2: 操作按钮行 [LikeButton, SizedBox(width: 8), CommentButton, SizedBox(width: 8), SongMoreButton]
+            // Row 2: 操作按钮行 [LikeButton, SizedBox(width: 12), CommentButton, SizedBox(width: 12), SongMoreButton]
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -532,14 +532,14 @@ class _SongInfoState extends State<SongInfo> {
                           iconColor: iconColor,
                           activeColor: colorScheme.secondary,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         _CommentButton(
                           player: widget.player,
                           song: song,
                           iconColor: iconColor,
                           onOpenComment: widget.onOpenComment,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         SongMoreButton(
                           player: widget.player,
                           auth: widget.auth,
@@ -710,7 +710,7 @@ class _LikeButton extends StatelessWidget {
   final Song? song;
   final Color iconColor;
   final Color activeColor;
-  static const double _iconSize = 18.0;
+  static const double _iconSize = 20.0;
 
   @override
   Widget build(BuildContext context) {
@@ -758,15 +758,22 @@ class _LikeButton extends StatelessWidget {
   }
 }
 
-/// 评论数 ≥ 万/亿时按「x.x万」「x.x亿」缩写（与 QQ 音乐一致）。
+/// 评论数格式化（紧凑规范：方案 A）：
+/// - count <= 0：'0'
+/// - count < 1000：显示原数字（如 169）
+/// - 1000 ~ 9999：显示 999+
+/// - 1万 ~ 99万：显示 xxw+（如 16w+）
+/// - >= 99万：封顶 99w+
 String formatCommentCount(int count) {
-  String trimZero(String s) =>
-      s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
-  if (count >= 100000000) {
-    return '${trimZero((count / 100000000).toStringAsFixed(1))}亿';
+  if (count <= 0) return '0';
+  if (count >= 990000) {
+    return '99w+';
   }
   if (count >= 10000) {
-    return '${trimZero((count / 10000).toStringAsFixed(1))}万';
+    return '${count ~/ 10000}w+';
+  }
+  if (count >= 1000) {
+    return '999+';
   }
   return '$count';
 }
@@ -889,9 +896,10 @@ class _CommentButtonState extends State<_CommentButton> {
               child: Text(
                 badge,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 8.5,
                   height: 1,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.3,
                   color: effectiveColor,
                 ),
               ),
@@ -1104,8 +1112,8 @@ class _SongMoreButtonState extends State<SongMoreButton> {
                   }
                 },
           icon: Container(
-            width: 19,
-            height: 19,
+            width: 18,
+            height: 18,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
@@ -1116,7 +1124,7 @@ class _SongMoreButtonState extends State<SongMoreButton> {
             alignment: Alignment.center,
             child: Icon(
               Icons.more_horiz_rounded,
-              size: 13,
+              size: 12,
               color: currentColor,
             ),
           ),

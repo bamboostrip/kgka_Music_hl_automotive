@@ -749,12 +749,18 @@ void main() {
       expect(bubble.showBadgeGap, isFalse);
     });
 
-    test('评论数 ≥ 万/亿按中文缩写展示', () {
+    test('评论数按紧凑规范格式化展示（方案 A：999+ / xxw+ / 99w+ 封顶）', () {
+      expect(formatCommentCount(0), '0');
       expect(formatCommentCount(169), '169');
-      expect(formatCommentCount(9999), '9999');
-      expect(formatCommentCount(10000), '1万');
-      expect(formatCommentCount(16800), '1.7万');
-      expect(formatCommentCount(120000000), '1.2亿');
+      expect(formatCommentCount(999), '999');
+      expect(formatCommentCount(1000), '999+');
+      expect(formatCommentCount(9999), '999+');
+      expect(formatCommentCount(10000), '1w+');
+      expect(formatCommentCount(16800), '1w+');
+      expect(formatCommentCount(167000), '16w+');
+      expect(formatCommentCount(989999), '98w+');
+      expect(formatCommentCount(990000), '99w+');
+      expect(formatCommentCount(120000000), '99w+');
     });
 
     testWidgets('无歌曲时展示"尚未播放"，更多操作按钮禁用', (tester) async {
