@@ -92,14 +92,17 @@ void main() {
   });
 
   group('ProgressClipper unit tests', () {
-    test('clips correctly at 0.0, 0.5, and 1.0 progress', () {
+    test('clips correctly at 0.0, 0.5, and 1.0 progress with vertical glow extension', () {
       const clipper0 = ProgressClipper(progress: 0.0, textWidth: 200.0);
+      expect(clipper0.getClip(const Size(200, 40)), const Rect.fromLTWH(0, -20.0, 0.0, 80.0));
       expect(clipper0.getClip(const Size(200, 40)).width, 0.0);
 
       const clipperHalf = ProgressClipper(progress: 0.5, textWidth: 200.0);
+      expect(clipperHalf.getClip(const Size(200, 40)), const Rect.fromLTWH(0, -20.0, 100.0, 80.0));
       expect(clipperHalf.getClip(const Size(200, 40)).width, 100.0);
 
       const clipperFull = ProgressClipper(progress: 1.0, textWidth: 200.0);
+      expect(clipperFull.getClip(const Size(200, 40)), const Rect.fromLTWH(0, -20.0, 200.0, 80.0));
       expect(clipperFull.getClip(const Size(200, 40)).width, 200.0);
     });
 
@@ -349,6 +352,80 @@ void main() {
       expect(baseText.style?.color?.a, closeTo(0.5, 0.01));
       // Highlight played text opacity
       expect(highlightText.style?.color?.a, closeTo(0.5, 0.01));
+    });
+
+    testWidgets('updates smoothly when progress changes and re-measures on text/fontSize changes', (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: LyricsKaraokeLine(
+            text: 'Karaoke Text',
+            fontSize: 24,
+            playedColor: Colors.blue,
+            unplayedColor: Colors.white,
+            progress: 0.2,
+            availableWidth: 500,
+          ),
+        ),
+      );
+
+      var clipFinder = find.descendant(
+        of: find.byType(Stack),
+        matching: find.byType(ClipRect),
+      );
+      var clipRect = tester.widget<ClipRect>(clipFinder);
+      var clipper = clipRect.clipper as ProgressClipper;
+      final initialWidth = clipper.textWidth;
+      expect(clipper.progress, 0.2);
+
+      // Update progress only
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: LyricsKaraokeLine(
+            text: 'Karaoke Text',
+            fontSize: 24,
+            playedColor: Colors.blue,
+            unplayedColor: Colors.white,
+            progress: 0.8,
+            availableWidth: 500,
+          ),
+        ),
+      );
+
+      clipFinder = find.descendant(
+        of: find.byType(Stack),
+        matching: find.byType(ClipRect),
+      );
+      clipRect = tester.widget<ClipRect>(clipFinder);
+      clipper = clipRect.clipper as ProgressClipper;
+      expect(clipper.progress, 0.8);
+      // Measured textWidth remains unchanged
+      expect(clipper.textWidth, initialWidth);
+
+      // Update fontSize to trigger re-measurement in didUpdateWidget
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: LyricsKaraokeLine(
+            text: 'Karaoke Text',
+            fontSize: 48,
+            playedColor: Colors.blue,
+            unplayedColor: Colors.white,
+            progress: 0.8,
+            availableWidth: 500,
+          ),
+        ),
+      );
+
+      clipFinder = find.descendant(
+        of: find.byType(Stack),
+        matching: find.byType(ClipRect),
+      );
+      clipRect = tester.widget<ClipRect>(clipFinder);
+      clipper = clipRect.clipper as ProgressClipper;
+      // textWidth should now be approximately double
+      expect(clipper.textWidth, greaterThan(initialWidth * 1.5));
     });
   });
 }

@@ -31,7 +31,7 @@ class ProgressClipper extends CustomClipper<Rect> {
   Rect getClip(Size size) {
     final clipWidth =
         (textWidth * progress.clamp(0.0, 1.0)).clamp(0.0, double.infinity);
-    return Rect.fromLTWH(0, 0, clipWidth, size.height + 20.0);
+    return Rect.fromLTWH(0, -20.0, clipWidth, size.height + 40.0);
   }
 
   @override
@@ -48,7 +48,7 @@ typedef _ProgressClipper = ProgressClipper;
 /// 采用双层叠放架构 (Base unplayed layer + Top played highlight layer) 与
 /// [ProgressClipper] 实现逐字/平滑变色渲染；
 /// 当单行文本宽度超出 [availableWidth] 时，自动开启平滑跑马灯位移。
-class LyricsKaraokeLine extends StatelessWidget {
+class LyricsKaraokeLine extends StatefulWidget {
   const LyricsKaraokeLine({
     super.key,
     required this.text,
@@ -87,8 +87,55 @@ class LyricsKaraokeLine extends StatelessWidget {
   }
 
   @override
+  State<LyricsKaraokeLine> createState() => _LyricsKaraokeLineState();
+}
+
+class _LyricsKaraokeLineState extends State<LyricsKaraokeLine> {
+  late TextPainter _textPainter;
+  double _textWidth = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initTextPainter();
+  }
+
+  void _initTextPainter() {
+    _textPainter = TextPainter(
+      text: TextSpan(
+        text: widget.text,
+        style: TextStyle(
+          decoration: TextDecoration.none,
+          fontSize: widget.fontSize,
+          fontWeight: widget.fontWeight,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    _textWidth = _textPainter.width;
+  }
+
+  @override
+  void didUpdateWidget(covariant LyricsKaraokeLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text != oldWidget.text ||
+        widget.fontSize != oldWidget.fontSize ||
+        widget.fontWeight != oldWidget.fontWeight) {
+      _textPainter.dispose();
+      _initTextPainter();
+    }
+  }
+
+  @override
+  void dispose() {
+    _textPainter.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final safeOpacity = textOpacity.clamp(0.0, 1.0);
+    final safeOpacity = widget.textOpacity.clamp(0.0, 1.0);
 
     final unplayedShadows = [
       Shadow(
@@ -109,51 +156,45 @@ class LyricsKaraokeLine extends StatelessWidget {
         offset: const Offset(0, 1),
       ),
       Shadow(
-        color: playedColor.withValues(alpha: (0.40 * safeOpacity).clamp(0.0, 1.0)),
+        color: widget.playedColor.withValues(alpha: (0.40 * safeOpacity).clamp(0.0, 1.0)),
         blurRadius: 12,
       ),
     ];
 
     final textStyle = TextStyle(
       decoration: TextDecoration.none,
-      fontSize: fontSize,
-      fontWeight: fontWeight,
+      fontSize: widget.fontSize,
+      fontWeight: widget.fontWeight,
     );
 
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: textStyle),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    final textWidth = painter.width;
-
-    final isOverflow = textWidth > availableWidth;
+    final textWidth = _textWidth;
+    final isOverflow = textWidth > widget.availableWidth;
 
     final karaokeStack = Stack(
       fit: StackFit.loose,
       children: [
         // Base Layer (unplayed)
         Text(
-          text,
+          widget.text,
           maxLines: 1,
           softWrap: false,
           style: textStyle.copyWith(
-            color: unplayedColor.withValues(alpha: safeOpacity),
+            color: widget.unplayedColor.withValues(alpha: safeOpacity),
             shadows: unplayedShadows,
           ),
         ),
         // Top Highlight Layer (played)
         ClipRect(
           clipper: _ProgressClipper(
-            progress: progress.clamp(0.0, 1.0),
+            progress: widget.progress.clamp(0.0, 1.0),
             textWidth: textWidth,
           ),
           child: Text(
-            text,
+            widget.text,
             maxLines: 1,
             softWrap: false,
             style: textStyle.copyWith(
-              color: playedColor.withValues(alpha: safeOpacity),
+              color: widget.playedColor.withValues(alpha: safeOpacity),
               shadows: playedShadows,
             ),
           ),
@@ -162,14 +203,14 @@ class LyricsKaraokeLine extends StatelessWidget {
     );
 
     if (isOverflow) {
-      final scrollOffset = calculateMarqueeOffset(
+      final scrollOffset = LyricsKaraokeLine.calculateMarqueeOffset(
         textWidth: textWidth,
-        availableWidth: availableWidth,
-        progress: progress,
+        availableWidth: widget.availableWidth,
+        progress: widget.progress,
       );
 
       return SizedBox(
-        width: availableWidth,
+        width: widget.availableWidth,
         child: ClipRect(
           child: Transform.translate(
             offset: Offset(scrollOffset, 0),
@@ -183,14 +224,14 @@ class LyricsKaraokeLine extends StatelessWidget {
         ),
       );
     } else {
-      final Alignment childAlignment = switch (alignment) {
+      final Alignment childAlignment = switch (widget.alignment) {
         TextAlign.left || TextAlign.start => Alignment.centerLeft,
         TextAlign.right || TextAlign.end => Alignment.centerRight,
         TextAlign.center || TextAlign.justify => Alignment.center,
       };
 
       return SizedBox(
-        width: availableWidth,
+        width: widget.availableWidth,
         child: Align(
           alignment: childAlignment,
           child: karaokeStack,
