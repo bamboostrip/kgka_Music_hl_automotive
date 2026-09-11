@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../form_factor.dart';
+
 /// 字号档位对应的中文文案。
 ///
 /// 设置页（字体大小弹窗留在 settings_page）与个性化分节共用。
@@ -23,7 +25,7 @@ class SectionHeader extends StatelessWidget {
         title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
           color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w900,
+          fontWeight: isDesktopFormFactor ? FontWeight.w600 : FontWeight.w900,
           fontSize: 15,
           letterSpacing: 0.2,
         ),
@@ -97,6 +99,11 @@ class SettingsTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: isDesktopFormFactor
+            ? (onTap != null
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic)
+            : null,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -186,52 +193,61 @@ class SettingsSwitchTile extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveColor = iconColor ?? colorScheme.primary;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: effectiveColor.withValues(alpha: isDark ? .22 : .10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(child: Icon(icon, size: 20, color: effectiveColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        mouseCursor: isDesktopFormFactor ? SystemMouseCursors.click : null,
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: effectiveColor.withValues(alpha: isDark ? .22 : .10),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                child: Center(
+                  child: Icon(icon, size: 20, color: effectiveColor),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Switch(
+                value: value,
+                onChanged: onChanged,
+                activeTrackColor: colorScheme.primary,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: colorScheme.primary,
-          ),
-        ],
+        ),
       ),
     );
   }

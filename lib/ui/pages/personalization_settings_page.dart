@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../controllers/theme_controller.dart';
+import '../form_factor.dart';
 import '../widgets/toast.dart';
 
 /// 个性化设置页面：全局皮肤配色 + 自定义背景图。
@@ -196,11 +197,14 @@ class _ColorDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return MouseRegion(
+      cursor:
+          isDesktopFormFactor ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
           Container(
             width: 46,
             height: 46,
@@ -230,6 +234,7 @@ class _ColorDot extends StatelessWidget {
                 ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -471,7 +476,8 @@ class _SectionHeader extends StatelessWidget {
         title,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w800,
+              fontWeight:
+                  isDesktopFormFactor ? FontWeight.w600 : FontWeight.w800,
               letterSpacing: 0.8,
             ),
       ),
@@ -520,47 +526,55 @@ class _SettingsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 32,
-              child: Icon(icon, size: 22, color: iconColor ?? colorScheme.primary),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: titleColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        mouseCursor: isDesktopFormFactor
+            ? (onTap != null
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic)
+            : null,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                child: Icon(icon, size: 22, color: iconColor ?? colorScheme.primary),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitle!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                      title,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: titleColor,
+                            fontWeight: FontWeight.w600,
                           ),
                     ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            if (onTap != null)
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: colorScheme.outline,
-              ),
-          ],
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: colorScheme.outline,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -587,39 +601,50 @@ class _SettingsSwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 32,
-            child: Icon(icon, size: 22, color: iconColor ?? colorScheme.primary),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        mouseCursor: isDesktopFormFactor
+            ? (onChanged != null
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic)
+            : null,
+        onTap: onChanged != null ? () => onChanged!(!value) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                child: Icon(icon, size: 22, color: iconColor ?? colorScheme.primary),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                       ),
+                    ],
+                  ],
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              Switch(value: value, onChanged: onChanged),
+            ],
           ),
-          Switch(value: value, onChanged: onChanged),
-        ],
+        ),
       ),
     );
   }

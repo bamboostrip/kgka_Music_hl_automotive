@@ -217,6 +217,33 @@ class AppTheme {
               ),
             )
           : null,
+      listTileTheme: desktop
+          ? ListTileThemeData(
+              mouseCursor: WidgetStateProperty.resolveWith<MouseCursor>(
+                (states) => states.contains(WidgetState.disabled)
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+              ),
+            )
+          : null,
+      switchTheme: desktop
+          ? SwitchThemeData(
+              mouseCursor: WidgetStateProperty.resolveWith<MouseCursor>(
+                (states) => states.contains(WidgetState.disabled)
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+              ),
+            )
+          : null,
+      radioTheme: desktop
+          ? RadioThemeData(
+              mouseCursor: WidgetStateProperty.resolveWith<MouseCursor>(
+                (states) => states.contains(WidgetState.disabled)
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+              ),
+            )
+          : null,
       scrollbarTheme: desktop ? _desktopScrollbarTheme(scheme) : null,
       tooltipTheme: desktop
           ? const TooltipThemeData(

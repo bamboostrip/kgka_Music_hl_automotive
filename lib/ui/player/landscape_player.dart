@@ -313,7 +313,9 @@ class LandscapeHeaderButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white.withValues(alpha: .12),
+        color: isDesktopFormFactor
+            ? Colors.transparent
+            : Colors.white.withValues(alpha: .12),
         shape: const CircleBorder(),
         clipBehavior: Clip.antiAlias,
         child: SizedBox.square(

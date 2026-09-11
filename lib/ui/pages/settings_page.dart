@@ -74,6 +74,8 @@ class SettingsPage extends StatelessWidget {
             children: [
               for (final scale in ThemeController.fontScaleOptions) ...[
                 InkWell(
+                  mouseCursor:
+                      isDesktopFormFactor ? SystemMouseCursors.click : null,
                   onTap: () => Navigator.of(ctx).pop(scale),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(

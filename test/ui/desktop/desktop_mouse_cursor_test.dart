@@ -10,6 +10,9 @@ import 'package:shiyin_music/ui/form_factor.dart';
 import 'package:shiyin_music/ui/pages/search_page.dart';
 import 'package:shiyin_music/ui/widgets/album_grid.dart';
 import 'package:shiyin_music/ui/widgets/locate_current_song_button.dart';
+import 'package:shiyin_music/ui/desktop/player_bar_widgets.dart';
+import 'package:shiyin_music/ui/player/landscape_player.dart';
+import 'package:shiyin_music/ui/settings/settings_widgets.dart';
 
 class _FakeMusicApi implements MusicApi {
   @override
@@ -28,6 +31,15 @@ class _FakePlayerController extends ChangeNotifier implements PlayerController {
 
   @override
   bool isPlaying = false;
+
+  @override
+  double volume = 0.5;
+
+  @override
+  Future<void> setVolume(double value) async {
+    volume = value;
+    notifyListeners();
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -228,6 +240,165 @@ void main() {
         find.ancestor(of: artistTypeChip, matching: find.byType(MouseRegion)).first,
       );
       expect(artistTypeMouseRegion.cursor, SystemMouseCursors.click);
+    });
+
+    testWidgets('桌面端 SettingsTile 与 SettingsSwitchTile 使用手型指针 (SystemMouseCursors.click)', (tester) async {
+      var switchToggled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Column(
+              children: [
+                SettingsTile(
+                  icon: Icons.sync,
+                  title: '同步个人信息',
+                  onTap: () {},
+                ),
+                const SettingsTile(
+                  icon: Icons.sync,
+                  title: '禁用项',
+                  onTap: null,
+                ),
+                SettingsSwitchTile(
+                  icon: Icons.card_giftcard,
+                  title: '自动领取VIP',
+                  value: false,
+                  onChanged: (v) => switchToggled = v,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final inkWells = tester.widgetList<InkWell>(find.byType(InkWell)).toList();
+      expect(inkWells.length, 3);
+      // 启用态 SettingsTile 为 click 手型
+      expect(inkWells[0].mouseCursor, SystemMouseCursors.click);
+      // 禁用态（onTap == null）SettingsTile 为 basic 箭头
+      expect(inkWells[1].mouseCursor, SystemMouseCursors.basic);
+      // SettingsSwitchTile 整行启用态为 click 手型
+      expect(inkWells[2].mouseCursor, SystemMouseCursors.click);
+
+      // 点击整行触发 Switch 切换
+      await tester.tap(find.text('自动领取VIP'));
+      expect(switchToggled, isTrue);
+    });
+
+    testWidgets('SectionHeader 在桌面端优化为 FontWeight.w600，移动端为 w900', (tester) async {
+      // 桌面端状态
+      debugDesktopFormFactorOverride = true;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SectionHeader(title: '账号'),
+          ),
+        ),
+      );
+      final desktopText = tester.widget<Text>(find.text('账号'));
+      expect(desktopText.style?.fontWeight, FontWeight.w600);
+
+      // 移动端状态
+      debugDesktopFormFactorOverride = false;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SectionHeader(title: '账号'),
+          ),
+        ),
+      );
+      final mobileText = tester.widget<Text>(find.text('账号'));
+      expect(mobileText.style?.fontWeight, FontWeight.w900);
+    });
+
+    testWidgets('LandscapeHeaderButton 在桌面端背景为透明（无阴影/底色），移动/车机端保留半透明底色', (tester) async {
+      // 桌面端
+      debugDesktopFormFactorOverride = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LandscapeHeaderButton(
+              tooltip: '返回',
+              size: 44,
+              iconSize: 34,
+              onPressed: () {},
+              icon: Icons.keyboard_arrow_left_rounded,
+            ),
+          ),
+        ),
+      );
+      final desktopMaterial = tester.widget<Material>(
+        find.descendant(
+          of: find.byType(LandscapeHeaderButton),
+          matching: find.byType(Material),
+        ).first,
+      );
+      expect(desktopMaterial.color, Colors.transparent);
+
+      // 移动/车机端
+      debugDesktopFormFactorOverride = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LandscapeHeaderButton(
+              tooltip: '返回',
+              size: 44,
+              iconSize: 34,
+              onPressed: () {},
+              icon: Icons.keyboard_arrow_left_rounded,
+            ),
+          ),
+        ),
+      );
+      final mobileMaterial = tester.widget<Material>(
+        find.descendant(
+          of: find.byType(LandscapeHeaderButton),
+          matching: find.byType(Material),
+        ).first,
+      );
+      expect(mobileMaterial.color, Colors.white.withValues(alpha: .12));
+    });
+
+    testWidgets('VolumePopoverButton 打开/关闭时外层尺寸保持严格一致（避免相邻播控按钮产生位移抖动）', (tester) async {
+      debugDesktopFormFactorOverride = true;
+      final player = _FakePlayerController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Center(
+              child: VolumePopoverButton(
+                key: const ValueKey('volume_btn'),
+                player: player,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final initialSize = tester.getSize(find.byKey(const ValueKey('volume_btn')));
+
+      // 点击打开音量弹出卡片
+      await tester.tap(find.byKey(const ValueKey('volume_btn')));
+      await tester.pumpAndSettle();
+
+      final openedSize = tester.getSize(find.byKey(const ValueKey('volume_btn')));
+      expect(openedSize, equals(initialSize), reason: '音量按钮开启态与关闭态尺寸必须完全一致，防止父级居中布局发生抖动位移');
+    });
+
+    test('桌面端全局主题配置 switchTheme、radioTheme、listTileTheme 鼠标指针为 SystemMouseCursors.click', () {
+      final theme = AppTheme.light();
+      final switchCursor = theme.switchTheme.mouseCursor?.resolve({});
+      final radioCursor = theme.radioTheme.mouseCursor?.resolve({});
+      final listTileCursor = theme.listTileTheme.mouseCursor?.resolve({});
+
+      expect(switchCursor, SystemMouseCursors.click);
+      expect(radioCursor, SystemMouseCursors.click);
+      expect(listTileCursor, SystemMouseCursors.click);
     });
   });
 }

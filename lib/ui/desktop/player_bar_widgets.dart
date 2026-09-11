@@ -266,16 +266,18 @@ class _VolumePopoverButtonState extends State<VolumePopoverButton> {
             child: Listener(
               onPointerSignal: _handlePointerSignal,
               child: Container(
-                decoration: isOpen
-                    ? BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: colorScheme.primary.withValues(alpha: 0.6),
-                          width: 1.5,
-                        ),
-                        color: colorScheme.primary.withValues(alpha: 0.08),
-                      )
-                    : null,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isOpen
+                        ? colorScheme.primary.withValues(alpha: 0.6)
+                        : Colors.transparent,
+                    width: 1.5,
+                  ),
+                  color: isOpen
+                      ? colorScheme.primary.withValues(alpha: 0.08)
+                      : Colors.transparent,
+                ),
                 child: IconButton(
                   onPressed: _toggle,
                   icon: Icon(volumeIconFor(volume), size: widget.iconSize),
