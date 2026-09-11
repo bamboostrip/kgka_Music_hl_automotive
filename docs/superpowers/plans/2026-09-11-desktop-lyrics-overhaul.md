@@ -295,11 +295,11 @@ test/
 1. 将 `LockedLyricsBody` 中解锁胶囊的垂直位置进一步上提（贴近窗口顶部，例如 `top: 2` 或 `top: 3`）；
 2. 优化歌词主体在锁定状态下的垂直内边距（略微下沉 4~6px），使解锁胶囊完全位于歌词上方的负空间，彻底消除对歌词文本的任何遮挡。
 
-- [ ] **Step 1: Write test verifying unlock pill position and non-overlapping margins**
-- [ ] **Step 2: Run test to verify failure**
-- [ ] **Step 3: Implement adjustments in lyrics_overlay_window.dart**
-- [ ] **Step 4: Run test to verify pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Write test verifying unlock pill position and non-overlapping margins**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: Implement adjustments in lyrics_overlay_window.dart**
+- [x] **Step 4: Run test to verify pass**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -318,11 +318,11 @@ test/
 2. 收起菜单时：
    - 精确还原原始窗口 Y 坐标和原始 88px 高度。
 
-- [ ] **Step 1: Write test for adaptive upward/downward menu layout and coordinate restoration**
-- [ ] **Step 2: Run test to verify failure**
-- [ ] **Step 3: Implement in lyrics_overlay_window.dart**
-- [ ] **Step 4: Run test to verify pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Write test for adaptive upward/downward menu layout and coordinate restoration**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: Implement in lyrics_overlay_window.dart**
+- [x] **Step 4: Run test to verify pass**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -338,11 +338,11 @@ test/
    - 唤起主窗口至前台：`windowManager.show()`, `windowManager.focus()`, 最小化时调用 `windowManager.restore()`；
    - 通过内容区导航器打开 `DesktopLyricsSettingsPage(player: widget.player)`。
 
-- [ ] **Step 1: Write widget test verifying openLyricsSettingsRequest brings window and pushes settings page**
-- [ ] **Step 2: Run test to verify failure**
-- [ ] **Step 3: Implement in desktop_shell.dart**
-- [ ] **Step 4: Run test to verify pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Write widget test verifying openLyricsSettingsRequest brings window and pushes settings page**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: Implement in desktop_shell.dart**
+- [x] **Step 4: Run test to verify pass**
+- [x] **Step 5: Commit**
 
 ---
 

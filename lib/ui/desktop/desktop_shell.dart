@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/download_controller.dart';
@@ -10,6 +11,7 @@ import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../pages/comment_page.dart';
 import '../pages/artist_detail_page.dart';
+import '../pages/desktop_lyrics_settings_page.dart';
 import '../pages/downloaded_songs_page.dart';
 import '../pages/home_page.dart';
 import '../pages/library_page.dart';
@@ -46,6 +48,7 @@ class DesktopShell extends StatefulWidget {
     required this.downloads,
     required this.theme,
     required this.localMusic,
+    this.windowRestorer,
   });
 
   final MusicApi api;
@@ -55,6 +58,7 @@ class DesktopShell extends StatefulWidget {
   final DownloadController downloads;
   final ThemeController theme;
   final LocalMusicController localMusic;
+  final Future<void> Function()? windowRestorer;
 
   @override
   State<DesktopShell> createState() => _DesktopShellState();
@@ -94,6 +98,33 @@ class _DesktopShellState extends State<DesktopShell> {
   /// 内容区导航栈上是否已有搜索结果页（用于连搜时 replace 而非叠层）。
   var _searchPageOpen = false;
 
+  /// 内容区导航栈上是否已有歌词设置页（避免重复打开叠层）。
+  var _lyricsSettingsPageOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      widget.player.openLyricsSettingsRequest
+          .addListener(_onOpenLyricsSettingsRequested);
+    } catch (_) {}
+  }
+
+  @override
+  void didUpdateWidget(covariant DesktopShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.player != widget.player) {
+      try {
+        oldWidget.player.openLyricsSettingsRequest
+            .removeListener(_onOpenLyricsSettingsRequested);
+      } catch (_) {}
+      try {
+        widget.player.openLyricsSettingsRequest
+            .addListener(_onOpenLyricsSettingsRequested);
+      } catch (_) {}
+    }
+  }
+
   /// 侧栏条目点按：单击语义不变（切换分区/回内容根）；窗口时长内连点同一
   /// 条目视为双击当前分区，触发对应页面刷新。检测用手动计时窗口而非
   /// InkWell.onDoubleTap——否则 Flutter 为消歧会把每次单击推迟 ~300ms
@@ -126,10 +157,55 @@ class _DesktopShellState extends State<DesktopShell> {
 
   @override
   void dispose() {
+    try {
+      widget.player.openLyricsSettingsRequest
+          .removeListener(_onOpenLyricsSettingsRequested);
+    } catch (_) {}
     _searchController.dispose();
     _searchFocusNode.dispose();
     _tabsRevision.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreMainWindow() async {
+    try {
+      if (await windowManager.isMinimized()) {
+        await windowManager.restore();
+      }
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (e) {
+      debugPrint('[DesktopShell] Failed to restore main window: $e');
+    }
+  }
+
+  Future<void> _onOpenLyricsSettingsRequested() async {
+    try {
+      if (!widget.player.openLyricsSettingsRequest.value) return;
+    } catch (_) {
+      return;
+    }
+    if (widget.windowRestorer != null) {
+      await widget.windowRestorer!();
+    } else {
+      await _restoreMainWindow();
+    }
+    if (!mounted) return;
+    if (_lyricsSettingsPageOpen) return;
+    _lyricsSettingsPageOpen = true;
+    final route = MaterialPageRoute<void>(
+      builder: (_) => DesktopLyricsSettingsPage(player: widget.player),
+    );
+    final inner = _contentNavKey.currentState;
+    final Future<void> popped;
+    if (inner != null) {
+      popped = inner.push(route);
+    } else {
+      popped = Navigator.of(context).push(route);
+    }
+    popped.whenComplete(() {
+      if (mounted) _lyricsSettingsPageOpen = false;
+    });
   }
 
   /// 回到内容根页（切换侧栏分区时关闭已打开的歌单/搜索等详情）。
