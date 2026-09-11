@@ -16,37 +16,60 @@ void main() {
   });
 
   group('DesktopLyricsSettings', () {
-    test('默认配置为透明悬浮与标准字号', () {
+    test('默认配置为透明悬浮、标准字号与默认布局/色彩', () {
       const settings = DesktopLyricsSettings();
       expect(settings.opacity, 0.0);
       expect(settings.locked, isFalse);
       expect(settings.passthrough, isFalse);
-      expect(settings.textColor, 0xFFFFFFFF);
+      expect(settings.textColor, 0xFF00BFFF);
+      expect(settings.unplayedTextColor, 0xFF00BFFF);
+      expect(settings.playedTextColor, 0xFFFFD700);
       expect(settings.fontSize, 24.0);
+      expect(settings.singleLine, isTrue);
+      expect(settings.alignment, 'center');
+      expect(settings.textOpacity, 1.0);
+      expect(settings.backgroundColor, 0xFF1A1A2E);
     });
 
-    test('序列化与反序列化完整保持字段', () {
+    test('序列化与反序列化完整保持所有新旧字段', () {
       const original = DesktopLyricsSettings(
         opacity: 0.8,
         locked: true,
         passthrough: true,
-        textColor: 0xFFE0E0E0,
         backgroundColor: 0xFF141823,
         fontSize: 22.0,
+        singleLine: false,
+        alignment: 'left',
+        textOpacity: 0.85,
+        playedTextColor: 0xFFFF0000,
+        unplayedTextColor: 0xFF00FF00,
       );
 
       final map = original.toMap();
+      expect(map['singleLine'], isFalse);
+      expect(map['alignment'], 'left');
+      expect(map['textOpacity'], 0.85);
+      expect(map['playedTextColor'], 0xFFFF0000);
+      expect(map['unplayedTextColor'], 0xFF00FF00);
+      expect(map['textColor'], 0xFF00FF00);
+
       final restored = DesktopLyricsSettings.fromMap(map);
 
       expect(restored.opacity, original.opacity);
       expect(restored.locked, original.locked);
       expect(restored.passthrough, original.passthrough);
-      expect(restored.textColor, original.textColor);
       expect(restored.backgroundColor, original.backgroundColor);
       expect(restored.fontSize, original.fontSize);
+      expect(restored.singleLine, original.singleLine);
+      expect(restored.alignment, original.alignment);
+      expect(restored.textOpacity, original.textOpacity);
+      expect(restored.playedTextColor, original.playedTextColor);
+      expect(restored.unplayedTextColor, original.unplayedTextColor);
+      expect(restored.textColor, original.unplayedTextColor);
+      expect(restored, original);
     });
 
-    test('兼容旧持久化字段：passthrough 仅解析保留，缺失字段取默认值', () {
+    test('兼容旧持久化字段：passthrough 保留，缺失字段取默认值，unplayedTextColor 回退到 textColor', () {
       // 旧版本 JSON：locked + passthrough 同时存在。
       final legacy = DesktopLyricsSettings.fromMap(const {
         'opacity': 0.5,
@@ -58,16 +81,73 @@ void main() {
       expect(legacy.passthrough, isTrue);
       expect(legacy.opacity, 0.5);
       expect(legacy.fontSize, 20.0);
+      expect(legacy.singleLine, isTrue);
+      expect(legacy.alignment, 'center');
+      expect(legacy.textOpacity, 1.0);
+      expect(legacy.playedTextColor, 0xFFFFD700);
+      expect(legacy.unplayedTextColor, 0xFF00BFFF);
 
-      // 字段缺失（更早版本）时不抛异常，逐项取默认值。
+      // 旧配置仅含 textColor：unplayedTextColor 自动回退并同步 textColor
+      final legacyTextColor = DesktopLyricsSettings.fromMap(const {
+        'textColor': 0xFF123456,
+      });
+      expect(legacyTextColor.unplayedTextColor, 0xFF123456);
+      expect(legacyTextColor.textColor, 0xFF123456);
+
+      // 同时包含 unplayedTextColor 与 textColor 时，unplayedTextColor 优先
+      final dualColorMap = DesktopLyricsSettings.fromMap(const {
+        'textColor': 0xFF111111,
+        'unplayedTextColor': 0xFF222222,
+      });
+      expect(dualColorMap.unplayedTextColor, 0xFF222222);
+      expect(dualColorMap.textColor, 0xFF222222);
+
+      // 字段全缺失时不抛异常，逐项取默认值。
       final minimal = DesktopLyricsSettings.fromMap(const {'locked': true});
       expect(minimal.locked, isTrue);
       expect(minimal.passthrough, isFalse);
       expect(minimal.opacity, 0.0);
       expect(minimal.fontSize, 24.0);
+      expect(minimal.singleLine, isTrue);
+      expect(minimal.alignment, 'center');
+      expect(minimal.textOpacity, 1.0);
+      expect(minimal.playedTextColor, 0xFFFFD700);
+      expect(minimal.unplayedTextColor, 0xFF00BFFF);
     });
 
-    test('相等性与 copyWith（设置页监听外部锁定变化的基础）', () {
+    test('相等性与 copyWith 完整覆盖所有新旧字段', () {
+      const base = DesktopLyricsSettings();
+
+      // copyWith 各个新字段
+      expect(base.copyWith(singleLine: false).singleLine, isFalse);
+      expect(base.copyWith(alignment: 'right').alignment, 'right');
+      expect(base.copyWith(textOpacity: 0.5).textOpacity, 0.5);
+      expect(base.copyWith(playedTextColor: 0xFF123456).playedTextColor, 0xFF123456);
+      expect(base.copyWith(unplayedTextColor: 0xFF654321).unplayedTextColor, 0xFF654321);
+      expect(base.copyWith(textColor: 0xFF778899).textColor, 0xFF778899);
+      expect(base.copyWith(textColor: 0xFF778899).unplayedTextColor, 0xFF778899);
+
+      // 相等性对比
+      final modifiedSingleLine = base.copyWith(singleLine: false);
+      expect(modifiedSingleLine, isNot(base));
+      expect(modifiedSingleLine.hashCode, isNot(base.hashCode));
+
+      final modifiedAlignment = base.copyWith(alignment: 'left');
+      expect(modifiedAlignment, isNot(base));
+      expect(modifiedAlignment.hashCode, isNot(base.hashCode));
+
+      final modifiedTextOpacity = base.copyWith(textOpacity: 0.8);
+      expect(modifiedTextOpacity, isNot(base));
+      expect(modifiedTextOpacity.hashCode, isNot(base.hashCode));
+
+      final modifiedPlayedColor = base.copyWith(playedTextColor: 0xFF111111);
+      expect(modifiedPlayedColor, isNot(base));
+      expect(modifiedPlayedColor.hashCode, isNot(base.hashCode));
+
+      final modifiedUnplayedColor = base.copyWith(unplayedTextColor: 0xFF222222);
+      expect(modifiedUnplayedColor, isNot(base));
+      expect(modifiedUnplayedColor.hashCode, isNot(base.hashCode));
+
       const locked = DesktopLyricsSettings(locked: true);
       expect(const DesktopLyricsSettings(locked: true), locked);
       expect(const DesktopLyricsSettings(locked: false, passthrough: true),

@@ -15,21 +15,34 @@ typedef DesktopLyricsLockChanged = void Function(bool locked);
 class DesktopLyricsSettings {
   // 默认 QQ 音乐式透明悬浮：无底色（透明度 0），靠文字阴影保证可读性；
   // 字号 24 在 780x88 悬浮窗内展示效果最佳。用户可在设置页调回底色。
+  // 默认经典金黄（已播放 0xFFFFD700）与天蓝（未播放 0xFF00BFFF）卡拉OK双色，单行居中。
   const DesktopLyricsSettings({
     this.opacity = 0.0,
     this.locked = false,
     this.passthrough = false,
-    this.textColor = 0xFFFFFFFF,
+    int? textColor,
     this.backgroundColor = 0xFF1A1A2E,
     this.fontSize = 24.0,
-  });
+    this.singleLine = true,
+    this.alignment = 'center',
+    this.textOpacity = 1.0,
+    this.playedTextColor = 0xFFFFD700,
+    int? unplayedTextColor,
+  }) : unplayedTextColor = unplayedTextColor ?? textColor ?? 0xFF00BFFF;
 
   final double opacity;
   final bool locked;
   final bool passthrough;
-  final int textColor;
   final int backgroundColor;
   final double fontSize;
+  final bool singleLine;
+  final String alignment;
+  final double textOpacity;
+  final int playedTextColor;
+  final int unplayedTextColor;
+
+  /// 向下兼容别名，映射至 [unplayedTextColor]
+  int get textColor => unplayedTextColor;
 
   DesktopLyricsSettings copyWith({
     double? opacity,
@@ -38,14 +51,24 @@ class DesktopLyricsSettings {
     int? textColor,
     int? backgroundColor,
     double? fontSize,
+    bool? singleLine,
+    String? alignment,
+    double? textOpacity,
+    int? playedTextColor,
+    int? unplayedTextColor,
   }) {
     return DesktopLyricsSettings(
       opacity: opacity ?? this.opacity,
       locked: locked ?? this.locked,
       passthrough: passthrough ?? this.passthrough,
-      textColor: textColor ?? this.textColor,
       backgroundColor: backgroundColor ?? this.backgroundColor,
       fontSize: fontSize ?? this.fontSize,
+      singleLine: singleLine ?? this.singleLine,
+      alignment: alignment ?? this.alignment,
+      textOpacity: textOpacity ?? this.textOpacity,
+      playedTextColor: playedTextColor ?? this.playedTextColor,
+      unplayedTextColor:
+          unplayedTextColor ?? textColor ?? this.unplayedTextColor,
     );
   }
 
@@ -53,9 +76,14 @@ class DesktopLyricsSettings {
     'opacity': opacity,
     'locked': locked,
     'passthrough': passthrough,
-    'textColor': textColor,
+    'textColor': unplayedTextColor,
     'backgroundColor': backgroundColor,
     'fontSize': fontSize,
+    'singleLine': singleLine,
+    'alignment': alignment,
+    'textOpacity': textOpacity,
+    'playedTextColor': playedTextColor,
+    'unplayedTextColor': unplayedTextColor,
   };
 
   @override
@@ -64,18 +92,26 @@ class DesktopLyricsSettings {
       other.opacity == opacity &&
       other.locked == locked &&
       other.passthrough == passthrough &&
-      other.textColor == textColor &&
       other.backgroundColor == backgroundColor &&
-      other.fontSize == fontSize;
+      other.fontSize == fontSize &&
+      other.singleLine == singleLine &&
+      other.alignment == alignment &&
+      other.textOpacity == textOpacity &&
+      other.playedTextColor == playedTextColor &&
+      other.unplayedTextColor == unplayedTextColor;
 
   @override
   int get hashCode => Object.hash(
     opacity,
     locked,
     passthrough,
-    textColor,
     backgroundColor,
     fontSize,
+    singleLine,
+    alignment,
+    textOpacity,
+    playedTextColor,
+    unplayedTextColor,
   );
 
   factory DesktopLyricsSettings.fromMap(Map<String, dynamic> map) {
@@ -83,9 +119,17 @@ class DesktopLyricsSettings {
       opacity: (map['opacity'] as num?)?.toDouble() ?? 0.0,
       locked: map['locked'] as bool? ?? false,
       passthrough: map['passthrough'] as bool? ?? false,
-      textColor: (map['textColor'] as num?)?.toInt() ?? 0xFFFFFFFF,
       backgroundColor: (map['backgroundColor'] as num?)?.toInt() ?? 0xFF1A1A2E,
       fontSize: (map['fontSize'] as num?)?.toDouble() ?? 24.0,
+      singleLine: map['singleLine'] as bool? ?? true,
+      alignment: map['alignment'] as String? ?? 'center',
+      textOpacity: (map['textOpacity'] as num?)?.toDouble() ?? 1.0,
+      playedTextColor:
+          (map['playedTextColor'] as num?)?.toInt() ?? 0xFFFFD700,
+      unplayedTextColor:
+          (map['unplayedTextColor'] as num?)?.toInt() ??
+          (map['textColor'] as num?)?.toInt() ??
+          0xFF00BFFF,
     );
   }
 }
