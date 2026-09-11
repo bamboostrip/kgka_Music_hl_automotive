@@ -277,11 +277,11 @@ test/
    - 上下两行字体大小统一（`settings.fontSize * 0.78` 或 `settings.fontSize`），字重统一为 `FontWeight.bold`，不再有大小粗细落差；
    - 仅通过已播放金黄高亮与未播放天蓝色进行状态区分。
 
-- [ ] **Step 1: Write widget test for toolbar backgroundless style and dual line font consistency**
-- [ ] **Step 2: Run test to verify failure**
-- [ ] **Step 3: Implement in lyrics_overlay_window.dart**
-- [ ] **Step 4: Run test to verify pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Write widget test for toolbar backgroundless style and dual line font consistency**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: Implement in lyrics_overlay_window.dart**
+- [x] **Step 4: Run test to verify pass**
+- [x] **Step 5: Commit**
 
 ---
 

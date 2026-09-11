@@ -812,6 +812,30 @@ void main() {
       expect(line2Align.alignment, Alignment.centerRight);
     });
 
+    testWidgets('双行交错模式 (singleLine: false)：上下两行统一字号与 bold 字重', (tester) async {
+      const fontSize = 24.0;
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: false, fontSize: fontSize),
+        current: '当前句歌词内容',
+        next: '下一句歌词内容',
+      );
+
+      final karaokeLines = tester.widgetList<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine)).toList();
+      expect(karaokeLines.length, 2);
+      final currentLine = karaokeLines[0];
+      final nextLine = karaokeLines[1];
+
+      // 上下两行字体大小统一且字重均为 bold
+      expect(currentLine.fontWeight, FontWeight.bold);
+      expect(nextLine.fontWeight, FontWeight.bold);
+      expect(currentLine.fontSize, nextLine.fontSize);
+      expect(currentLine.fontSize, closeTo(fontSize * 0.82, 0.001));
+      // 上行变色高亮，下行未播天蓝色，但基础 unplayedColor 与 textOpacity 一致
+      expect(currentLine.unplayedColor, nextLine.unplayedColor);
+      expect(currentLine.textOpacity, nextLine.textOpacity);
+    });
+
     testWidgets('修改 progress 更新 DesktopLyricsOverlayContent 变色进度', (tester) async {
       await pumpCustomOverlay(
         tester,
@@ -956,6 +980,79 @@ void main() {
         ),
       );
       expect(find.byIcon(Icons.settings_rounded), findsOneWidget);
+    });
+
+    testWidgets('工具栏去背景装饰且位置上提，按钮尺寸扩大为 30x30 且图标尺寸为 20', (tester) async {
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+        ),
+      );
+
+      // 工具栏位置 top 为 2
+      final positionedToolbar = tester.widget<Positioned>(
+        find.ancestor(
+          of: find.byIcon(Icons.settings_rounded),
+          matching: find.byType(Positioned),
+        ).first,
+      );
+      expect(positionedToolbar.top, 2.0);
+
+      // 工具栏在 IgnorePointer 内直接是 Padding，不再有外层 DecoratedBox 半透黑色胶囊背景
+      final toolbarRow = find.ancestor(
+        of: find.byIcon(Icons.settings_rounded),
+        matching: find.byType(Row),
+      ).first;
+      final ignorePointer = find.ancestor(
+        of: toolbarRow,
+        matching: find.byType(IgnorePointer),
+      ).first;
+      final ignorePointerWidget = tester.widget<IgnorePointer>(ignorePointer);
+      expect(ignorePointerWidget.child, isA<Padding>());
+      expect(
+        find.descendant(
+          of: ignorePointer,
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is DecoratedBox &&
+                w.decoration is BoxDecoration &&
+                (w.decoration as BoxDecoration).borderRadius ==
+                    BorderRadius.circular(10),
+          ),
+        ),
+        findsNothing,
+      );
+
+      // 按钮尺寸扩大为 30x30
+      final buttonContainers = tester.widgetList<AnimatedContainer>(
+        find.descendant(
+          of: toolbarRow,
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      expect(buttonContainers.isNotEmpty, isTrue);
+      for (final container in buttonContainers) {
+        expect(container.constraints?.maxWidth, 30.0);
+        expect(container.constraints?.maxHeight, 30.0);
+      }
+
+      // 工具栏播控与设置按钮默认图标统一为 20
+      final icons = tester.widgetList<Icon>(
+        find.descendant(
+          of: toolbarRow,
+          matching: find.byType(Icon),
+        ),
+      );
+      for (final icon in icons) {
+        expect(icon.size, 20.0);
+      }
     });
 
     testWidgets('点击设置按钮展开快捷调节菜单，再次点击或点击遮罩收起', (tester) async {

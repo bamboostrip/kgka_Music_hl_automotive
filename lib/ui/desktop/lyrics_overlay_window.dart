@@ -989,7 +989,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                   ),
                 ),
               Positioned(
-                top: 6,
+                top: 2,
                 right: 8,
                 child: AnimatedOpacity(
                   opacity: showToolbar ? 1.0 : 0.0,
@@ -1025,74 +1025,64 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
 
   Widget _buildOverlayToolbar(BuildContext context) {
     final settings = widget.settings;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.10),
-          width: 0.5,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ToolbarButton(
-              icon: Icons.skip_previous_rounded,
-              tooltip: '上一曲',
-              iconSize: 18,
-              onPressed: () => widget.onControlPlayback('previous'),
-            ),
-            const SizedBox(width: 2),
-            _ToolbarButton(
-              icon: widget.isPlaying
-                  ? Icons.pause_rounded
-                  : Icons.play_arrow_rounded,
-              tooltip: widget.isPlaying ? '暂停' : '播放',
-              iconSize: 18,
-              onPressed: () => widget.onControlPlayback('togglePlay'),
-            ),
-            const SizedBox(width: 2),
-            _ToolbarButton(
-              icon: Icons.skip_next_rounded,
-              tooltip: '下一曲',
-              iconSize: 18,
-              onPressed: () => widget.onControlPlayback('next'),
-            ),
-            Container(
-              width: 1,
-              height: 14,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              color: Colors.white.withValues(alpha: 0.18),
-            ),
-            _ToolbarButton(
-              icon: settings.locked
-                  ? Icons.lock_rounded
-                  : Icons.lock_open_rounded,
-              tooltip: settings.locked ? '解锁歌词' : '锁定歌词',
-              iconSize: 18,
-              onPressed: () => widget.onToggleLock(!settings.locked),
-            ),
-            const SizedBox(width: 2),
-            _ToolbarButton(
-              icon: Icons.settings_rounded,
-              tooltip: '桌面歌词设置',
-              iconSize: 18,
-              isActive: _showSettingsMenu,
-              onPressed: () =>
-                  _setSettingsMenuVisible(!_showSettingsMenu),
-            ),
-            const SizedBox(width: 2),
-            _ToolbarButton(
-              icon: Icons.close_rounded,
-              tooltip: '关闭桌面歌词',
-              iconSize: 18,
-              onPressed: widget.onClose,
-            ),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ToolbarButton(
+            icon: Icons.skip_previous_rounded,
+            tooltip: '上一曲',
+            iconSize: 20,
+            onPressed: () => widget.onControlPlayback('previous'),
+          ),
+          const SizedBox(width: 2),
+          _ToolbarButton(
+            icon: widget.isPlaying
+                ? Icons.pause_rounded
+                : Icons.play_arrow_rounded,
+            tooltip: widget.isPlaying ? '暂停' : '播放',
+            iconSize: 20,
+            onPressed: () => widget.onControlPlayback('togglePlay'),
+          ),
+          const SizedBox(width: 2),
+          _ToolbarButton(
+            icon: Icons.skip_next_rounded,
+            tooltip: '下一曲',
+            iconSize: 20,
+            onPressed: () => widget.onControlPlayback('next'),
+          ),
+          Container(
+            width: 1,
+            height: 14,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            color: Colors.white.withValues(alpha: 0.18),
+          ),
+          _ToolbarButton(
+            icon: settings.locked
+                ? Icons.lock_rounded
+                : Icons.lock_open_rounded,
+            tooltip: settings.locked ? '解锁歌词' : '锁定歌词',
+            iconSize: 20,
+            onPressed: () => widget.onToggleLock(!settings.locked),
+          ),
+          const SizedBox(width: 2),
+          _ToolbarButton(
+            icon: Icons.settings_rounded,
+            tooltip: '桌面歌词设置',
+            iconSize: 20,
+            isActive: _showSettingsMenu,
+            onPressed: () =>
+                _setSettingsMenuVisible(!_showSettingsMenu),
+          ),
+          const SizedBox(width: 2),
+          _ToolbarButton(
+            icon: Icons.close_rounded,
+            tooltip: '关闭桌面歌词',
+            iconSize: 20,
+            onPressed: widget.onClose,
+          ),
+        ],
       ),
     );
   }
@@ -1138,8 +1128,10 @@ Widget buildOverlayLyricsBody({
     );
   } else {
     // QQ 音乐经典双行交错排版：
-    // 上行居左交错（当前句，变色+跑马灯），下行居右交错（下一句，未播弱化+跑马灯）
+    // 上下两行统一字号（settings.fontSize * 0.82）与 bold 字重；
+    // 上行居左交错（当前句，变色+跑马灯），下行居右交错（下一句，未播天蓝+跑马灯）。
     final dualLineWidth = contentWidth - 60.0;
+    final dualFontSize = settings.fontSize * 0.82;
     body = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1147,7 +1139,7 @@ Widget buildOverlayLyricsBody({
           alignment: Alignment.centerLeft,
           child: LyricsKaraokeLine(
             text: current.isEmpty ? '暂无歌词' : current,
-            fontSize: settings.fontSize * 0.85,
+            fontSize: dualFontSize,
             playedColor: playedColor,
             unplayedColor: unplayedColor,
             progress: progress,
@@ -1162,14 +1154,14 @@ Widget buildOverlayLyricsBody({
           alignment: Alignment.centerRight,
           child: LyricsKaraokeLine(
             text: next.isEmpty ? '' : next,
-            fontSize: settings.fontSize * 0.75,
+            fontSize: dualFontSize,
             playedColor: playedColor,
-            unplayedColor: unplayedColor.withValues(alpha: 0.65),
+            unplayedColor: unplayedColor,
             progress: 0.0,
             availableWidth: dualLineWidth,
             alignment: TextAlign.right,
-            textOpacity: settings.textOpacity * 0.65,
-            fontWeight: FontWeight.normal,
+            textOpacity: settings.textOpacity,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],
@@ -1199,7 +1191,7 @@ class _ToolbarButton extends StatefulWidget {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
-    this.iconSize = 18,
+    this.iconSize = 20,
     this.isActive = false,
   });
 
@@ -1230,8 +1222,8 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
           onTap: widget.onPressed,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width: 26,
-            height: 26,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               color: (widget.isActive || _hovered)
                   ? Colors.white.withValues(alpha: widget.isActive ? 0.28 : 0.18)
