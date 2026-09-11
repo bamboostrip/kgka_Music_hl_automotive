@@ -313,28 +313,16 @@ class MusicAudioHandler extends BaseAudioHandler
 
   // ---- 引擎加载串行门 ----------------------------------------------------
   //
-  // just_audio_windows 的 WinRT MediaPlayer 在高频 setUrl（快速连点切歌）
-  // 时，native 回调线程与 COM 平台线程竞态，会触发 "Lost connection to
-  // device" 进程崩溃——与 completed→自动下一首的 100ms workaround
-  // （player_controller._handleCompleted）同根源的上游后端缺陷。
-  // 门规则：
+  // 桌面统一走 media_kit(libmpv) 后端后，WinRT MediaPlayer 高频 setUrl 的
+  // COM 线程竞态崩溃根源已消除，最小加载间隔 workaround 已随迁移删除；
+  // 但串行门本身保留——它承载的语义与后端无关：
   // 1. 串行：同一时刻至多一个 setUrl 在 native 侧执行（异步链排队）；
-  // 2. 最小间隔：Windows 上两次 setUrl 发起至少间隔 [_minEngineLoadGap]，
-  //    覆盖上一次加载/中止后 native 回调的尾部清理窗口；
-  // 3. 只加载最新：排队期间出现更新的 load 注册时，旧 load 直接跳过
+  // 2. 只加载最新：排队期间出现更新的 load 注册时，旧 load 直接跳过
   //    （不碰引擎），上层 playSong 的 hash 守卫会把对应的旧流程收尾。
   // 连点 N 次的净效果：队列里的旧任务瞬间跳过，只有最后一次真正进引擎。
 
-  /// Windows 两次引擎加载的最小间隔。与 completed workaround 的 100ms
-  /// 同量级、稍保守：连点场景每次加载的 native 开销远大于 250ms 的
-  /// 用户感知阈值，取安全值。
-  static const _minEngineLoadGap = Duration(milliseconds: 250);
-
   /// 引擎加载串行链的尾端（Promise 链式排队）。
   Future<void> _engineLoadChain = Future<void>.value();
-
-  /// 上一次 setUrl 发起时刻（仅 Windows 记录）。
-  DateTime? _lastEngineLoadAt;
 
   Future<void> _enqueueEngineLoad(int seq, String proxyUrl) {
     final task = _engineLoadChain
@@ -350,17 +338,6 @@ class MusicAudioHandler extends BaseAudioHandler
 
   Future<void> _performEngineLoad(int seq, String proxyUrl) async {
     if (seq != _loadSeq) return; // 已被更新的加载取代，跳过
-    if (Platform.isWindows) {
-      final last = _lastEngineLoadAt;
-      if (last != null) {
-        final elapsed = DateTime.now().difference(last);
-        if (elapsed < _minEngineLoadGap) {
-          await Future<void>.delayed(_minEngineLoadGap - elapsed);
-          if (seq != _loadSeq) return; // 等待期间又被更新取代
-        }
-      }
-      _lastEngineLoadAt = DateTime.now();
-    }
     await audioPlayer.setUrl(proxyUrl).timeout(
       const Duration(seconds: 15),
       onTimeout: () {

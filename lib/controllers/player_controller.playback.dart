@@ -552,16 +552,6 @@ mixin _PlayerPlayback on _PlayerControllerBase {
         return;
       }
 
-      // Windows 上 just_audio_windows 的 WinRT MediaPlayer 在触发 completed
-      // 事件时，native 回调仍在后台线程执行。若立即调用 setUrl() 加载新音源，
-      // 会与 COM 平台线程产生竞态，导致 "Lost connection to device" 进程崩溃。
-      // 延迟 100ms 让 native 层完成 completed 状态的清理，再切换到下一首。
-      if (Platform.isWindows) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        // 延迟后重新检查状态，避免在延迟期间用户手动切歌
-        if (_completedSongHash != currentSong?.hash) return;
-      }
-
       if (playbackMode == PlaybackMode.singleLoop) {
         // 重启完成后再清去重 hash：重启在途中重复 completed 事件仍去重，
         // 避免 self-loop 打转；下一轮正常播完可再次触发
