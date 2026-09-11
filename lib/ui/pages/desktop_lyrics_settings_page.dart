@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/player_controller.dart';
 import '../../services/desktop_lyrics_service.dart';
+import '../desktop/lyrics_karaoke_line.dart';
 import '../form_factor.dart';
 
 class DesktopLyricsSettingsPage extends StatefulWidget {
@@ -60,20 +61,34 @@ class _DesktopLyricsSettingsPageState
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          // Background opacity
+          // Appearance
           _SectionHeader(title: '外观'),
           const SizedBox(height: 8),
           _SettingsCard(
             children: [
-              _SliderTile(
-                icon: Icons.opacity_rounded,
+              _SegmentTile<bool>(
+                icon: Icons.table_rows_rounded,
                 iconColor: colorScheme.primary,
-                title: '背景透明度',
-                value: _settings.opacity,
-                min: 0.0,
-                max: 1.0,
-                label: '${(_settings.opacity * 100).round()}%',
-                onChanged: (v) => _update((s) => s.copyWith(opacity: v)),
+                title: '行数',
+                selected: _settings.singleLine,
+                segments: const [
+                  ButtonSegment(value: true, label: Text('单行显示')),
+                  ButtonSegment(value: false, label: Text('双行显示')),
+                ],
+                onChanged: (v) => _update((s) => s.copyWith(singleLine: v)),
+              ),
+              _SettingsDivider(),
+              _SegmentTile<String>(
+                icon: Icons.format_align_center_rounded,
+                iconColor: colorScheme.primary,
+                title: '对齐方式',
+                selected: _settings.alignment,
+                segments: const [
+                  ButtonSegment(value: 'left', label: Text('左对齐')),
+                  ButtonSegment(value: 'center', label: Text('居中对齐')),
+                  ButtonSegment(value: 'right', label: Text('右对齐')),
+                ],
+                onChanged: (v) => _update((s) => s.copyWith(alignment: v)),
               ),
               _SettingsDivider(),
               _SliderTile(
@@ -87,9 +102,31 @@ class _DesktopLyricsSettingsPageState
                 onChanged: (v) => _update((s) => s.copyWith(fontSize: v)),
               ),
               _SettingsDivider(),
+              _SliderTile(
+                icon: Icons.format_paint_rounded,
+                iconColor: colorScheme.primary,
+                title: '文字透明度',
+                value: _settings.textOpacity,
+                min: 0.2,
+                max: 1.0,
+                label: '${(_settings.textOpacity * 100).round()}%',
+                onChanged: (v) => _update((s) => s.copyWith(textOpacity: v)),
+              ),
+              _SettingsDivider(),
+              _SliderTile(
+                icon: Icons.opacity_rounded,
+                iconColor: colorScheme.primary,
+                title: '背景透明度',
+                value: _settings.opacity,
+                min: 0.0,
+                max: 1.0,
+                label: '${(_settings.opacity * 100).round()}%',
+                onChanged: (v) => _update((s) => s.copyWith(opacity: v)),
+              ),
+              _SettingsDivider(),
               _ColorPickerTile(
                 title: '歌词颜色',
-                currentColor: Color(_settings.textColor),
+                currentColor: Color(_settings.unplayedTextColor),
                 presets: const [
                   Colors.white,
                   Color(0xFFFFD700), // Gold
@@ -99,7 +136,28 @@ class _DesktopLyricsSettingsPageState
                   Color(0xFFFF6347), // Tomato
                   Color(0xFF000000), // Black
                 ],
-                onChanged: (c) => _update((s) => s.copyWith(textColor: c.toARGB32())),
+                onChanged: (c) => _update(
+                  (s) => s.copyWith(
+                    unplayedTextColor: c.toARGB32(),
+                    textColor: c.toARGB32(),
+                  ),
+                ),
+              ),
+              _SettingsDivider(),
+              _ColorPickerTile(
+                title: '高亮颜色',
+                currentColor: Color(_settings.playedTextColor),
+                presets: const [
+                  Color(0xFFFFD700), // Gold
+                  Color(0xFFFFEE58), // Yellow
+                  Color(0xFFFF6347), // Coral
+                  Color(0xFF00BFFF), // Sky Blue
+                  Color(0xFF00FF7F), // Spring Green
+                  Color(0xFFFFFFFF), // White
+                ],
+                onChanged: (c) => _update(
+                  (s) => s.copyWith(playedTextColor: c.toARGB32()),
+                ),
               ),
               _SettingsDivider(),
               _ColorPickerTile(
@@ -156,6 +214,10 @@ class _DesktopLyricsSettingsPageState
               ],
             ],
           ),
+          const SizedBox(height: 24),
+          _SectionHeader(title: '效果预览'),
+          const SizedBox(height: 8),
+          _LyricsPreviewCard(settings: _settings),
         ],
       ),
     );
@@ -375,6 +437,7 @@ class _ColorPickerTile extends StatelessWidget {
             children: [
               for (final color in presets)
                 GestureDetector(
+                  key: Key('color_${title}_${color.toARGB32().toRadixString(16)}'),
                   onTap: () => onChanged(color),
                   child: Container(
                     width: 36,
@@ -412,6 +475,176 @@ class _ColorPickerTile extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SegmentTile<T> extends StatelessWidget {
+  const _SegmentTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.selected,
+    required this.segments,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final T selected;
+  final List<ButtonSegment<T>> segments;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 22, color: iconColor),
+              const SizedBox(width: 14),
+              Text(
+                title,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<T>(
+              showSelectedIcon: false,
+              segments: segments,
+              selected: {selected},
+              onSelectionChanged: (newSet) {
+                if (newSet.isNotEmpty) {
+                  onChanged(newSet.first);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LyricsPreviewCard extends StatelessWidget {
+  const _LyricsPreviewCard({required this.settings});
+
+  final DesktopLyricsSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final playedColor = Color(settings.playedTextColor);
+    final unplayedColor = Color(settings.unplayedTextColor);
+    final textAlign = switch (settings.alignment) {
+      'left' => TextAlign.left,
+      'right' => TextAlign.right,
+      _ => TextAlign.center,
+    };
+    final lineAlignment = switch (settings.alignment) {
+      'left' => Alignment.centerLeft,
+      'right' => Alignment.centerRight,
+      _ => Alignment.center,
+    };
+
+    return Container(
+      height: 110,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF161622),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant
+              .withValues(alpha: 0.3),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        color: Color(settings.backgroundColor)
+            .withValues(alpha: settings.opacity),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth;
+            final Widget body;
+            if (settings.singleLine) {
+              body = Align(
+                alignment: lineAlignment,
+                child: LyricsKaraokeLine(
+                  text: '时音 听我想听',
+                  fontSize: settings.fontSize,
+                  playedColor: playedColor,
+                  unplayedColor: unplayedColor,
+                  progress: 0.45,
+                  availableWidth: availableWidth,
+                  alignment: textAlign,
+                  textOpacity: settings.textOpacity,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            } else {
+              final dualLineWidth = availableWidth - 40.0;
+              final effectiveDualWidth =
+                  dualLineWidth > 0 ? dualLineWidth : availableWidth;
+              body = Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: LyricsKaraokeLine(
+                      text: '时音 听我想听',
+                      fontSize: settings.fontSize * 0.85,
+                      playedColor: playedColor,
+                      unplayedColor: unplayedColor,
+                      progress: 0.45,
+                      availableWidth: effectiveDualWidth,
+                      alignment: TextAlign.left,
+                      textOpacity: settings.textOpacity,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: LyricsKaraokeLine(
+                      text: '让音乐更自由',
+                      fontSize: settings.fontSize * 0.75,
+                      playedColor: playedColor,
+                      unplayedColor: unplayedColor.withValues(alpha: 0.65),
+                      progress: 0.0,
+                      availableWidth: effectiveDualWidth,
+                      alignment: TextAlign.right,
+                      textOpacity: settings.textOpacity * 0.65,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: availableWidth,
+                child: body,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
