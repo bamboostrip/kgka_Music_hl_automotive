@@ -256,10 +256,119 @@ test/
 ---
 
 ### Task 8: 全量端到端验证与静态检查
+- [x] 完成 Task 1~7 端到端验证与静态代码检查。
+
+---
+
+## Phase 2: 细节优化与交互精修（用户实机走查反馈）
+
+### Task 9: 工具栏按钮去背景/增大热区 & 双行字体大小粗细统一
+
+**Files:**
+- Modify: `lib/ui/desktop/lyrics_overlay_window.dart`
+- Test: `test/ui/desktop/desktop_lyrics_test.dart`
+
+**Requirements:**
+1. 工具栏样式调整：
+   - 移除 `_buildOverlayToolbar` 外层的黑色半透底色和边框装饰（去背景，纯图标浮空展示）；
+   - 位置上提：由 `top: 6` 调整为更贴顶的位置；
+   - 按钮尺寸增大：`_ToolbarButton` 尺寸由 26x26 扩大为 30x30，图标大小调整为 19~20，热区更大更好点；悬停单按钮时保留微弱高亮背景（`Colors.white.withValues(alpha: 0.16)`）。
+2. 双行模式字号字重统一（对标截图 3 QQ 音乐）：
+   - 上下两行字体大小统一（`settings.fontSize * 0.78` 或 `settings.fontSize`），字重统一为 `FontWeight.bold`，不再有大小粗细落差；
+   - 仅通过已播放金黄高亮与未播放天蓝色进行状态区分。
+
+- [ ] **Step 1: Write widget test for toolbar backgroundless style and dual line font consistency**
+- [ ] **Step 2: Run test to verify failure**
+- [ ] **Step 3: Implement in lyrics_overlay_window.dart**
+- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 10: 锁定态「🔒 解锁」胶囊位置上提与防遮挡优化
+
+**Files:**
+- Modify: `lib/ui/desktop/lyrics_overlay_window.dart`
+- Test: `test/ui/desktop/desktop_lyrics_test.dart`
+
+**Requirements:**
+1. 将 `LockedLyricsBody` 中解锁胶囊的垂直位置进一步上提（贴近窗口顶部，例如 `top: 2` 或 `top: 3`）；
+2. 优化歌词主体在锁定状态下的垂直内边距（略微下沉 4~6px），使解锁胶囊完全位于歌词上方的负空间，彻底消除对歌词文本的任何遮挡。
+
+- [ ] **Step 1: Write test verifying unlock pill position and non-overlapping margins**
+- [ ] **Step 2: Run test to verify failure**
+- [ ] **Step 3: Implement adjustments in lyrics_overlay_window.dart**
+- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 11: 设置快捷菜单弹出方向智能自适应（向上/向下）
+
+**Files:**
+- Modify: `lib/ui/desktop/lyrics_overlay_window.dart`
+- Test: `test/ui/desktop/desktop_lyrics_test.dart`
+
+**Requirements:**
+1. 展收快捷菜单时，获取悬浮窗当前的屏幕 Y 坐标（`windowManager.getPosition()`）：
+   - 若上方空间充足（例如 `position.dy >= 260.0`，大部分用户放置在屏幕底部或中下部）：
+     - 菜单向上弹出！悬浮窗移动到 `position.dy - 172`，高度设为 260，菜单渲染在歌词上方；
+   - 若上方空间不足（靠屏幕顶部）：
+     - 菜单向下弹出，悬浮窗保持当前 Y，高度设为 260，菜单渲染在歌词下方；
+2. 收起菜单时：
+   - 精确还原原始窗口 Y 坐标和原始 88px 高度。
+
+- [ ] **Step 1: Write test for adaptive upward/downward menu layout and coordinate restoration**
+- [ ] **Step 2: Run test to verify failure**
+- [ ] **Step 3: Implement in lyrics_overlay_window.dart**
+- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 12: 打通“更多设置”拉起主程序并跳转歌词设置页
+
+**Files:**
+- Modify: `lib/ui/desktop/desktop_shell.dart`
+- Test: `test/ui/desktop/desktop_shell_lyrics_settings_test.dart`
+
+**Requirements:**
+1. 在 `DesktopShell` 中监听 `player.openLyricsSettingsRequest`；
+2. 当收到请求时：
+   - 唤起主窗口至前台：`windowManager.show()`, `windowManager.focus()`, 最小化时调用 `windowManager.restore()`；
+   - 通过内容区导航器打开 `DesktopLyricsSettingsPage(player: widget.player)`。
+
+- [ ] **Step 1: Write widget test verifying openLyricsSettingsRequest brings window and pushes settings page**
+- [ ] **Step 2: Run test to verify failure**
+- [ ] **Step 3: Implement in desktop_shell.dart**
+- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 13: 桌面歌词设置页紧凑化与同屏实时预览优化
+
+**Files:**
+- Modify: `lib/ui/pages/desktop_lyrics_settings_page.dart`
+- Test: `test/ui/pages/desktop_lyrics_settings_test.dart`
+
+**Requirements:**
+1. 紧凑化布局调整：
+   - 减小大内边距，去除冗余空隙；
+   - 在桌面宽度宽裕时采用左右双栏布局（左侧为紧凑设置面板，右侧为置顶实时预览卡片）；
+   - 在窄屏或移动端时预览卡片置于顶部或紧凑排列，确保用户在调节上方选项时，能够同屏直观看到下方/右侧预览效果，无需反复滚动页面。
+
+- [ ] **Step 1: Write widget test for compact/split layout and responsive preview**
+- [ ] **Step 2: Run test to verify failure**
+- [ ] **Step 3: Implement in desktop_lyrics_settings_page.dart**
+- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 14: Phase 2 全量回归验证与静态分析
 
 - [ ] **Step 1: Run flutter analyze**
-  运行 `flutter analyze` 确保 0 errors、0 warnings、0 issues。
-- [ ] **Step 2: Run all related unit & widget tests**
-  运行 `flutter test test/ui/desktop/` 与 `flutter test test/ui/pages/` 确保所有用例 100% 绿色通过。
-- [ ] **Step 3: Verification & Commit**
-  整理文档与最终提交。
+- [ ] **Step 2: Run flutter test on all desktop & pages suites**
+- [ ] **Step 3: Final verification and commit**
+
