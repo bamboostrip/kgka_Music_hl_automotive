@@ -26,6 +26,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../services/desktop_lyrics_service.dart';
 import '../../services/windows_desktop_lyrics_bridge.dart';
 import '../design_tokens.dart';
+import 'lyrics_karaoke_line.dart';
 
 /// 子窗口控制器（入口函数创建后模块级持有，供关闭流程使用）。
 WindowController? _overlayWindowController;
@@ -89,6 +90,7 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
   var current = '';
   var next = '';
   var isPlaying = false;
+  var progress = 0.0;
   if (args.length > 2 && args[2].isNotEmpty) {
     try {
       // 包 0.2.1 的 WindowController 无 arguments getter，
@@ -101,6 +103,7 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
       current = initialArgs['current'] as String? ?? '';
       next = initialArgs['next'] as String? ?? '';
       isPlaying = initialArgs['isPlaying'] as bool? ?? false;
+      progress = (initialArgs['progress'] as num?)?.toDouble() ?? 0.0;
     } catch (e) {
       debugPrint('[桌面歌词悬浮窗] 解析初始参数失败，使用默认值: $e');
     }
@@ -197,6 +200,7 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
     current: current,
     next: next,
     isPlaying: isPlaying,
+    progress: progress,
   );
 
   // 尽早注册消息处理，缩短主窗早期消息的丢失窗口期
@@ -210,7 +214,14 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
             model
               ..current = message['current'] as String? ?? model.current
               ..next = message['next'] as String? ?? model.next
-              ..isPlaying = message['isPlaying'] as bool? ?? model.isPlaying;
+              ..isPlaying = message['isPlaying'] as bool? ?? model.isPlaying
+              ..progress = 0.0;
+          }
+        case 'updateProgress':
+          final message = (call.arguments as Map?)?.cast<String, dynamic>();
+          if (message != null) {
+            model.progress = (message['progress'] as num?)?.toDouble() ?? 0.0;
+            model.isPlaying = message['isPlaying'] as bool? ?? model.isPlaying;
           }
         case 'updateSettings':
           final message = (call.arguments as Map?)?.cast<String, dynamic>();
@@ -374,20 +385,24 @@ class _OverlayModel extends ChangeNotifier {
     required String current,
     required String next,
     required bool isPlaying,
+    double progress = 0.0,
   }) : _settings = settings,
        _current = current,
        _next = next,
-       _isPlaying = isPlaying;
+       _isPlaying = isPlaying,
+       _progress = progress;
 
   DesktopLyricsSettings _settings;
   String _current;
   String _next;
   bool _isPlaying;
+  double _progress;
 
   DesktopLyricsSettings get settings => _settings;
   String get current => _current;
   String get next => _next;
   bool get isPlaying => _isPlaying;
+  double get progress => _progress;
 
   set settings(DesktopLyricsSettings value) {
     if (_settings == value) return;
@@ -410,6 +425,12 @@ class _OverlayModel extends ChangeNotifier {
   set isPlaying(bool value) {
     if (_isPlaying == value) return;
     _isPlaying = value;
+    notifyListeners();
+  }
+
+  set progress(double value) {
+    if (_progress == value) return;
+    _progress = value;
     notifyListeners();
   }
 }
@@ -509,6 +530,7 @@ class _LyricsOverlayHomeState extends State<_LyricsOverlayHome>
           current: model.current,
           next: model.next,
           isPlaying: model.isPlaying,
+          progress: model.progress,
           onControlPlayback: (action) => unawaited(_controlPlayback(action)),
           onToggleLock: (locked) => unawaited(_setLocked(locked)),
           onClose: () => unawaited(closeLyricsOverlayWindow()),
@@ -531,6 +553,7 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
     required this.current,
     required this.next,
     required this.isPlaying,
+    this.progress = 0.0,
     required this.onControlPlayback,
     required this.onToggleLock,
     required this.onClose,
@@ -540,6 +563,7 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   final String current;
   final String next;
   final bool isPlaying;
+  final double progress;
   final ValueChanged<String> onControlPlayback;
 
   /// 参数为目标锁定状态（true=锁定）。
@@ -553,12 +577,14 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
             settings: settings,
             current: current,
             next: next,
+            progress: progress,
           )
         : _HoverableOverlay(
             settings: settings,
             current: current,
             next: next,
             isPlaying: isPlaying,
+            progress: progress,
             onControlPlayback: onControlPlayback,
             onToggleLock: onToggleLock,
             onClose: onClose,
@@ -576,11 +602,13 @@ class _LockedLyricsBody extends StatelessWidget {
     required this.settings,
     required this.current,
     required this.next,
+    this.progress = 0.0,
   });
 
   final DesktopLyricsSettings settings;
   final String current;
   final String next;
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
@@ -588,6 +616,7 @@ class _LockedLyricsBody extends StatelessWidget {
       settings: settings,
       current: current,
       next: next,
+      progress: progress,
     );
   }
 }
@@ -599,6 +628,7 @@ class _HoverableOverlay extends StatefulWidget {
     required this.current,
     required this.next,
     required this.isPlaying,
+    this.progress = 0.0,
     required this.onControlPlayback,
     required this.onToggleLock,
     required this.onClose,
@@ -608,6 +638,7 @@ class _HoverableOverlay extends StatefulWidget {
   final String current;
   final String next;
   final bool isPlaying;
+  final double progress;
   final ValueChanged<String> onControlPlayback;
   final ValueChanged<bool> onToggleLock;
   final VoidCallback onClose;
@@ -678,6 +709,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                         settings: settings,
                         current: widget.current,
                         next: widget.next,
+                        progress: widget.progress,
                       ),
                     ),
                   ),
@@ -770,88 +802,97 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
   }
 }
 
-/// 歌词主体（锁定/未锁定两套子树共用）：当前句 + 下一句，含文字阴影。
+/// 歌词主体（锁定/未锁定两套子树共用）：默认单行居中或 QQ 音乐经典双行交错排版。
 ///
-/// 布局契约：紧约束 SizedBox(780x88) + 水平 32 Padding + FittedBox(scaleDown)
-/// + 固定宽度（悬浮窗宽 - 64）的 Column。紧约束是关键：FittedBox 在松约束
-/// （Center 直接包裹）下会按子项原尺寸布局、不触发缩小，子项超高时 Center
-/// 直接溢出（锁定态无 Stack 紧约束故必现，未锁定态靠 Stack 偶然收敛）。
-/// 紧约束保证两行总高超过 88px 窗高（系统字体缩放/48sp 大字号）时整体等比
+/// 布局契约：紧约束 SizedBox(780x88) + 水平 24 Padding + FittedBox(scaleDown)
+/// + 固定宽度（悬浮窗宽 - 48）的容器。
+/// 紧约束保证内容超过 88px 窗高（系统字体缩放/48sp 大字号）时整体等比
 /// 缩小，而不是 RenderFlex 垂直溢出（溢出黄黑条纹会常驻窗口底部）。
 Widget buildOverlayLyricsBody({
   required DesktopLyricsSettings settings,
   required String current,
   required String next,
+  double progress = 0.0,
 }) {
-  final textColor = Color(settings.textColor);
-  final hasNext = next.trim().isNotEmpty;
+  final playedColor = Color(settings.playedTextColor);
+  final unplayedColor = Color(settings.unplayedTextColor);
+  final textAlign = switch (settings.alignment) {
+    'left' => TextAlign.left,
+    'right' => TextAlign.right,
+    _ => TextAlign.center,
+  };
+
+  const horizontalPadding = 24.0;
+  final contentWidth =
+      WindowsDesktopLyricsBridge.overlayWidth - (horizontalPadding * 2);
+
+  final Widget body;
+  if (settings.singleLine) {
+    // 默认单行模式：垂直居中展示单行逐字变色/跑马灯歌词
+    body = LyricsKaraokeLine(
+      text: current.isEmpty ? '暂无歌词' : current,
+      fontSize: settings.fontSize,
+      playedColor: playedColor,
+      unplayedColor: unplayedColor,
+      progress: progress,
+      availableWidth: contentWidth,
+      alignment: textAlign,
+      textOpacity: settings.textOpacity,
+      fontWeight: FontWeight.bold,
+    );
+  } else {
+    // QQ 音乐经典双行交错排版：
+    // 上行居左交错（当前句，变色+跑马灯），下行居右交错（下一句，未播弱化+跑马灯）
+    final dualLineWidth = contentWidth - 60.0;
+    body = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: LyricsKaraokeLine(
+            text: current.isEmpty ? '暂无歌词' : current,
+            fontSize: settings.fontSize * 0.85,
+            playedColor: playedColor,
+            unplayedColor: unplayedColor,
+            progress: progress,
+            availableWidth: dualLineWidth,
+            alignment: TextAlign.left,
+            textOpacity: settings.textOpacity,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerRight,
+          child: LyricsKaraokeLine(
+            text: next.isEmpty ? '' : next,
+            fontSize: settings.fontSize * 0.75,
+            playedColor: playedColor,
+            unplayedColor: unplayedColor.withValues(alpha: 0.65),
+            progress: 0.0,
+            availableWidth: dualLineWidth,
+            alignment: TextAlign.right,
+            textOpacity: settings.textOpacity * 0.65,
+            fontWeight: FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
   return SizedBox(
     width: WindowsDesktopLyricsBridge.overlayWidth,
     height: WindowsDesktopLyricsBridge.overlayHeight,
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: Center(
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: SizedBox(
-            width: WindowsDesktopLyricsBridge.overlayWidth - 64,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _lyricLine(
-                  text: current.isEmpty ? '暂无歌词' : current,
-                  fontSize: settings.fontSize,
-                  color: textColor,
-                  fontWeight: FontWeight.bold,
-                ),
-                if (hasNext) ...[
-                  const SizedBox(height: 3),
-                  _lyricLine(
-                    text: next,
-                    fontSize: settings.fontSize * 0.58,
-                    color: textColor.withValues(alpha: 0.60),
-                    fontWeight: FontWeight.normal,
-                  ),
-                ],
-              ],
-            ),
+            width: contentWidth,
+            child: body,
           ),
         ),
-      ),
-    ),
-  );
-}
-
-Widget _lyricLine({
-  required String text,
-  required double fontSize,
-  required Color color,
-  required FontWeight fontWeight,
-}) {
-  return SizedBox(
-    width: double.infinity,
-    child: Text(
-      text,
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.ellipsis,
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        decoration: TextDecoration.none,
-        fontSize: fontSize,
-        color: color,
-        fontWeight: fontWeight,
-        shadows: [
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.75),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
-          ),
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 14,
-          ),
-        ],
       ),
     ),
   );

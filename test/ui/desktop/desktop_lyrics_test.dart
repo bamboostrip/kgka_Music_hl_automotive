@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiyin_music/services/desktop_lyrics_service.dart';
 import 'package:shiyin_music/services/windows_desktop_lyrics_bridge.dart';
+import 'package:shiyin_music/ui/desktop/lyrics_karaoke_line.dart';
 import 'package:shiyin_music/ui/desktop/lyrics_overlay_window.dart';
 
 void main() {
@@ -523,12 +524,12 @@ void main() {
         (tester) async {
       await pumpContent(
         tester,
-        settings: const DesktopLyricsSettings(locked: true),
+        settings: const DesktopLyricsSettings(locked: true, singleLine: false),
       );
 
       // 歌词文字仍在（含下一句）。
-      expect(find.text('第一句歌词'), findsOneWidget);
-      expect(find.text('第二句歌词'), findsOneWidget);
+      expect(find.text('第一句歌词'), findsWidgets);
+      expect(find.text('第二句歌词'), findsWidgets);
 
       // 无任何依赖 hover 的窗内 UI：工具栏（Tooltip/图标）、MouseRegion。
       // （限定在悬浮窗内容子树内：MaterialApp 自带框架级 MouseRegion。）
@@ -566,7 +567,7 @@ void main() {
         (tester) async {
       await pumpContent(tester, settings: const DesktopLyricsSettings());
 
-      expect(find.text('第一句歌词'), findsOneWidget);
+      expect(find.text('第一句歌词'), findsWidgets);
       expect(find.byType(Tooltip), findsWidgets);
       expect(find.byIcon(Icons.lock_open_rounded), findsOneWidget);
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
@@ -651,6 +652,7 @@ void main() {
       WidgetTester tester, {
       required DesktopLyricsSettings settings,
       double textScale = 1.0,
+      double progress = 0.0,
     }) async {
       tester.view.physicalSize = const Size(
         WindowsDesktopLyricsBridge.overlayWidth,
@@ -674,6 +676,7 @@ void main() {
               current: '当前句歌词内容',
               next: '下一句歌词内容',
               isPlaying: true,
+              progress: progress,
               onControlPlayback: (_) {},
               onToggleLock: (_) {},
               onClose: () {},
@@ -701,7 +704,7 @@ void main() {
         settings: const DesktopLyricsSettings(locked: true, fontSize: 48),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('当前句歌词内容'), findsOneWidget);
+      expect(find.text('当前句歌词内容'), findsWidgets);
     });
 
     testWidgets('未锁定态悬停卡片内同样不溢出（48sp + 1.5 倍缩放）',
@@ -720,9 +723,175 @@ void main() {
         tester,
         settings: const DesktopLyricsSettings(locked: true),
       );
-      final textWidget = tester.widget<Text>(find.text('当前句歌词内容'));
+      final textWidget = tester.widget<Text>(find.text('当前句歌词内容').first);
       expect(textWidget.style?.decoration, TextDecoration.none);
       expect(find.byType(Material), findsWidgets);
+    });
+  });
+
+  group('桌面歌词排版（单行居中与 QQ 音乐双行交错）', () {
+    Future<void> pumpCustomOverlay(
+      WidgetTester tester, {
+      required DesktopLyricsSettings settings,
+      required String current,
+      required String next,
+      double progress = 0.0,
+    }) async {
+      tester.view.physicalSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DesktopLyricsOverlayContent(
+            settings: settings,
+            current: current,
+            next: next,
+            isPlaying: true,
+            progress: progress,
+            onControlPlayback: (_) {},
+            onToggleLock: (_) {},
+            onClose: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('单行模式 (singleLine: true)：仅渲染当前句，不渲染下一句', (tester) async {
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: true),
+        current: '当前句歌词内容',
+        next: '下一句歌词内容',
+      );
+      expect(find.text('当前句歌词内容'), findsWidgets);
+      expect(find.text('下一句歌词内容'), findsNothing);
+
+      final karaokeLines = tester.widgetList<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine)).toList();
+      expect(karaokeLines.length, 1);
+      expect(karaokeLines.first.text, '当前句歌词内容');
+      expect(karaokeLines.first.fontWeight, FontWeight.bold);
+    });
+
+    testWidgets('双行交错模式 (singleLine: false)：当前句居左交错，下一句居右交错', (tester) async {
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: false),
+        current: '当前句歌词内容',
+        next: '下一句歌词内容',
+      );
+      expect(find.text('当前句歌词内容'), findsWidgets);
+      expect(find.text('下一句歌词内容'), findsWidgets);
+
+      final karaokeLines = tester.widgetList<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine)).toList();
+      expect(karaokeLines.length, 2);
+
+      final currentLine = karaokeLines[0];
+      final nextLine = karaokeLines[1];
+
+      expect(currentLine.text, '当前句歌词内容');
+      expect(currentLine.alignment, TextAlign.left);
+      expect(currentLine.fontWeight, FontWeight.bold);
+
+      expect(nextLine.text, '下一句歌词内容');
+      expect(nextLine.alignment, TextAlign.right);
+      expect(nextLine.progress, 0.0);
+
+      final column = tester.widget<Column>(find.byType(Column));
+      final line1Align = column.children[0] as Align;
+      final line2Align = column.children[2] as Align;
+      expect(line1Align.alignment, Alignment.centerLeft);
+      expect(line2Align.alignment, Alignment.centerRight);
+    });
+
+    testWidgets('修改 progress 更新 DesktopLyricsOverlayContent 变色进度', (tester) async {
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: true),
+        current: '变色测试',
+        next: '',
+        progress: 0.25,
+      );
+
+      var karaokeLine = tester.widget<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine));
+      expect(karaokeLine.progress, 0.25);
+
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: true),
+        current: '变色测试',
+        next: '',
+        progress: 0.75,
+      );
+
+      karaokeLine = tester.widget<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine));
+      expect(karaokeLine.progress, 0.75);
+    });
+
+    testWidgets('单行模式下 settings.alignment 生效', (tester) async {
+      for (final alignStr in ['left', 'right', 'center']) {
+        final expected = alignStr == 'left'
+            ? TextAlign.left
+            : (alignStr == 'right' ? TextAlign.right : TextAlign.center);
+        await pumpCustomOverlay(
+          tester,
+          settings: DesktopLyricsSettings(singleLine: true, alignment: alignStr),
+          current: '对齐测试',
+          next: '',
+        );
+        final line = tester.widget<LyricsKaraokeLine>(find.byType(LyricsKaraokeLine));
+        expect(line.alignment, expected);
+      }
+    });
+
+    testWidgets('当前歌词为空时渲染“暂无歌词”', (tester) async {
+      await pumpCustomOverlay(
+        tester,
+        settings: const DesktopLyricsSettings(singleLine: true),
+        current: '',
+        next: '',
+      );
+
+      expect(find.text('暂无歌词'), findsWidgets);
+    });
+
+    testWidgets('双行模式下 48sp 与 2.0 textScale 同样不溢出', (tester) async {
+      tester.view.physicalSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(
+              WindowsDesktopLyricsBridge.overlayWidth,
+              WindowsDesktopLyricsBridge.overlayHeight,
+            ),
+            textScaler: TextScaler.linear(2.0),
+          ),
+          child: MaterialApp(
+            home: DesktopLyricsOverlayContent(
+              settings: const DesktopLyricsSettings(singleLine: false, fontSize: 48),
+              current: '超大字号当前句歌词内容',
+              next: '超大字号下一句歌词内容',
+              isPlaying: true,
+              progress: 0.5,
+              onControlPlayback: (_) {},
+              onToggleLock: (_) {},
+              onClose: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
     });
   });
 
