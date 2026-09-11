@@ -900,6 +900,7 @@ void main() {
     Future<void> pumpQuickSettings(
       WidgetTester tester, {
       required Widget child,
+      Future<dynamic>? Function(MethodCall call)? windowManagerHandler,
     }) async {
       tester.view.physicalSize = const Size(
         WindowsDesktopLyricsBridge.overlayWidth,
@@ -907,6 +908,15 @@ void main() {
       );
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
+
+      const windowManagerChannel = MethodChannel('window_manager');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        windowManagerChannel,
+        windowManagerHandler ?? (call) async => null,
+      );
+      addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(windowManagerChannel, null));
 
       await tester.pumpWidget(
         MaterialApp(
@@ -1123,6 +1133,77 @@ void main() {
       expect(openedDetailed, isTrue);
       // 菜单已关闭
       expect(find.text('更多设置'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('展开快捷菜单时动态调整原生窗口高度为 260，收起或销毁时复位为 88', (tester) async {
+      final windowSizes = <Size>[];
+
+      await pumpQuickSettings(
+        tester,
+        windowManagerHandler: (call) async {
+          if (call.method == 'setSize' || call.method == 'setBounds') {
+            final args = (call.arguments as Map).cast<String, dynamic>();
+            windowSizes.add(Size(
+              (args['width'] as num).toDouble(),
+              (args['height'] as num).toDouble(),
+            ));
+          }
+          return null;
+        },
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+        ),
+      );
+
+      // 初始未展开菜单，未触发快捷菜单引起的 setSize
+      expect(windowSizes, isEmpty);
+
+      // 1. 点击设置按钮展开菜单 -> 窗口高度调整为 260
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+      expect(windowSizes.isNotEmpty, isTrue);
+      expect(
+        windowSizes.last,
+        const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+      );
+
+      // 2. 点击空白遮罩收起菜单 -> 窗口高度恢复为 88
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(
+        windowSizes.last,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+
+      // 3. 再次点击设置按钮展开
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+      expect(
+        windowSizes.last,
+        const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+      );
+
+      // 4. 菜单展开状态下组件销毁（如被移除或关闭）-> dispose 防御性重置窗口尺寸回 88
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      expect(
+        windowSizes.last,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 

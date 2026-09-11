@@ -684,7 +684,39 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
   bool _hovering = false;
   bool _showSettingsMenu = false;
 
-  Future<void> _updateSettings(DesktopLyricsSettings newSettings) async {
+  void _setSettingsMenuVisible(bool visible) {
+    if (_showSettingsMenu == visible) return;
+    setState(() => _showSettingsMenu = visible);
+    try {
+      windowManager.setSize(
+        Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          visible ? 260.0 : WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[桌面歌词悬浮窗] 调整菜单窗口尺寸失败: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_showSettingsMenu) {
+      try {
+        windowManager.setSize(
+          const Size(
+            WindowsDesktopLyricsBridge.overlayWidth,
+            WindowsDesktopLyricsBridge.overlayHeight,
+          ),
+        );
+      } catch (e) {
+        debugPrint('[桌面歌词悬浮窗] 调整菜单窗口尺寸失败: $e');
+      }
+    }
+    super.dispose();
+  }
+
+  void _updateSettings(DesktopLyricsSettings newSettings) {
     // Update local model for immediate response
     widget.onUpdateSettings?.call(newSettings);
   }
@@ -767,7 +799,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _showSettingsMenu = false),
+                    onTap: () => _setSettingsMenuVisible(false),
                   ),
                 ),
               Positioned(
@@ -793,7 +825,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                       _updateSettings(newSettings);
                     },
                     onOpenDetailedSettings: () {
-                      setState(() => _showSettingsMenu = false);
+                      _setSettingsMenuVisible(false);
                       widget.onOpenDetailedSettings?.call();
                     },
                   ),
@@ -864,7 +896,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
               iconSize: 18,
               isActive: _showSettingsMenu,
               onPressed: () =>
-                  setState(() => _showSettingsMenu = !_showSettingsMenu),
+                  _setSettingsMenuVisible(!_showSettingsMenu),
             ),
             const SizedBox(width: 2),
             _ToolbarButton(
