@@ -424,11 +424,10 @@ class LoudnessService {
   /// 按增益正负分流:
   /// - gain > 0(歌曲偏轻,需放大):
   ///   - Android:原生 [LoudnessEnhancer](官方仅支持正向放大),setVolume 1.0;
-  ///   - Linux:mpv 音量上限已被 vendored just_audio_media_kit 抬高
-  ///     (volume-max=400),setVolume 可 >1.0 直接数字放大;
-  ///   - Windows:WinRT MediaPlayer.Volume 只认 0..1,无放大能力,
-  ///     保持 1.0(平台限制,设置页有说明);
-  ///   - iOS/macOS:同 Windows,保持 1.0。
+  ///   - Linux/Windows(mpv 后端):mpv 音量上限已被 vendored
+  ///     just_audio_media_kit 抬高(volume-max=400),setVolume 可 >1.0
+  ///     直接数字放大;
+  ///   - iOS/macOS:无放大能力,保持 1.0。
   /// - gain <= 0(歌曲偏响,需衰减):统一用 [AudioPlayer.setVolume] 衰减。
   ///   Android 的 LoudnessEnhancer 不支持负增益(衰减属未定义行为,
   ///   多数设备无效),故响歌也走 setVolume。
@@ -475,8 +474,8 @@ class LoudnessService {
       return;
     }
 
-    // 轻歌放大:Android 用 LoudnessEnhancer;Linux 用 mpv 数字放大(>1.0);
-    // Windows(WinRT Volume 0..1)/iOS/macOS 无放大能力,保持用户音量。
+    // 轻歌放大:Android 用 LoudnessEnhancer;Linux/Windows(mpv 后端)用
+    // mpv 数字放大(>1.0);iOS/macOS 无放大能力,保持用户音量。
     if (defaultTargetPlatform == TargetPlatform.android) {
       final gainMb = (clampedGain * 100).round().clamp(0, 1500);
       try {
@@ -498,15 +497,17 @@ class LoudnessService {
       } on MissingPluginException {
         log('applyGain AMPLIFY(android) NO_PLUGIN → 降级 setVolume');
       }
-    } else if (defaultTargetPlatform == TargetPlatform.linux && !kIsWeb) {
+    } else if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.linux ||
+            defaultTargetPlatform == TargetPlatform.windows)) {
       // mpv: just_audio volume 1.0 = mpv volume 100; 放大即 >100
       //（vendored just_audio_media_kit 已抬高 volume-max）。
       final volume = (user * pow(10, clampedGain / 20)).toDouble().clamp(
         0.0,
-        _linuxMaxBoostVolume,
+        _mpvMaxBoostVolume,
       );
       log(
-        'applyGain AMPLIFY(linux/mpv) gain=${clampedGain.toStringAsFixed(2)}dB volume=${volume.toStringAsFixed(3)} instant=$instant user=$user',
+        'applyGain AMPLIFY(mpv) gain=${clampedGain.toStringAsFixed(2)}dB volume=${volume.toStringAsFixed(3)} instant=$instant user=$user',
       );
       await _disableNativeEnhancer(audioSessionId);
       await _setVolumeRamped(audioPlayer, volume, instant);
@@ -521,17 +522,24 @@ class LoudnessService {
     await audioPlayer.setVolume(user);
   }
 
-  /// Linux 放大上限（mpv 音量标量）。+6dB = 2.0；vendored 适配层把
+  /// mpv 后端放大上限（mpv 音量标量）。+6dB = 2.0；vendored 适配层把
   /// mpv volume-max 抬到 400（=4.0/+12dB），留出钳制后的安全余量。
-  static const double _linuxMaxBoostVolume = 2.0;
+  static const double _mpvMaxBoostVolume = 2.0;
 
-  /// 平台音量上限（ramp 插值时的 clamp 边界）。
+  /// 平台音量上限（ramp 插值时的 clamp 边界）。mpv 后端（Linux/Windows）
+  /// 允许 >1.0；其余后端 0..1。与上方放大门控同用 defaultTargetPlatform，
+  /// 保证测试可覆写、两处判定一致。
   static double get _platformMaxVolume =>
-      (!kIsWeb && Platform.isLinux) ? _linuxMaxBoostVolume : 1.0;
+      (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.linux ||
+              defaultTargetPlatform == TargetPlatform.windows))
+      ? _mpvMaxBoostVolume
+      : 1.0;
 
   /// 平滑过渡 setVolume。instant=true 直接设置(缓存命中首播);否则在
   /// [_rampDurationMs] 内线性插值,消除音量突变。插值边界按平台音量上限
-  /// clamp（Linux 放大路径允许 >1.0，见 [_linuxMaxBoostVolume]）。
+  /// clamp（mpv 后端（Linux/Windows）放大路径允许 >1.0，见
+  /// [_mpvMaxBoostVolume]）。
   Future<void> _setVolumeRamped(
     AudioPlayer audioPlayer,
     double targetVolume, [

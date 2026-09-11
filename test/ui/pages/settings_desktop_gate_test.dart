@@ -186,7 +186,7 @@ void main() {
   });
 
   group('桌面形态响度提示', () {
-    testWidgets('桌面形态在 Windows 平台上展示 Windows 限制提示', (tester) async {
+    testWidgets('桌面形态在 Windows 平台上不显示平台限制提示（mpv 后端已支持放大）', (tester) async {
       debugDesktopFormFactorOverride = true;
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
@@ -194,9 +194,10 @@ void main() {
 
         expect(find.text('响度均衡'), findsOneWidget);
         expect(
-          find.text('基于 EBU R128 LUFS 标准化；Windows 仅支持压低偏响歌曲'),
+          find.text('基于 EBU R128 LUFS 标准化，降低各首歌曲音量差异'),
           findsOneWidget,
         );
+        expect(find.textContaining('仅支持压低'), findsNothing);
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
