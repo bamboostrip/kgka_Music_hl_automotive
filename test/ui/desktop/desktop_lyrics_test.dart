@@ -940,7 +940,21 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
         windowManagerChannel,
-        windowManagerHandler ?? (call) async => null,
+        (call) async {
+          if (windowManagerHandler != null) {
+            final result = await windowManagerHandler(call);
+            if (result != null) return result;
+          }
+          if (call.method == 'getBounds' || call.method == 'getPosition') {
+            return {
+              'x': 0.0,
+              'y': 0.0,
+              'width': WindowsDesktopLyricsBridge.overlayWidth,
+              'height': WindowsDesktopLyricsBridge.overlayHeight,
+            };
+          }
+          return null;
+        },
       );
       addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(windowManagerChannel, null));
@@ -1304,6 +1318,215 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('当窗口顶部 >= 180 时快捷菜单向上弹出：窗口上移 172、高度扩展至 260、菜单位于 bottom 92；收起时位置与尺寸恢复', (tester) async {
+      Offset currentPos = const Offset(100, 500);
+      Size currentSize = const Size(WindowsDesktopLyricsBridge.overlayWidth, 88.0);
+      final positionLogs = <Offset>[];
+      final sizeLogs = <Size>[];
+
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+          windowPositionGetter: () async => currentPos,
+          windowPositionSetter: (offset) async {
+            currentPos = offset;
+            positionLogs.add(offset);
+          },
+          windowSizeSetter: (size) async {
+            currentSize = size;
+            sizeLogs.add(size);
+          },
+        ),
+      );
+
+      // 1. 点击设置按钮展开菜单 -> 向上弹出
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      // 窗口上移 172：500 - 172 = 328
+      expect(positionLogs, [const Offset(100, 328)]);
+      expect(currentPos, const Offset(100, 328));
+
+      // 窗口高度扩展至 260
+      expect(sizeLogs, [const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0)]);
+      expect(currentSize, const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0));
+
+      // 快捷菜单渲染在工具栏上方 (bottom: 92)
+      final menuFinder = find.descendant(
+        of: find.byType(HoverableOverlay),
+        matching: find.byWidgetPredicate(
+          (w) => w is Positioned && w.child is OverlayQuickSettingsMenu,
+        ),
+      );
+      expect(menuFinder, findsOneWidget);
+      final menuPositioned = tester.widget<Positioned>(menuFinder);
+      expect(menuPositioned.bottom, 92.0);
+      expect(menuPositioned.top, isNull);
+
+      // 歌词卡片渲染在底部 (bottom: 0)
+      final lyricsCardFinder = find.descendant(
+        of: find.byType(HoverableOverlay),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Positioned &&
+              w.height == WindowsDesktopLyricsBridge.overlayHeight &&
+              w.bottom == 0.0,
+        ),
+      );
+      expect(lyricsCardFinder, findsOneWidget);
+
+      // 2. 点击空白遮罩收起菜单 -> 恢复原始位置与高度 88
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(
+        sizeLogs.last,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+      expect(positionLogs.last, const Offset(100, 500));
+      expect(currentPos, const Offset(100, 500));
+      expect(find.byType(OverlayQuickSettingsMenu), findsNothing);
+    });
+
+    testWidgets('当窗口顶部 < 180 时快捷菜单向下弹出：窗口位置保持、高度扩展至 260、菜单位于 top 38；收起时尺寸恢复', (tester) async {
+      Offset currentPos = const Offset(100, 50);
+      Size currentSize = const Size(WindowsDesktopLyricsBridge.overlayWidth, 88.0);
+      final positionLogs = <Offset>[];
+      final sizeLogs = <Size>[];
+
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+          windowPositionGetter: () async => currentPos,
+          windowPositionSetter: (offset) async {
+            currentPos = offset;
+            positionLogs.add(offset);
+          },
+          windowSizeSetter: (size) async {
+            currentSize = size;
+            sizeLogs.add(size);
+          },
+        ),
+      );
+
+      // 1. 点击设置按钮展开菜单 -> 向下弹出
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      // 窗口位置保持不变
+      expect(positionLogs, isEmpty);
+      expect(currentPos, const Offset(100, 50));
+
+      // 窗口高度扩展至 260
+      expect(sizeLogs, [const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0)]);
+      expect(currentSize, const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0));
+
+      // 快捷菜单渲染在工具栏下方 (top: 38)
+      final menuFinder = find.descendant(
+        of: find.byType(HoverableOverlay),
+        matching: find.byWidgetPredicate(
+          (w) => w is Positioned && w.child is OverlayQuickSettingsMenu,
+        ),
+      );
+      expect(menuFinder, findsOneWidget);
+      final menuPositioned = tester.widget<Positioned>(menuFinder);
+      expect(menuPositioned.top, 38.0);
+      expect(menuPositioned.bottom, isNull);
+
+      // 歌词卡片渲染在顶部 (top: 0)
+      final lyricsCardFinder = find.descendant(
+        of: find.byType(HoverableOverlay),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Positioned &&
+              w.height == WindowsDesktopLyricsBridge.overlayHeight &&
+              w.top == 0.0,
+        ),
+      );
+      expect(lyricsCardFinder, findsOneWidget);
+
+      // 2. 点击空白遮罩收起菜单 -> 尺寸恢复为 88，位置未调整
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(
+        sizeLogs.last,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+      expect(positionLogs, isEmpty);
+      expect(find.byType(OverlayQuickSettingsMenu), findsNothing);
+    });
+
+    testWidgets('快捷菜单向上弹出状态下组件销毁时，dispose 防御性恢复窗口位置与尺寸', (tester) async {
+      Offset currentPos = const Offset(100, 500);
+      Size currentSize = const Size(WindowsDesktopLyricsBridge.overlayWidth, 88.0);
+      final positionLogs = <Offset>[];
+      final sizeLogs = <Size>[];
+
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+          windowPositionGetter: () async => currentPos,
+          windowPositionSetter: (offset) async {
+            currentPos = offset;
+            positionLogs.add(offset);
+          },
+          windowSizeSetter: (size) async {
+            currentSize = size;
+            sizeLogs.add(size);
+          },
+        ),
+      );
+
+      // 打开菜单向上弹出
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      expect(currentPos, const Offset(100, 328));
+      expect(currentSize, const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0));
+
+      // 组件销毁
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      expect(
+        sizeLogs.last,
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+      expect(positionLogs.last, const Offset(100, 500));
+      expect(currentPos, const Offset(100, 500));
     });
   });
 

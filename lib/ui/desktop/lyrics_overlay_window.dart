@@ -585,6 +585,9 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
     this.cursorPositionProvider,
     this.windowPositionProvider,
     this.ignoreMouseEventsSetter,
+    this.windowPositionGetter,
+    this.windowPositionSetter,
+    this.windowSizeSetter,
   });
 
   final DesktopLyricsSettings settings;
@@ -602,6 +605,9 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   final Future<Offset?> Function()? cursorPositionProvider;
   final Future<Offset?> Function()? windowPositionProvider;
   final Future<void> Function(bool ignore)? ignoreMouseEventsSetter;
+  final Future<Offset> Function()? windowPositionGetter;
+  final Future<void> Function(Offset offset)? windowPositionSetter;
+  final Future<void> Function(Size size)? windowSizeSetter;
 
   @override
   Widget build(BuildContext context) {
@@ -627,6 +633,9 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
             onClose: onClose,
             onUpdateSettings: onUpdateSettings,
             onOpenDetailedSettings: onOpenDetailedSettings,
+            windowPositionGetter: windowPositionGetter,
+            windowPositionSetter: windowPositionSetter,
+            windowSizeSetter: windowSizeSetter,
           );
     return Material(
       type: MaterialType.transparency,
@@ -836,6 +845,9 @@ class _LockedLyricsBodyState extends State<LockedLyricsBody> {
   }
 }
 
+@visibleForTesting
+typedef HoverableOverlay = _HoverableOverlay;
+
 /// 未锁定态：悬停淡入暗色卡片 + 顶部工具栏，整卡可拖动。
 class _HoverableOverlay extends StatefulWidget {
   const _HoverableOverlay({
@@ -849,6 +861,9 @@ class _HoverableOverlay extends StatefulWidget {
     required this.onClose,
     this.onUpdateSettings,
     this.onOpenDetailedSettings,
+    this.windowPositionGetter,
+    this.windowPositionSetter,
+    this.windowSizeSetter,
   });
 
   final DesktopLyricsSettings settings;
@@ -861,6 +876,9 @@ class _HoverableOverlay extends StatefulWidget {
   final VoidCallback onClose;
   final ValueChanged<DesktopLyricsSettings>? onUpdateSettings;
   final VoidCallback? onOpenDetailedSettings;
+  final Future<Offset> Function()? windowPositionGetter;
+  final Future<void> Function(Offset offset)? windowPositionSetter;
+  final Future<void> Function(Size size)? windowSizeSetter;
 
   @override
   State<_HoverableOverlay> createState() => _HoverableOverlayState();
@@ -869,34 +887,141 @@ class _HoverableOverlay extends StatefulWidget {
 class _HoverableOverlayState extends State<_HoverableOverlay> {
   bool _hovering = false;
   bool _showSettingsMenu = false;
+  bool _menuPopsUpward = false;
+  double? _originalWindowTop;
+  bool _isTogglingSettingsMenu = false;
 
-  void _setSettingsMenuVisible(bool visible) {
-    if (_showSettingsMenu == visible) return;
-    setState(() => _showSettingsMenu = visible);
+  Future<Offset> Function()? windowPositionGetter;
+  Future<void> Function(Offset offset)? windowPositionSetter;
+  Future<void> Function(Size size)? windowSizeSetter;
+
+  @override
+  void initState() {
+    super.initState();
+    windowPositionGetter = widget.windowPositionGetter;
+    windowPositionSetter = widget.windowPositionSetter;
+    windowSizeSetter = widget.windowSizeSetter;
+  }
+
+  @override
+  void didUpdateWidget(covariant _HoverableOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.windowPositionGetter != null) {
+      windowPositionGetter = widget.windowPositionGetter;
+    }
+    if (widget.windowPositionSetter != null) {
+      windowPositionSetter = widget.windowPositionSetter;
+    }
+    if (widget.windowSizeSetter != null) {
+      windowSizeSetter = widget.windowSizeSetter;
+    }
+  }
+
+  Future<Offset> _getWindowPosition() async {
     try {
-      windowManager.setSize(
-        Size(
-          WindowsDesktopLyricsBridge.overlayWidth,
-          visible ? 260.0 : WindowsDesktopLyricsBridge.overlayHeight,
-        ),
-      );
+      final getter = windowPositionGetter ?? widget.windowPositionGetter;
+      if (getter != null) {
+        return await getter();
+      }
+      return await windowManager.getPosition();
+    } catch (e) {
+      debugPrint('[桌面歌词悬浮窗] 获取窗口位置失败: $e');
+      return Offset.zero;
+    }
+  }
+
+  Future<void> _setWindowPosition(Offset offset) async {
+    try {
+      final setter = windowPositionSetter ?? widget.windowPositionSetter;
+      if (setter != null) {
+        await setter(offset);
+      } else {
+        await windowManager.setPosition(offset);
+      }
+    } catch (e) {
+      debugPrint('[桌面歌词悬浮窗] 调整窗口位置失败: $e');
+    }
+  }
+
+  Future<void> _setWindowSize(Size size) async {
+    try {
+      final setter = windowSizeSetter ?? widget.windowSizeSetter;
+      if (setter != null) {
+        await setter(size);
+      } else {
+        await windowManager.setSize(size);
+      }
     } catch (e) {
       debugPrint('[桌面歌词悬浮窗] 调整菜单窗口尺寸失败: $e');
+    }
+  }
+
+  Future<void> _setSettingsMenuVisible(bool visible) async {
+    if (_showSettingsMenu == visible || _isTogglingSettingsMenu) return;
+    _isTogglingSettingsMenu = true;
+    try {
+      if (visible) {
+        final pos = await _getWindowPosition();
+        _originalWindowTop = pos.dy;
+
+        if (pos.dy >= 180.0) {
+          _menuPopsUpward = true;
+          final newTop = pos.dy - 172.0;
+          await _setWindowPosition(Offset(pos.dx, newTop));
+          await _setWindowSize(
+            const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+          );
+        } else {
+          _menuPopsUpward = false;
+          await _setWindowSize(
+            const Size(WindowsDesktopLyricsBridge.overlayWidth, 260.0),
+          );
+        }
+        if (!mounted) return;
+        setState(() => _showSettingsMenu = true);
+      } else {
+        if (_menuPopsUpward && _originalWindowTop != null) {
+          await _setWindowSize(
+            const Size(
+              WindowsDesktopLyricsBridge.overlayWidth,
+              WindowsDesktopLyricsBridge.overlayHeight,
+            ),
+          );
+          final pos = await _getWindowPosition();
+          await _setWindowPosition(Offset(pos.dx, _originalWindowTop!));
+        } else {
+          await _setWindowSize(
+            const Size(
+              WindowsDesktopLyricsBridge.overlayWidth,
+              WindowsDesktopLyricsBridge.overlayHeight,
+            ),
+          );
+        }
+        _menuPopsUpward = false;
+        _originalWindowTop = null;
+        if (!mounted) return;
+        setState(() => _showSettingsMenu = false);
+      }
+    } finally {
+      _isTogglingSettingsMenu = false;
     }
   }
 
   @override
   void dispose() {
     if (_showSettingsMenu) {
-      try {
-        windowManager.setSize(
-          const Size(
-            WindowsDesktopLyricsBridge.overlayWidth,
-            WindowsDesktopLyricsBridge.overlayHeight,
-          ),
-        );
-      } catch (e) {
-        debugPrint('[桌面歌词悬浮窗] 调整菜单窗口尺寸失败: $e');
+      _setWindowSize(
+        const Size(
+          WindowsDesktopLyricsBridge.overlayWidth,
+          WindowsDesktopLyricsBridge.overlayHeight,
+        ),
+      );
+      if (_menuPopsUpward && _originalWindowTop != null) {
+        final originalTop = _originalWindowTop!;
+        () async {
+          final pos = await _getWindowPosition();
+          await _setWindowPosition(Offset(pos.dx, originalTop));
+        }();
       }
     }
     super.dispose();
@@ -953,8 +1078,11 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              SizedBox(
-                width: WindowsDesktopLyricsBridge.overlayWidth,
+              Positioned(
+                top: _menuPopsUpward ? null : 0,
+                bottom: _menuPopsUpward ? 0 : null,
+                left: 0,
+                right: 0,
                 height: WindowsDesktopLyricsBridge.overlayHeight,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -989,7 +1117,7 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
                   ),
                 ),
               Positioned(
-                top: 2,
+                top: _menuPopsUpward ? 174 : 2,
                 right: 8,
                 child: AnimatedOpacity(
                   opacity: showToolbar ? 1.0 : 0.0,
@@ -1003,7 +1131,8 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
               ),
               if (_showSettingsMenu)
                 Positioned(
-                  top: 38,
+                  top: _menuPopsUpward ? null : 38,
+                  bottom: _menuPopsUpward ? 92 : null,
                   right: 8,
                   child: _OverlayQuickSettingsMenu(
                     settings: settings,
@@ -1249,6 +1378,9 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
     );
   }
 }
+
+@visibleForTesting
+typedef OverlayQuickSettingsMenu = _OverlayQuickSettingsMenu;
 
 /// 桌面歌词悬浮工具栏快捷调节菜单（字号加减、预设配色、单双行切换、更多设置）。
 class _OverlayQuickSettingsMenu extends StatelessWidget {
