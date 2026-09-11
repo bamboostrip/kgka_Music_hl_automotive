@@ -1,7 +1,9 @@
 # 时音 Windows 音频后端迁移 media_kit 方案（评估稿）
 
 > 日期：2026-09-11 · 分支：`feature/pc-desktop-adaptation`
-> 状态：**待评估，未实施**。本文所有数字均为本机实测，非估算；凡未实测的都显式标注"待实测"。
+> 状态：**已实施（阶段 0-3，见 §9 实施记录；阶段 4 gapless 未做）**。
+> 本文数字均为实测（迁移前三产物基线与迁移后数字均经 `flutter clean` 干净构建复测）；
+> R1/R2/R3 为**发版期决策**，尚未裁决——见 §9.3。
 > 读者：评估方（技术可行性 / 许可与分发 / 回归成本三个维度）。
 
 ## 0. 结论摘要（TL;DR）
@@ -145,15 +147,28 @@
 
 行动项：向评估方确认该 DLL 的 LGPL/GPL 归属；若不可确认，只能走 R1(b)/(c)。
 
-### 4.3 R3：体积 — 已实测
+**2026-09-11 调研补充（已证实 GPL 倾向）**：media-kit 官方仓库 issue #20
+（"custom libmpv shared libraries"）明确说明默认捆绑构建为 GPL、闭源商业
+应用需自建 LGPL 版 libmpv（社区通行做法是 media-autobuild_suite 关闭 GPL
+组件）。本项目为私有闭源仓库且对外分发 portable.zip/setup.exe——**若按
+(a) 路线发版，需要项目所有者显式接受 GPL 分发风险，或改走 (c) 自建
+LGPL libmpv（`ensureInitialized(libmpv:)` 支持自定义 DLL 路径，应用侧
+代码无需改动）**。R2 维持"发版阻塞项"评级。
 
-| 项 | 现状 | 迁移后 | 说明 |
+### 4.3 R3：体积 — 已实测（干净构建复测，2026-09-11）
+
+| 项 | 迁移前（干净基线） | 迁移后（干净构建） | 增量 |
 |---|---|---|---|
-| runner bundle（未压缩） | 43 MB | **约 58 MB**（+15 MB） | 实测 DLL 15 MB |
-| `portable.zip` | 18.6 MB | 约 25 MB（待实测） | deflate 压缩率低于 7z |
-| `setup.exe`（Inno，lzma2/max + solid） | 待实测 | 预计 +5~7 MB（**待实测**） | 5.2 MB 的 7z 归档为压缩后下界参考 |
+| runner bundle（未压缩） | 42 MB | 57 MB | **+15 MB** |
+| `portable.zip` | 18,712,804 B（17.8 MB） | 26,087,281 B（24.9 MB） | **+7.4 MB** |
+| `setup.exe`（Inno，lzma2/max + solid） | 15,618,348 B（14.9 MB） | 21,184,770 B（20.2 MB） | **+5.6 MB**（落在预估 +5~7 MB 内） |
 
 对便携版用户（解压覆盖）而言 15 MB 的增量可感知。
+
+> ⚠️ 实测过程中的运维发现：切换依赖变体后不 `flutter clean`，旧 DLL
+> （如 libmpv-2.dll / just_audio_windows_plugin.dll）会**残留**在
+> `build/windows/x64/runner/Release/` 并被打进新包，产物体积与内容都会
+> 失真（首测 setup.exe 仅差 70KB 即此假象）。切换变体后必须 clean 重测。
 
 ### 4.4 R4：CI 与构建流程
 
@@ -231,3 +246,38 @@
 | 依赖可解析（无版本冲突） | `flutter pub add media_kit_libs_windows_audio --dry-run` → `+ media_kit_libs_windows_audio 1.0.9` |
 | 构建仓库已归档 | 归档仓库页面标注 archived 2024-10-09 |
 | 包最新版本 1.0.9（约 2 年前） | pub.dev versions 页面 |
+
+## 9. 实施记录（2026-09-11，分支 `feature/pc-desktop-adaptation`）
+
+### 9.1 提交序列（每阶段独立可 revert）
+
+| 提交 | 阶段 | 内容 |
+|---|---|---|
+| `4903878` | 0 | 加 `media_kit_libs_windows_audio` + main.dart Windows 注册 + `title='时音'` |
+| `c3089e1` | 1 | 删 completed 100ms 延迟与 250ms 最小加载间隔（串行链/seq 守卫保留） |
+| `fea1a23` | 2 | 响度放大门控合并（Windows 共享 mpv 数字放大，`_mpvMaxBoostVolume`）+ 设置页文案 + 新增 `test/services/loudness_amplify_test.dart`（6 用例）+ 门控断言更新 |
+| `e20c5d8` | 3 | 移除 `just_audio_windows`（含 windows/flutter 生成文件同步） |
+
+每阶段后 `flutter analyze` 零 issue + 全量 `flutter test` 通过（790 → 796 个）。
+
+### 9.2 真机验证结果（本机 Windows，自动化部分）
+
+| 项 | 结果 |
+|---|---|
+| 后端注册 | 日志确认 `media_kit_libs_windows_audio registered` |
+| 播放链路 | mpv 详细日志确认 代理(audio/mpeg) → mp3 解码 → WASAPI 出声；系统音频峰值表实测非零波动 |
+| completed 自动推进（B1） | 实测 `没有如果` 播完自动切到 `趁早 (2005版)`，无崩溃（无 100ms workaround） |
+| 连点切歌（B2） | 8 次 130ms 间隔 Ctrl+→ 快速切歌无崩溃，播放恢复 |
+| 坏源自动前进 | 失效 URL 自动跳下一首的恢复链正常 |
+| SMTC | mediaItem 标题推送正常（外部 SMTC 探针全程可读） |
+| mpv 非致命噪声 | `lavf: Failed to create file cache`（文件后备缓存创建失败，回退内存缓存，播放不受影响）与 `_setProperty(osc, 1) property not found`（audio-only 构建无 osc 属性）——均可忽略 |
+
+### 9.3 发版前遗留（需人工/决策）
+
+1. **R1/R2/R3 决策**（见 §7）：GPL 分发风险为闭源发版的硬阻塞，未裁决前不得发版。
+2. 人工听感与交互回归：媒体键/锁屏/音量浮层交互、蓝牙拔插（车机）、seek 精度与倍速/音调、歌词时间轴同步、响度放大 A/B 听感（§4.5 R5/R6 清单）。
+3. `update.md` 应用内更新日志条目：按 RELEASE.md 属发版动作，未随本迁移添加。
+4. 阶段 4（gapless，`prefetch-playlist` 实验特性）未实施。
+5. 本机网络受限提示：pub.dev/GitHub 直连不可达，依赖经 pub.flutter-io.cn 镜像解析后
+   将 lockfile URL 回写为 pub.dev（lockfile 仅 8 行净增，无传递依赖搅动）；libmpv 归档
+   经 ghfast.top 镜像下载并经 MD5 校验一致。CI（GitHub 托管机）无此问题。
