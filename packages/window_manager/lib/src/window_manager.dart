@@ -699,6 +699,16 @@ class WindowManager {
     await _channel.invokeMethod('setIgnoreMouseEvents', arguments);
   }
 
+  /// Returns `Offset` - Contains the cursor's current screen position.
+  Future<Offset> getCursorScreenPoint() async {
+    final Map<dynamic, dynamic> result =
+        await _channel.invokeMethod('getCursorScreenPoint');
+    return Offset(
+      (result['dx'] as num).toDouble(),
+      (result['dy'] as num).toDouble(),
+    );
+  }
+
   Future<void> popUpWindowMenu() async {
     final Map<String, dynamic> arguments = {};
     await _channel.invokeMethod('popUpWindowMenu', arguments);

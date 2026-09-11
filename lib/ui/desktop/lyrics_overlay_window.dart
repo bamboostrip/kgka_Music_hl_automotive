@@ -582,6 +582,9 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
     required this.onClose,
     this.onUpdateSettings,
     this.onOpenDetailedSettings,
+    this.cursorPositionProvider,
+    this.windowPositionProvider,
+    this.ignoreMouseEventsSetter,
   });
 
   final DesktopLyricsSettings settings;
@@ -596,6 +599,9 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   final VoidCallback onClose;
   final ValueChanged<DesktopLyricsSettings>? onUpdateSettings;
   final VoidCallback? onOpenDetailedSettings;
+  final Future<Offset?> Function()? cursorPositionProvider;
+  final Future<Offset?> Function()? windowPositionProvider;
+  final Future<void> Function(bool ignore)? ignoreMouseEventsSetter;
 
   @override
   Widget build(BuildContext context) {
@@ -605,6 +611,10 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
             current: current,
             next: next,
             progress: progress,
+            onToggleLock: onToggleLock,
+            cursorPositionProvider: cursorPositionProvider,
+            windowPositionProvider: windowPositionProvider,
+            ignoreMouseEventsSetter: ignoreMouseEventsSetter,
           )
         : _HoverableOverlay(
             settings: settings,
@@ -625,27 +635,203 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   }
 }
 
-/// 锁定态：只有歌词文字（含文字阴影），无任何交互/装饰组件。
-class _LockedLyricsBody extends StatelessWidget {
-  const _LockedLyricsBody({
+/// 锁定态：歌词文字常显，悬停窗口淡入「🔒 解锁」胶囊徽标，悬停徽标临时解除穿透以响应点击解锁。
+@visibleForTesting
+class LockedLyricsBody extends StatefulWidget {
+  const LockedLyricsBody({
+    super.key,
     required this.settings,
     required this.current,
     required this.next,
     this.progress = 0.0,
+    required this.onToggleLock,
+    this.cursorPositionProvider,
+    this.windowPositionProvider,
+    this.ignoreMouseEventsSetter,
   });
 
   final DesktopLyricsSettings settings;
   final String current;
   final String next;
   final double progress;
+  final ValueChanged<bool> onToggleLock;
+  final Future<Offset?> Function()? cursorPositionProvider;
+  final Future<Offset?> Function()? windowPositionProvider;
+  final Future<void> Function(bool ignore)? ignoreMouseEventsSetter;
+
+  @override
+  State<LockedLyricsBody> createState() => _LockedLyricsBodyState();
+}
+
+typedef _LockedLyricsBody = LockedLyricsBody;
+
+class _LockedLyricsBodyState extends State<LockedLyricsBody> {
+  bool _isHoveringWindow = false;
+  bool _isHoveringPill = false;
+  bool _polling = false;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
+      _pollCursor();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _setIgnoreMouseEvents(bool ignore) async {
+    try {
+      if (widget.ignoreMouseEventsSetter != null) {
+        await widget.ignoreMouseEventsSetter!(ignore);
+      } else {
+        await windowManager.setIgnoreMouseEvents(ignore);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _pollCursor() async {
+    if (_polling) return;
+    _polling = true;
+    try {
+      Offset? cursorPos;
+      try {
+        cursorPos = widget.cursorPositionProvider != null
+            ? await widget.cursorPositionProvider!()
+            : await windowManager.getCursorScreenPoint();
+      } catch (_) {}
+
+      Offset? windowPos;
+      try {
+        windowPos = widget.windowPositionProvider != null
+            ? await widget.windowPositionProvider!()
+            : await windowManager.getPosition();
+      } catch (_) {}
+
+      if (!mounted || cursorPos == null || windowPos == null) return;
+
+      final winRect = Rect.fromLTWH(
+        windowPos.dx,
+        windowPos.dy,
+        WindowsDesktopLyricsBridge.overlayWidth,
+        WindowsDesktopLyricsBridge.overlayHeight,
+      );
+      const pillWidth = 84.0;
+      const pillHeight = 26.0;
+      final pillLeft = windowPos.dx +
+          (WindowsDesktopLyricsBridge.overlayWidth - pillWidth) / 2;
+      final pillTop = windowPos.dy + 6.0;
+      final pillRect = Rect.fromLTWH(pillLeft, pillTop, pillWidth, pillHeight);
+
+      if (winRect.contains(cursorPos)) {
+        var stateChanged = false;
+        if (!_isHoveringWindow) {
+          _isHoveringWindow = true;
+          stateChanged = true;
+        }
+        if (pillRect.contains(cursorPos)) {
+          if (!_isHoveringPill) {
+            _isHoveringPill = true;
+            stateChanged = true;
+            await _setIgnoreMouseEvents(false);
+          }
+        } else {
+          if (_isHoveringPill) {
+            _isHoveringPill = false;
+            stateChanged = true;
+            await _setIgnoreMouseEvents(true);
+          }
+        }
+        if (!mounted) return;
+        if (stateChanged) {
+          setState(() {});
+        }
+      } else {
+        if (_isHoveringWindow || _isHoveringPill) {
+          _isHoveringWindow = false;
+          _isHoveringPill = false;
+          await _setIgnoreMouseEvents(true);
+          if (!mounted) return;
+          setState(() {});
+        }
+      }
+    } finally {
+      _polling = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return buildOverlayLyricsBody(
-      settings: settings,
-      current: current,
-      next: next,
-      progress: progress,
+    return Stack(
+      children: [
+        buildOverlayLyricsBody(
+          settings: widget.settings,
+          current: widget.current,
+          next: widget.next,
+          progress: widget.progress,
+        ),
+        Positioned(
+          top: 6.0,
+          left: 0.0,
+          right: 0.0,
+          child: Center(
+            child: AnimatedOpacity(
+              opacity: _isHoveringWindow ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 180),
+              child: IgnorePointer(
+                ignoring: !_isHoveringWindow,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onToggleLock(false),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      width: 84.0,
+                      height: 26.0,
+                      decoration: BoxDecoration(
+                        color: const Color(0xCC333333),
+                        borderRadius: BorderRadius.circular(13.0),
+                        border: Border.all(
+                          color: Colors.white.withValues(
+                            alpha: _isHoveringPill ? 0.35 : 0.15,
+                          ),
+                          width: 0.5,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.lock_rounded,
+                            size: 13.0,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 4.0),
+                          Text(
+                            '解锁',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.w500,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

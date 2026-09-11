@@ -518,10 +518,11 @@ void main() {
           ),
         ),
       );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
       await tester.pump();
     }
 
-    testWidgets('锁定：只渲染歌词文字，无工具栏与任何 hover 组件',
+    testWidgets('锁定：只渲染歌词文字与悬浮解锁胶囊，无播控工具栏',
         (tester) async {
       await pumpContent(
         tester,
@@ -532,36 +533,37 @@ void main() {
       expect(find.text('第一句歌词'), findsWidgets);
       expect(find.text('第二句歌词'), findsWidgets);
 
-      // 无任何依赖 hover 的窗内 UI：工具栏（Tooltip/图标）、MouseRegion。
-      // （限定在悬浮窗内容子树内：MaterialApp 自带框架级 MouseRegion。）
+      // 无工具栏 Tooltip。
       final content = find.byKey(contentKey);
       expect(
         find.descendant(of: content, matching: find.byType(Tooltip)),
         findsNothing,
       );
-      expect(
-        find.descendant(of: content, matching: find.byType(MouseRegion)),
-        findsNothing,
-      );
-      // 工具栏全部图标（播放/锁定/关闭）在锁定子树中一律不存在。
-      const toolbarIcons = [
+      // 悬浮播控栏全部图标在锁定子树中一律不存在。
+      const playbackToolbarIcons = [
         Icons.lock_open_rounded,
-        Icons.lock_rounded,
         Icons.close_rounded,
         Icons.play_arrow_rounded,
         Icons.pause_rounded,
         Icons.skip_previous_rounded,
         Icons.skip_next_rounded,
+        Icons.settings_rounded,
       ];
       expect(
         find.descendant(
           of: content,
           matching: find.byWidgetPredicate(
-            (w) => w is Icon && toolbarIcons.contains(w.icon),
+            (w) => w is Icon && playbackToolbarIcons.contains(w.icon),
           ),
         ),
         findsNothing,
       );
+      // 包含解锁胶囊（Icons.lock_rounded + 解锁文字），初始透明度为 0.0
+      expect(find.text('解锁'), findsOneWidget);
+      final opacityWidget = tester.widget<AnimatedOpacity>(
+        find.descendant(of: content, matching: find.byType(AnimatedOpacity)),
+      );
+      expect(opacityWidget.opacity, 0.0);
     });
 
     testWidgets('未锁定：保留工具栏与锁按钮（悬停 UI 只属于非锁定态）',
@@ -661,6 +663,7 @@ void main() {
       );
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
 
       await tester.pumpWidget(
         MediaQuery(
@@ -1265,4 +1268,182 @@ void main() {
       expect(origin, const Offset(2500, 900));
     });
   });
+
+  group('锁定态靠近悬浮「🔒 解锁」胶囊与鼠标动态穿透', () {
+    testWidgets('光标在窗口外时胶囊不可见 (opacity 0.0)', (tester) async {
+      Offset? cursorPos = const Offset(0, 0);
+      const windowPos = Offset(100, 100);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LockedLyricsBody(
+              settings: const DesktopLyricsSettings(locked: true),
+              current: '当前歌词',
+              next: '下一句歌词',
+              onToggleLock: (_) {},
+              cursorPositionProvider: () async => cursorPos,
+              windowPositionProvider: () async => windowPos,
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+      // 80ms 定时轮询
+      await tester.pump(const Duration(milliseconds: 80));
+
+      final opacityFinder = find.descendant(
+        of: find.byType(LockedLyricsBody),
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(opacityFinder, findsOneWidget);
+      expect(tester.widget<AnimatedOpacity>(opacityFinder).opacity, 0.0);
+    });
+
+    testWidgets('光标移入窗口内时胶囊淡入可见 (opacity 1.0)', (tester) async {
+      Offset? cursorPos = const Offset(0, 0);
+      const windowPos = Offset(100, 100);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LockedLyricsBody(
+              settings: const DesktopLyricsSettings(locked: true),
+              current: '当前歌词',
+              next: '下一句歌词',
+              onToggleLock: (_) {},
+              cursorPositionProvider: () async => cursorPos,
+              windowPositionProvider: () async => windowPos,
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+      await tester.pump(const Duration(milliseconds: 80));
+      final opacityFinder = find.descendant(
+        of: find.byType(LockedLyricsBody),
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(tester.widget<AnimatedOpacity>(opacityFinder).opacity, 0.0);
+
+      // 光标移入窗口内部（非胶囊区，例如 (200, 120)）
+      cursorPos = const Offset(200, 120);
+      await tester.pump(const Duration(milliseconds: 80));
+      // 推进 AnimatedOpacity 动画 180ms
+      await tester.pump(const Duration(milliseconds: 180));
+
+      expect(tester.widget<AnimatedOpacity>(opacityFinder).opacity, 1.0);
+    });
+
+    testWidgets('光标悬浮在胶囊上时触发 setIgnoreMouseEvents(false)', (tester) async {
+      Offset? cursorPos = const Offset(200, 120);
+      const windowPos = Offset(100, 100);
+      final mouseEventsCalls = <bool>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LockedLyricsBody(
+              settings: const DesktopLyricsSettings(locked: true),
+              current: '当前歌词',
+              next: '下一句歌词',
+              onToggleLock: (_) {},
+              cursorPositionProvider: () async => cursorPos,
+              windowPositionProvider: () async => windowPos,
+              ignoreMouseEventsSetter: (ignore) async => mouseEventsCalls.add(ignore),
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(mouseEventsCalls, isEmpty);
+
+      // 胶囊水平居中：pillLeft = 100 + (780 - 84)/2 = 448, pillTop = 100 + 6 = 106
+      // 光标移入胶囊矩形内 (450, 110)
+      cursorPos = const Offset(450, 110);
+      await tester.pump(const Duration(milliseconds: 80));
+
+      expect(mouseEventsCalls, contains(false));
+      expect(mouseEventsCalls.last, isFalse);
+    });
+
+    testWidgets('点击胶囊触发 onToggleLock(false)', (tester) async {
+      Offset? cursorPos = const Offset(450, 110);
+      const windowPos = Offset(100, 100);
+      bool? toggledLock;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LockedLyricsBody(
+              settings: const DesktopLyricsSettings(locked: true),
+              current: '当前歌词',
+              next: '下一句歌词',
+              onToggleLock: (locked) => toggledLock = locked,
+              cursorPositionProvider: () async => cursorPos,
+              windowPositionProvider: () async => windowPos,
+              ignoreMouseEventsSetter: (ignore) async {},
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.pump(const Duration(milliseconds: 180));
+
+      await tester.tap(find.text('解锁'));
+      await tester.pump();
+
+      expect(toggledLock, isFalse);
+    });
+
+    testWidgets('光标离开窗口时胶囊淡出且恢复 setIgnoreMouseEvents(true)', (tester) async {
+      Offset? cursorPos = const Offset(450, 110);
+      const windowPos = Offset(100, 100);
+      final mouseEventsCalls = <bool>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LockedLyricsBody(
+              settings: const DesktopLyricsSettings(locked: true),
+              current: '当前歌词',
+              next: '下一句歌词',
+              onToggleLock: (_) {},
+              cursorPositionProvider: () async => cursorPos,
+              windowPositionProvider: () async => windowPos,
+              ignoreMouseEventsSetter: (ignore) async => mouseEventsCalls.add(ignore),
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+      // 悬浮在胶囊上
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(mouseEventsCalls.last, isFalse);
+
+      final opacityFinder = find.descendant(
+        of: find.byType(LockedLyricsBody),
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(tester.widget<AnimatedOpacity>(opacityFinder).opacity, 1.0);
+
+      // 光标移出窗口
+      cursorPos = const Offset(0, 0);
+      await tester.pump(const Duration(milliseconds: 80));
+
+      expect(mouseEventsCalls.last, isTrue);
+
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(tester.widget<AnimatedOpacity>(opacityFinder).opacity, 0.0);
+    });
+  });
 }
+

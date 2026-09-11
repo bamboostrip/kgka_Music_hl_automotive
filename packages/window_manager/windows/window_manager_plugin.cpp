@@ -564,6 +564,15 @@ void WindowManagerPlugin::HandleMethodCall(
         std::get<flutter::EncodableMap>(*method_call.arguments());
     window_manager->SetIgnoreMouseEvents(args);
     result->Success(flutter::EncodableValue(true));
+  } else if (method_name.compare("getCursorScreenPoint") == 0) {
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    flutter::EncodableMap result_map;
+    result_map[flutter::EncodableValue("dx")] =
+        flutter::EncodableValue(static_cast<double>(cursorPos.x));
+    result_map[flutter::EncodableValue("dy")] =
+        flutter::EncodableValue(static_cast<double>(cursorPos.y));
+    result->Success(flutter::EncodableValue(result_map));
   } else if (method_name.compare("popUpWindowMenu") == 0) {
     const flutter::EncodableMap& args =
         std::get<flutter::EncodableMap>(*method_call.arguments());
