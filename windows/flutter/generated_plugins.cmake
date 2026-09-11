@@ -7,8 +7,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   desktop_multi_window
   file_selector_windows
-  just_audio_windows
   local_notifier
+  media_kit_libs_windows_audio
   screen_retriever_windows
   system_tray
   url_launcher_windows

@@ -16,17 +16,16 @@ dependencies:
   audio_session: ^0.2.3
   http: ^1.5.0
   just_audio: ^0.10.4
-  just_audio_windows: ^0.2.3
-  # 桌面音频后端：just_audio 官方不出 Linux 平台实现；Windows 官方实现
-  # （just_audio_windows，WinRT MediaPlayer）存在高频 setUrl/completed 竞态
-  # 崩溃（见 music_audio_handler 引擎加载串行门注释），统一迁移社区
-  # media_kit(libmpv) 适配，在 main.dart 的 Linux/Windows 分支注册。
-  # Linux 运行期依赖系统 libmpv2；Windows 二进制由
+  # 桌面音频后端（Linux/Windows）：just_audio 官方不出桌面平台实现，
+  # 统一用社区 media_kit(libmpv) 适配，在 main.dart 的 Linux/Windows 分支
+  # 注册（Windows 原生 WinRT 后端已随 2026-09 迁移移除，记录见
+  # docs/superpowers/specs/2026-09-11-windows-media-kit-migration-design.md）。
+  # Linux 运行期依赖系统 libmpv2（发行版维护）；Windows 二进制由
   # media_kit_libs_windows_audio 构建期提供（见下）。
   # 本地 vendored 副本（packages/just_audio_media_kit），含四处补丁：
   # 1) load() 时清空 _setPosition（上游 2.1.0 跨歌残留 seek 目标 bug）；
   # 2) 构造时设置 volume-max=400（响度均衡 +12dB 余量，配套
-  #    loudness_service 的 _linuxMaxBoostVolume=2.0 钳制）；
+  #    loudness_service 的 _mpvMaxBoostVolume=2.0 钳制）；
   # 3) error 流对 _loadCompleter completeError（上游 load 失败无人
   #    complete，死链路要挂满上层 15s 超时才报错）；
   # 4) buffering 流不再把 idle 错误态掩盖回 ready / 清错误码（失败被

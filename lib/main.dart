@@ -106,12 +106,12 @@ Future<void> main(List<String> args) async {
     );
 
     // Linux/Windows 桌面：统一注册社区 media_kit(libmpv) 后端（见
-    // pubspec.yaml 依赖注释）——Linux 无官方实现，Windows 官方实现
-    // （WinRT MediaPlayer）存在高频 setUrl/completed 竞态崩溃。必须在
-    // 创建首个 AudioPlayer（AudioService.init → MusicAudioHandler 字段
-    // 初始化）之前调用。kIsWeb 前置：web 上访问 Platform.* 会直接 throw
-    // （当前 web 构建因 dart:io 无法编译，此为防御性收敛，保持与
-    // form_factor 判定同构）。
+    // pubspec.yaml 依赖注释；Windows 自 2026-09 起由 just_audio_windows
+    // 迁移而来，记录见 docs/superpowers/specs/
+    // 2026-09-11-windows-media-kit-migration-design.md）。必须在创建首个
+    // AudioPlayer（AudioService.init → MusicAudioHandler 字段初始化）之前
+    // 调用。kIsWeb 前置：web 上访问 Platform.* 会直接 throw（当前 web 构建
+    // 因 dart:io 无法编译，此为防御性收敛，保持与 form_factor 判定同构）。
     if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
       // Windows 音量合成器/任务管理器里的进程显示名（mpv 原生侧使用，
       // Linux 忽略）；不设则显示默认的 "JustAudioMediaKit"。
