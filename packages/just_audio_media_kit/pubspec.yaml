@@ -1,6 +1,8 @@
 name: just_audio_media_kit
 description: package:media_kit bindings for just_audio to support Linux and Windows.
-version: 2.1.0
+# +shiyin 后缀 = 本地 fork（主工程 pubspec.yaml 记录了全部四处补丁），
+# 升级上游时勿直接覆盖本目录。
+version: 2.1.0+shiyin.4
 repository: https://github.com/Pato05/just_audio_media_kit
 
 environment:

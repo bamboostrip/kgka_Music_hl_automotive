@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../desktop/desktop_window.dart';
 import '../../models/app_version.dart';
 import '../../services/app_update_service.dart';
 import 'toast.dart';
@@ -302,14 +303,19 @@ class _WindowsUpdateDialogState extends State<_WindowsUpdateDialog> {
       return;
     }
     try {
-      // 成功路径不再返回：拉起向导后 exit(0) 退出本应用。
-      await widget.service.launchWindowsInstallerAndExit(path);
+      await widget.service.launchWindowsInstaller(path);
     } catch (error) {
       if (!mounted) {
         return;
       }
       Toast.error('启动安装程序失败：${_cleanError(error)}');
+      return;
     }
+    // 成功路径不再返回：向导已独立存活，本进程走统一优雅退出——
+    // 落盘窗口几何 + 刷写播放队列等退出前钩子后硬终止（直接 exit(0)
+    // 会丢这些状态，且在 IME/UIA 环境触发 teardown 崩溃，见
+    // DesktopWindow.quitGracefully 注释）。
+    await DesktopWindow.quitGracefully();
   }
 
   /// 提取可读错误文案（StateError 去 "Bad state:" 前缀，DioException 映射常见网络错误）。

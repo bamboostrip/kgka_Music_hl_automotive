@@ -7,7 +7,8 @@
 // 消息协议（与悬浮窗侧约定一致）：
 // - main -> sub：updateLyric {current, next, isPlaying, activeOnBottom} /
 //   updateSettings {DesktopLyricsSettings.toMap()} /
-//   updateProgress {progress, isPlaying}
+//   updateProgress {progress, isPlaying} /
+//   updatePlayState {isPlaying}（仅播放态，不触发换句重置进度）
 //   （不向子窗发 close：主窗侧关闭直接走原生 window.close）。
 // - sub -> main：windowClosed {}（用户手动关闭，触发可见性回调与就绪门控复位）/
 //   overlayReady {}（子引擎通道就绪：主窗先打开就绪门控，再补发缓存的歌词、
@@ -229,7 +230,17 @@ class WindowsDesktopLyricsBridge {
   Future<void> updatePlayState({required bool isPlaying}) async {
     _isPlaying = isPlaying;
     if (!_visible) return;
-    await _pushLyric();
+    // 播放态变化走专用消息：复用 updateLyric 会触发子窗"换句重置进度"，
+    // 每次暂停/缓冲都把当前句已唱的逐字高亮清零（且暂停期间没有
+    // updateProgress 帧把它补回来，直到恢复播放）。
+    if (!_overlayReady) return;
+    try {
+      await _invokeSub('updatePlayState', <String, dynamic>{
+        'isPlaying': isPlaying,
+      });
+    } on Exception {
+      // 子窗已退出：缓存待下次 show 重发。
+    }
   }
 
   Future<void> updateSettings(DesktopLyricsSettings settings) async {

@@ -271,7 +271,6 @@ class PlayerController extends _PlayerControllerBase
     unawaited(_loudness.releaseNative());
     unawaited(_superLyric.unregisterPublisher());
     _audioHandler.detachTransportControls();
-    _desktopLyrics.setVisibilityChangedHandler(null);
     unawaited(_audioHandler.close());
     unawaited(_desktopLyrics.hide());
     super.dispose();

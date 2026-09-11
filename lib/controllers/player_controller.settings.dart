@@ -187,10 +187,17 @@ mixin _PlayerSettings on _PlayerControllerBase {
       }
       errorMessage = error.toString();
     } finally {
+      var depth = _changingSourceDepth;
+      if (depth > 0) {
+        depth = --_changingSourceDepth;
+      }
       if (!_disposed) {
-        if (_changingSourceDepth > 0) _changingSourceDepth--;
-        isPreparing = false;
-        notifyListeners();
+        // 与 playSong 的 finally 同一守卫归属规则：本流程被更新的切歌/切音质
+        // 抢先时，不得清掉新流程的 isPreparing（加载态会提前消失）。
+        if (depth == 0 && isPreparing) {
+          isPreparing = false;
+          notifyListeners();
+        }
       }
     }
   }
@@ -384,11 +391,19 @@ mixin _PlayerSettings on _PlayerControllerBase {
       }
     } else {
       // 旧版本残留直接丢弃，并把版本号写到最新，避免每次启动重复判断。
+      // 必须同时删除旧 JSON：只写版本号的话，下次启动 dlVersion 已达标，
+      // 上面的读取分支会把 v1 的旧值（旧透明度/字号/锁定态）重新 parse
+      // 回来——首启是新默认值、二启复活旧样式，来回翻转。
+      await prefs.remove(_desktopLyricsSettingsKey);
       await prefs.setInt(
         _desktopLyricsSettingsVersionKey,
         _desktopLyricsSettingsVersion,
       );
     }
+    // 本方法从构造函数 unawaited 发起，任何 await 之后都可能已被 dispose
+    // （测试里创建后即刻销毁是常态）：继续通知/驱动引擎都会踩
+    // "used after being disposed"。
+    if (_disposed) return;
     unawaited(audioPlayer.setSpeed(playbackSpeed));
     // 恢复用户音量到引擎（响度关闭时即最终值；开启后首播的 instant
     // 应用会再按系数合成一次，此处只保证恢复后、首播前的一致性）
@@ -443,6 +458,9 @@ mixin _PlayerSettings on _PlayerControllerBase {
       // 歌词走缓存优先（30 天）+ 静默刷新，高潮走网络补拉。
       duration = currentSong?.duration ?? Duration.zero;
 
+      // 与 _restoreSettings 同理：构造函数 unawaited 发起，await 之后
+      // 可能已 dispose，不得再通知或触发补拉。
+      if (_disposed) return;
       hasRestoredPlaybackState = true;
       notifyListeners();
       final restored = currentSong;

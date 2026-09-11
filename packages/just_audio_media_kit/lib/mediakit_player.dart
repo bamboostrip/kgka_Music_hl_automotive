@@ -2,6 +2,7 @@ library just_audio_media_kit;
 
 import 'dart:async';
 
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'package:logging/logging.dart';
@@ -97,12 +98,20 @@ class MediaKitPlayer extends AudioPlayerPlatform {
         if (_processingState == ProcessingStateMessage.loading) {
           if (!isBuffering && _mediaOpened) {
             _processingState = ProcessingStateMessage.ready;
+            _errorCode = null;
+            _errorMessage = null;
             if (_loadCompleter?.isCompleted != true) {
               _loadCompleter?.complete(_duration);
             }
           }
-        } else if (_processingState != ProcessingStateMessage.completed ||
-            isBuffering) {
+        } else if ((_processingState != ProcessingStateMessage.completed ||
+                isBuffering) &&
+            // LOCAL PATCH (upstream bug, Pato05/just_audio_media_kit):
+            // error 流已把状态置为 idle+errorCode 后，迟到的
+            // buffering=false 不得把失败掩盖回 ready、也不得清掉错误码
+            // ——否则 load 已完成、play 是空操作、错误又消失，队列会
+            // 无声地冻死在这一首。错误态的复位只发生在下一次 load()。
+            _errorCode == null) {
           _processingState = isBuffering
               ? ProcessingStateMessage.buffering
               : ProcessingStateMessage.ready;
@@ -110,8 +119,6 @@ class MediaKitPlayer extends AudioPlayerPlatform {
             _updateDuration(_player.state.duration);
           }
         }
-        _errorCode = null;
-        _errorMessage = null;
         _updatePlaybackEvent();
       }),
       _player.stream.buffer.listen((buffer) {
@@ -152,6 +159,17 @@ class MediaKitPlayer extends AudioPlayerPlatform {
           _processingState = ProcessingStateMessage.idle;
           _errorCode = kErrorCode;
           _errorMessage = error;
+          // LOCAL PATCH (upstream bug, Pato05/just_audio_media_kit):
+          // load() 在等 _loadCompleter，而它只有 buffering/buffer 监听器会
+          // 以"成功"完成——打不开的 URL（404/DNS 失败）永远没人 complete，
+          // 每次失败都要挂满上层 15s 超时才走重试/错误路径。这里补
+          // completeError，让 just_audio 的 setUrl/load 立刻抛
+          // PlatformException 并进入既有重试链。
+          if (_loadCompleter?.isCompleted != true) {
+            _loadCompleter?.completeError(
+              PlatformException(code: kErrorCode.toString(), message: error),
+            );
+          }
           _updatePlaybackEvent();
         }
         _logger.severe('ERROR OCCURRED: $error');

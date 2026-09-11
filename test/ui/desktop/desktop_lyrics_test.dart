@@ -394,6 +394,42 @@ void main() {
       expect(pushPayload(pushesOf('updateLyric').last)['current'], '第一句');
     });
 
+    test('updatePlayState 走专用消息，不重发会清进度的 updateLyric', () async {
+      final binding = TestDefaultBinaryMessengerBinding.instance;
+      setUpMultiWindowMocks(binding);
+      addTearDown(() => clearMultiWindowMocks(binding));
+
+      final bridge = WindowsDesktopLyricsBridge();
+      await bridge.show(title: '标题', artist: '歌手');
+      await bridge.updateLyrics(
+        current: '第一句',
+        next: '第二句',
+        activeOnBottom: false,
+      );
+      await simulateChildMessage(binding, 'overlayReady');
+      outgoing.clear();
+
+      // 播放态变化必须走专用 updatePlayState 消息：复用 updateLyric 的话，
+      // 子窗的"换句重置进度"会顺带清掉当前句已唱的逐字高亮。
+      await bridge.updatePlayState(isPlaying: false);
+      expect(pushesOf('updatePlayState'), hasLength(1));
+      expect(
+        pushPayload(pushesOf('updatePlayState').single)['isPlaying'],
+        isFalse,
+      );
+      expect(pushesOf('updateLyric'), isEmpty);
+
+      // 换句仍走 updateLyric 全量推送（isPlaying 随歌词一起下发）。
+      await bridge.updateLyrics(
+        current: '第三句',
+        next: '第四句',
+        activeOnBottom: true,
+      );
+      expect(pushesOf('updateLyric'), hasLength(1));
+      expect(pushPayload(pushesOf('updateLyric').single)['current'], '第三句');
+      expect(pushPayload(pushesOf('updateLyric').single)['isPlaying'], isFalse);
+    });
+
     test('setLyricsLocked 转发回调；主窗处理后的 updateSettings 回推子窗',
         () async {
       final binding = TestDefaultBinaryMessengerBinding.instance;

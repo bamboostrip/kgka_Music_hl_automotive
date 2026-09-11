@@ -1,3 +1,16 @@
+### 0.4.3+shiyin.1（本地 fork，时音专用补丁）
+
+基于上游 0.4.3，含三处本地修改（升级上游时必须重新移植，详见主工程
+pubspec.yaml dependency_overrides 的注释）：
+
+* [windows] 静态 MethodChannel 改为实例成员 channel_：desktop_multi_window
+  子窗二次注册插件时不再覆盖/析构主窗的 channel（上游全局 channel 会被
+  置空，主窗窗口事件全部失效）
+* [windows] SetSkipTaskbar/SetProgressBar 的 taskbar_ COM 接口懒初始化 +
+  空 HWND 防护 + 析构 Release()（防泄漏/防崩溃）
+* [all] 新增 getCursorScreenPoint（Dart 侧按调用方 DPR 换算逻辑坐标，
+  桌面歌词悬浮窗的解锁胶囊悬停检测使用）
+
 ### 0.4.3
 
 * [windows] fix: scale ratio on dpi change (#496)

@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../models/music_models.dart';
 
+/// 逐字卡拉OK着色 painter：底层整行 base 色，上层按每个字的播放进度
+/// 裁剪绘制高亮层。
+///
+/// 生命周期契约：本 Flutter 版本的 [CustomPainter] 没有 dispose 钩子，
+/// 框架不会回收 painter 持有的 TextPainter 原生排版资源——必须由持有方
+/// （LyricText 的 State）在替换/销毁时显式调用 [release]。播放位置变化
+/// 走 [withPosition] 生成共享排版结果的轻量副本，避免每帧两次完整
+/// layout（海报页播放中每帧都在重建）。
 class KaraokeLinePainter extends CustomPainter {
   KaraokeLinePainter({
     required this.line,
@@ -13,7 +21,7 @@ class KaraokeLinePainter extends CustomPainter {
     required this.textAlign,
     required this.maxLines,
     required this.maxWidth,
-  }) {
+  }) : _ownsPainters = true {
     _textPainter = TextPainter(
       text: TextSpan(
         text: line.text,
@@ -36,8 +44,24 @@ class KaraokeLinePainter extends CustomPainter {
     )..layout(maxWidth: maxLines == 1 ? double.infinity : maxWidth);
   }
 
+  KaraokeLinePainter._reuse({
+    required this.line,
+    required this.position,
+    required this.style,
+    required this.baseColor,
+    required this.activeColor,
+    required this.textDirection,
+    required this.textAlign,
+    required this.maxLines,
+    required this.maxWidth,
+    required TextPainter textPainter,
+    required TextPainter highlightPainter,
+  }) : _textPainter = textPainter,
+       _highlightPainter = highlightPainter,
+       _ownsPainters = true;
+
   final LyricLine line;
-  final Duration position;
+  Duration position;
   final TextStyle style;
   final Color baseColor;
   final Color activeColor;
@@ -47,9 +71,39 @@ class KaraokeLinePainter extends CustomPainter {
   final double maxWidth;
   late final TextPainter _textPainter;
   late final TextPainter _highlightPainter;
+  bool _ownsPainters;
 
   double get width => _textPainter.width;
   double get height => _textPainter.height;
+
+  /// 用新的播放位置生成共享排版结果的副本：不重新 layout，直接复用
+  /// 本实例的两个 TextPainter。调用后本实例放弃所有权（不再可释放），
+  /// 由副本负责最终释放。
+  KaraokeLinePainter withPosition(Duration newPosition) {
+    _ownsPainters = false;
+    return KaraokeLinePainter._reuse(
+      line: line,
+      position: newPosition,
+      style: style,
+      baseColor: baseColor,
+      activeColor: activeColor,
+      textDirection: textDirection,
+      textAlign: textAlign,
+      maxLines: maxLines,
+      maxWidth: maxWidth,
+      textPainter: _textPainter,
+      highlightPainter: _highlightPainter,
+    );
+  }
+
+  /// 释放原生排版资源（框架无 dispose 钩子，必须由持有方显式调用）。
+  /// 已让渡所有权（withPosition 之后）的实例调用是安全的空操作。
+  void release() {
+    if (!_ownsPainters) return;
+    _ownsPainters = false;
+    _textPainter.dispose();
+    _highlightPainter.dispose();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {

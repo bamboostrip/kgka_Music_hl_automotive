@@ -41,6 +41,13 @@ class DesktopLyricsSettings {
   // 字号 24 在 780x124 悬浮窗内展示效果最佳。用户可在设置页调回底色。
   // 默认经典金黄（已播放 0xFFFFD700）与天蓝（未播放 0xFF00BFFF）卡拉OK双色，
   // 双行默认左右分离（split）、单行等价居中。
+
+  /// 字号允许范围：设置页滑杆与悬浮窗快捷菜单共用的唯一定义处。
+  /// 两处此前各自硬编码（12–48 vs 16–40），设为 12 后点快捷菜单 [-]
+  /// 会直接跳回 16。
+  static const double fontSizeMin = 12.0;
+  static const double fontSizeMax = 48.0;
+
   const DesktopLyricsSettings({
     this.opacity = 0.0,
     this.locked = false,

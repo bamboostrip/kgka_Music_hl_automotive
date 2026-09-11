@@ -108,6 +108,11 @@ class CacheService {
     }
   }
 
+  /// 歌单缓存旧版双写 key 前缀（auth_controller 兼容写，仍在读取）：
+  /// 与 `cache_*` 一样是可重建的缓存，计入大小统计，也必须随
+  /// 「清理数据缓存」一并清除——否则清理后提示成功但大小几乎不变。
+  static const _legacyPlaylistCachePrefix = 'shiyin_cached_playlists';
+
   /// 获取所有数据缓存的总大小（字节）。
   ///
   /// 遍历 SharedPreferences 中的所有 key，计算以 `cache_` 开头或
@@ -117,7 +122,7 @@ class CacheService {
     var total = 0;
     for (final key in prefs.getKeys()) {
       if (key.startsWith('cache_') ||
-          key.startsWith('shiyin_cached_playlists')) {
+          key.startsWith(_legacyPlaylistCachePrefix)) {
         final value = prefs.getString(key);
         if (value != null) {
           total += value.length * 2; // UTF-16 每字符约 2 字节
@@ -132,7 +137,11 @@ class CacheService {
     final prefs = await SharedPreferences.getInstance();
     return prefs
         .getKeys()
-        .where((key) => key.startsWith('cache_'))
+        .where(
+          (key) =>
+              key.startsWith('cache_') ||
+              key.startsWith(_legacyPlaylistCachePrefix),
+        )
         .length;
   }
 
@@ -141,7 +150,8 @@ class CacheService {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().toList();
     for (final key in keys) {
-      if (key.startsWith('cache_')) {
+      if (key.startsWith('cache_') ||
+          key.startsWith(_legacyPlaylistCachePrefix)) {
         await prefs.remove(key);
       }
     }

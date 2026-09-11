@@ -177,7 +177,6 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       }
     } catch (error) {
       if (_disposed) return;
-      _pendingInitialPosition = null;
       // VIP 过期：自动领取后重试一次（转发定位/队列上下文，避免冷启动
       // 定位与高潮试听从 0 秒重播）。isRetry 内不再领取：重试后仍报 VIP
       // 说明领取无效/服务端持续拒绝，不设限会形成"领取→重试→再领取"无限循环。
@@ -226,14 +225,22 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       isPreparing = false;
       notifyListeners();
     } finally {
-      _pendingInitialPosition = null;
+      var depth = _changingSourceDepth;
+      if (depth > 0) {
+        depth = --_changingSourceDepth;
+      }
       if (!_disposed) {
-        if (_changingSourceDepth > 0) {
-          _changingSourceDepth--;
-        }
-        if (isPreparing) {
-          isPreparing = false;
-          notifyListeners();
+        // 守卫归属：_pendingInitialPosition / isPreparing 属于"最新的在途
+        // 加载流程"。本流程被更新流程抢先而中止时（hash 检查 return），
+        // finally 不得清掉新流程刚设置的守卫——否则加载期间引擎的 0 秒
+        // 位置事件会把进度/歌词闪回开头、加载态提前消失。仅在深度归零
+        // （没有任何在途流程）时才允许清。
+        if (depth == 0) {
+          _pendingInitialPosition = null;
+          if (isPreparing) {
+            isPreparing = false;
+            notifyListeners();
+          }
         }
         _scheduleSavePlaybackState();
       }

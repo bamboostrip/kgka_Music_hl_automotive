@@ -6,6 +6,7 @@
 //
 // 消息协议（main -> sub）：
 // - updateLyric    {current, next, isPlaying}
+// - updatePlayState {isPlaying}（仅播放态变化；不触发换句重置进度）
 // - updateSettings {DesktopLyricsSettings.toMap()}
 // 消息协议（sub -> main）：
 // - windowClosed   {}（用户手动关闭悬浮窗）
@@ -39,6 +40,13 @@ const Duration _kPersistDebounce = Duration(milliseconds: 500);
 /// preventClose 拦截后转入漏斗）并发触发，只执行一次。
 bool _overlayCloseInFlight = false;
 
+/// 快捷菜单展开期间窗口被原生加高；向上弹出时 top 还上移了
+/// [WindowsDesktopLyricsBridge.overlayMenuPanelHeight]。展开态任何时机的
+/// 位置落盘（WM_MOVE 防抖、关闭前补存）都必须记"收起态等效 top"：
+/// 直接存展开态 top 的话，展开时点关闭/退出应用，下次打开整体上飘
+/// 一截，逐次累积漂移。
+double _overlayExpandedTopAdjust = 0.0;
+
 /// 立即持久化当前窗口位置（防抖取消失效时与关闭前补存共用）。
 Future<void> persistOverlayWindowPosition() async {
   try {
@@ -47,7 +55,9 @@ Future<void> persistOverlayWindowPosition() async {
     await prefs.setDouble(
         WindowsDesktopLyricsBridge.windowLeftPrefKey, position.dx);
     await prefs.setDouble(
-        WindowsDesktopLyricsBridge.windowTopPrefKey, position.dy);
+      WindowsDesktopLyricsBridge.windowTopPrefKey,
+      position.dy + _overlayExpandedTopAdjust,
+    );
   } on Exception {
     // 位置持久化失败不影响展示。
   }
@@ -223,6 +233,13 @@ Future<void> runLyricsOverlayWindow(List<String> args) async {
               // 换句即重置逐字进度：新句从 0 开始（进度由随后的
               // updateProgress 帧驱动）。
               ..progress = 0.0;
+          }
+        case 'updatePlayState':
+          // 仅播放态变化：不得走 updateLyric 的换句重置，否则每次
+          // 暂停/缓冲都清掉当前句已唱的高亮进度。
+          final message = (call.arguments as Map?)?.cast<String, dynamic>();
+          if (message != null) {
+            model.isPlaying = message['isPlaying'] as bool? ?? model.isPlaying;
           }
         case 'updateProgress':
           final message = (call.arguments as Map?)?.cast<String, dynamic>();
@@ -1002,6 +1019,10 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
             _showSettingsMenu = true;
           });
           await WidgetsBinding.instance.endOfFrame;
+          // 窗口即将上移 menuPanelHeight：展开期间一切位置落盘都要按
+          // 收起态等效 top 记账（见 _overlayExpandedTopAdjust 注释）。
+          _overlayExpandedTopAdjust =
+              WindowsDesktopLyricsBridge.overlayMenuPanelHeight;
           await _setWindowBounds(
             Rect.fromLTWH(
               pos.dx,
@@ -1046,6 +1067,9 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
         );
         _menuPopsUpward = false;
         _originalWindowTop = null;
+        // 几何已还原为收起态，位置记账同步复位（还原触发的 WM_MOVE
+        // 防抖落盘会以真实 top 写入）。
+        _overlayExpandedTopAdjust = 0.0;
         if (!mounted) return;
         setState(() => _showSettingsMenu = false);
       }
@@ -1142,6 +1166,9 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
         );
       }();
     }
+    // 本 State 销毁后（如锁定态切换子树）记账标志不再有人复位：
+    // 残留非零值会让后续正常拖动的落盘整体偏移一个菜单高度。
+    _overlayExpandedTopAdjust = 0.0;
     super.dispose();
   }
 
@@ -1622,7 +1649,10 @@ class _OverlayQuickSettingsMenu extends StatelessWidget {
               _buildStepButton(
                 icon: Icons.remove,
                 onTap: () {
-                  final newSize = (settings.fontSize - 2).clamp(16.0, 40.0);
+                  final newSize = (settings.fontSize - 2).clamp(
+                    DesktopLyricsSettings.fontSizeMin,
+                    DesktopLyricsSettings.fontSizeMax,
+                  );
                   onUpdateSettings(settings.copyWith(fontSize: newSize));
                 },
               ),
@@ -1640,7 +1670,10 @@ class _OverlayQuickSettingsMenu extends StatelessWidget {
               _buildStepButton(
                 icon: Icons.add,
                 onTap: () {
-                  final newSize = (settings.fontSize + 2).clamp(16.0, 40.0);
+                  final newSize = (settings.fontSize + 2).clamp(
+                    DesktopLyricsSettings.fontSizeMin,
+                    DesktopLyricsSettings.fontSizeMax,
+                  );
                   onUpdateSettings(settings.copyWith(fontSize: newSize));
                 },
               ),

@@ -95,8 +95,14 @@ class _DesktopShellState extends State<DesktopShell> {
   final _searchFocusNode = FocusNode();
   var _searchPanelOpen = false;
 
-  /// 内容区导航栈上是否已有搜索结果页（用于连搜时 replace 而非叠层）。
-  var _searchPageOpen = false;
+  /// 内容区导航栈上当前搜索结果页的路由（用于连搜时 replace 而非叠层）。
+  ///
+  /// 必须跟踪路由对象而非布尔标记：pushReplacement 下旧路由的 popped
+  /// 会在新路由动画完成后才触发（SDK 的 complete→didComplete 链），布尔
+  /// 版本会被旧路由的 whenComplete 误清，下一次连搜从 replace 退化成
+  /// 叠层；且"栈顶是否搜索页"要靠路由身份判断，canPop() 判断会把搜索
+  /// 页上方push的歌手/歌单详情页错误地替换掉。
+  Route<void>? _searchRoute;
 
   /// 内容区导航栈上是否已有歌词设置页（避免重复打开叠层）。
   var _lyricsSettingsPageOpen = false;
@@ -300,17 +306,23 @@ class _DesktopShellState extends State<DesktopShell> {
       return;
     }
     // 不 popUntil 根：保留用户原先的内容栈（如歌单详情），返回即回上一页。
-    // 仅当栈顶已是搜索页时 replace，避免连搜叠多层。
+    // 仅当栈顶仍是搜索页（跟踪的路由 isCurrent）时 replace，避免连搜叠层；
+    // 搜索页上方若有详情页则正常 push，replace 会把用户正在看的详情页换掉。
     final route = MaterialPageRoute<void>(builder: (_) => page);
     final Future<void> popped;
-    if (_searchPageOpen && inner.canPop()) {
+    final searchRoute = _searchRoute;
+    if (searchRoute != null && searchRoute.isCurrent && inner.canPop()) {
       popped = inner.pushReplacement(route);
     } else {
       popped = inner.push(route);
     }
-    _searchPageOpen = true;
+    _searchRoute = route;
     popped.whenComplete(() {
-      if (mounted) _searchPageOpen = false;
+      // 只有完成的仍是当前跟踪的搜索路由才清位：pushReplacement 下旧路由
+      // 的 popped 晚于新路由入栈才完成，不能误清新路由的标记。
+      if (mounted && identical(_searchRoute, route)) {
+        _searchRoute = null;
+      }
     });
   }
 

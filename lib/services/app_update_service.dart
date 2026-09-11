@@ -485,18 +485,22 @@ class AppUpdateService {
     debugPrint('[AppUpdate] sha256 校验通过: $actual');
   }
 
-  /// 拉起安装向导并退出本应用（Windows 安装版"退出并安装"）。
+  /// 拉起安装向导（Windows 安装版"退出并安装"第一步）。
   ///
-  /// detached 启动使向导独立于本进程存活；`exit(0)` 立即终止进程，
-  /// 音频设备、悬浮歌词窗、下载句柄随进程一并释放，避免安装器报文件占用
-  /// （Inno 侧 `CloseApplications=yes` 再兜底其他残留副本）。
-  Future<void> launchWindowsInstallerAndExit(String setupPath) async {
+  /// detached 启动使向导独立于本进程存活；本应用进程的退出由调用方
+  /// 走 [DesktopWindow.quitGracefully]（落盘几何 + 刷写播放队列等退出前
+  /// 钩子后硬终止）——此前这里直接 exit(0)，既绕过退出前刷写（更新后
+  /// 播放队列回退一首、窗口几何不保存），也会在 IME/UIA 环境下因 DLL
+  /// 静态析构触发 flutter_windows.dll 的 use-after-free 崩溃（见
+  /// DesktopWindow.quitGracefully 注释的实测记录）。硬终止同样释放
+  /// 音频设备、悬浮歌词窗与下载句柄，不存在文件占用问题（Inno 侧
+  /// CloseApplications=yes 再兜底其他残留副本）。
+  Future<void> launchWindowsInstaller(String setupPath) async {
     final file = File(setupPath);
     if (!await file.exists()) {
       throw StateError('安装包不存在：$setupPath');
     }
     await Process.start(setupPath, [], mode: ProcessStartMode.detached);
-    exit(0);
   }
 }
 
