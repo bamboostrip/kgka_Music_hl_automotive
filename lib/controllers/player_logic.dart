@@ -56,9 +56,79 @@ abstract final class PlayerLyricLogic {
   }
 }
 
+/// 桌面歌词逐字进度换算（无状态纯逻辑）。
+///
+/// 桌面悬浮窗只接收一个 `[0,1]` 标量：子窗按**整行渲染宽度**做裁剪，所以
+/// PC 上的"逐字"等价于把进度映射到**字符占比**而非时间占比。
+///
+/// 整行线性推进（elapsed / 行时长）在大段伴奏间隙、句中停顿、尾字长音上
+/// 会提前点亮后面的字——这正是移动端海报页（真逐字裁剪，见
+/// KaraokeLinePainter）与 PC 悬浮窗观感不一致的原因。有逐字时间时改用
+/// 分段映射：字内线性推进、字间间隙停住不动。
+abstract final class PlayerLyricProgressLogic {
+  /// 计算 [line] 在 [position] 时点的进度（0..1）。
+  ///
+  /// - 有逐字时间：按字符占比分段映射（见类注释）；
+  /// - 无逐字时间：按 [lineDuration]（缺省用 [LyricLine.duration]）整行线性推进；
+  /// - 时长都不可得（<= 0）：返回 1.0（整行点亮，不留下永不完成的高亮）。
+  static double forLine({
+    required LyricLine line,
+    required Duration position,
+    Duration? lineDuration,
+  }) {
+    final fromWords = _fromWords(line.words, line.text.length, position);
+    if (fromWords != null) return fromWords;
+
+    final resolved = lineDuration ?? line.duration;
+    final totalMs = resolved?.inMilliseconds ?? 0;
+    if (totalMs <= 0) return 1.0;
+    final elapsed = position.inMilliseconds - line.time.inMilliseconds;
+    return (elapsed / totalMs).clamp(0.0, 1.0);
+  }
+
+  /// 逐字分段映射。返回 null 表示逐字数据不可用（无字/无有效文本），
+  /// 由调用方退回整行线性推进。
+  static double? _fromWords(
+    List<LyricWord> words,
+    int lineLength,
+    Duration position,
+  ) {
+    if (words.isEmpty || lineLength <= 0) return null;
+    var wordsLength = 0;
+    for (final word in words) {
+      wordsLength += word.text.length;
+    }
+    if (wordsLength <= 0) return null;
+
+    // 占比分母用整行字符数：裁剪按整行渲染宽度计算，用整行长度才能与
+    // 实际裁剪位置对齐。
+    var prefix = 0;
+    for (var i = 0; i < words.length; i++) {
+      final word = words[i];
+      final startFrac = (prefix / lineLength).clamp(0.0, 1.0);
+      final endFrac = ((prefix + word.text.length) / lineLength).clamp(0.0, 1.0);
+      final wordStartMs = word.time.inMilliseconds;
+
+      if (position.inMilliseconds < wordStartMs) {
+        // 落在上一字结束到本字开始之间的间隙（或整行开头）：停住不动。
+        return startFrac;
+      }
+      final spanMs = word.duration.inMilliseconds;
+      if (spanMs > 0 && position.inMilliseconds < wordStartMs + spanMs) {
+        final ratio = (position.inMilliseconds - wordStartMs) / spanMs;
+        return (startFrac + (endFrac - startFrac) * ratio).clamp(0.0, 1.0);
+      }
+      // 本字已唱完（duration<=0 视为瞬时完成）：末字之后整行补齐，
+      // 覆盖未被逐字数据包含的尾部（标点等），不留半亮状态。
+      if (i == words.length - 1) return 1.0;
+      prefix += word.text.length;
+    }
+    return 1.0;
+  }
+}
+
 /// 进度换算。
-abstract final class PlayerPositionLogic {
-  /// 把进度夹取到 [0, duration]；时长未知（<= 0）时只夹下界。
+abstract final class PlayerPositionLogic {  /// 把进度夹取到 [0, duration]；时长未知（<= 0）时只夹下界。
   static Duration clamp(Duration value, Duration duration) {
     if (value < Duration.zero) {
       return Duration.zero;

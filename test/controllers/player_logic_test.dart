@@ -317,4 +317,116 @@ void main() {
       });
     },
   );
+
+  group('PlayerLyricProgressLogic.forLine（桌面歌词逐字进度映射）', () {
+    // 四个字各 500ms，但第二字后留出 2s 伴奏间隙（第三字 2.5s 才开始）。
+    // 整行 4 个字符 → 每字占 1/4。
+    const spaced = LyricLine(
+      time: Duration.zero,
+      text: '一二三四',
+      words: [
+        LyricWord(
+          time: Duration.zero,
+          duration: Duration(milliseconds: 500),
+          text: '一',
+        ),
+        LyricWord(
+          time: Duration(milliseconds: 500),
+          duration: Duration(milliseconds: 500),
+          text: '二',
+        ),
+        LyricWord(
+          time: Duration(milliseconds: 2500),
+          duration: Duration(milliseconds: 500),
+          text: '三',
+        ),
+        LyricWord(
+          time: Duration(milliseconds: 3000),
+          duration: Duration(milliseconds: 500),
+          text: '四',
+        ),
+      ],
+    );
+
+    test('字内线性推进', () {
+      expect(
+        PlayerLyricProgressLogic.forLine(
+          line: spaced,
+          position: const Duration(milliseconds: 250),
+        ),
+        closeTo(0.125, 1e-9),
+      );
+    });
+
+    test('字间间隙停住不动（整行线性推进会在这里提前点亮）', () {
+      // 间隙内任意时点的进度都应等于第二字结束处（2/4 = 0.5）。
+      expect(
+        PlayerLyricProgressLogic.forLine(
+          line: spaced,
+          position: const Duration(milliseconds: 1000),
+        ),
+        closeTo(0.5, 1e-9),
+      );
+      expect(
+        PlayerLyricProgressLogic.forLine(
+          line: spaced,
+          position: const Duration(milliseconds: 2499),
+        ),
+        closeTo(0.5, 1e-9),
+      );
+    });
+
+    test('末字结束后补齐为 1.0（不留半亮）', () {
+      expect(
+        PlayerLyricProgressLogic.forLine(
+          line: spaced,
+          position: const Duration(milliseconds: 3500),
+        ),
+        1.0,
+      );
+    });
+
+    test('行首为 0 且全程单调不减', () {
+      expect(
+        PlayerLyricProgressLogic.forLine(line: spaced, position: Duration.zero),
+        0.0,
+      );
+      var last = -1.0;
+      for (var ms = 0; ms <= 3600; ms += 50) {
+        final progress = PlayerLyricProgressLogic.forLine(
+          line: spaced,
+          position: Duration(milliseconds: ms),
+        );
+        expect(progress, greaterThanOrEqualTo(last));
+        last = progress;
+      }
+      expect(last, 1.0);
+    });
+
+    test('无逐字时间时回退整行线性推进', () {
+      const plain = LyricLine(
+        time: Duration(seconds: 1),
+        text: '一行歌词',
+        duration: Duration(seconds: 4),
+      );
+      expect(
+        PlayerLyricProgressLogic.forLine(
+          line: plain,
+          position: const Duration(seconds: 3),
+        ),
+        closeTo(0.5, 1e-9),
+      );
+    });
+
+    test('无逐字时间且行时长不可得 → 1.0（历史语义：整行点亮）', () {
+      const plain = LyricLine(time: Duration.zero, text: '一行歌词');
+      expect(
+        PlayerLyricProgressLogic.forLine(
+          line: plain,
+          position: const Duration(seconds: 9),
+        ),
+        1.0,
+      );
+    });
+  });
 }

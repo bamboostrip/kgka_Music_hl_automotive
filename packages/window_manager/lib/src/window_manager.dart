@@ -699,11 +699,20 @@ class WindowManager {
     await _channel.invokeMethod('setIgnoreMouseEvents', arguments);
   }
 
-  /// Returns `Offset` - Contains the cursor's current screen position.
+  /// Returns `Offset` - Contains the cursor's current screen position,
+  /// converted to logical pixels.
+  ///
+  /// 缩放比取自**光标所在显示器**（原生一并回传）：混合缩放的多显示器
+  /// 环境下，用本窗口的 DPR 换算会在鼠标位于另一块屏时错位。
+  /// [devicePixelRatio] 显式传入时优先（调用方知情）。
   Future<Offset> getCursorScreenPoint({double? devicePixelRatio}) async {
     final Map<dynamic, dynamic> result =
         await _channel.invokeMethod('getCursorScreenPoint');
-    final double ratio = devicePixelRatio ?? getDevicePixelRatio();
+    final nativeScale = (result['scale'] as num?)?.toDouble();
+    final double ratio = devicePixelRatio ??
+        ((nativeScale != null && nativeScale > 0)
+            ? nativeScale
+            : getDevicePixelRatio());
     return Offset(
       (result['dx'] as num).toDouble() / ratio,
       (result['dy'] as num).toDouble() / ratio,

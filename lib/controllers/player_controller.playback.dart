@@ -162,6 +162,9 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       notifyListeners();
       unawaited(loadLyrics(song));
       await _audioHandler.play();
+      // 起播成功：连续失败 streak 整体归零（含已自动跳过的计数）。
+      _consecutivePlayFailures = 0;
+      _autoSkippedInStreak = 0;
       // 记录播放历史与本地播放统计（后台执行，不阻塞播放）
       unawaited(_historyService.record(song));
       unawaited(_statsService.recordPlay(song));
@@ -192,7 +195,13 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       // 网络类失败（非 VIP、非首次重试）：短暂等待后自动重试一次。
       // 车机弱网/网络切换瞬间首次请求常失败，重试后即可恢复；
       // 确定性错误（如"没有可播放地址"）重试成本低，统一兜底一次。
-      if (!isRetry && error is! VipRequiredException) {
+      //
+      // 例外：已进入"连续失败自动跳过"状态（_autoSkippedInStreak > 0）时
+      // 不再逐首重试——此时基本是网络/服务端级故障，每首再等 2 秒会把
+      // 跳过扫描拖成数分钟的跳歌风暴，直接计入失败并继续跳。
+      if (!isRetry &&
+          error is! VipRequiredException &&
+          _autoSkippedInStreak == 0) {
         // 等待期间用户可能已切歌：旧歌的自动重试不得抢回播放权。
         if (currentSong?.hash != song.hash) {
           debugPrint('[时音][player] 重试前歌曲已切换，放弃重试: ${song.title}');
@@ -224,6 +233,8 @@ mixin _PlayerPlayback on _PlayerControllerBase {
       errorMessage = error.toString();
       isPreparing = false;
       notifyListeners();
+      // 已走完 VIP 领取与自动重试仍失败：计一次最终失败，达阈值自动前进。
+      _registerPlaybackFailure(song);
     } finally {
       var depth = _changingSourceDepth;
       if (depth > 0) {
@@ -245,6 +256,47 @@ mixin _PlayerPlayback on _PlayerControllerBase {
         _scheduleSavePlaybackState();
       }
     }
+  }
+
+  /// 记录一次最终播放失败（已走完 VIP 领取与自动重试）。
+  ///
+  /// 连续失败达 [_kAutoSkipFailureThreshold] 次后自动跳到下一首：坏源
+  /// （无版权/地址失效）与断网场景下，播放器此前会永久卡在同一首的错误态，
+  /// 用户只能手动一首首点。跳过策略：
+  /// - 单曲队列不跳（无处可去，保持错误态提示）；
+  /// - 本轮 streak 内跳过次数上限 = min(队列长度, [_kMaxAutoSkipsPerStreak])：
+  ///   连续多首失败说明是网络/服务端问题而非单曲问题，早点停下报错——
+  ///   每首都要走一遍自动重试（2s 等待），长队列会变成数分钟的跳歌风暴；
+  /// - 任一首成功起播即整体归零（见 playSong 起播后的清零）。
+  void _registerPlaybackFailure(Song song) {
+    if (_disposed) return;
+    _consecutivePlayFailures++;
+    if (_consecutivePlayFailures < _kAutoSkipFailureThreshold) return;
+
+    final queueLength = queue.length;
+    if (queueLength <= 1) return;
+    final skipLimit = queueLength < _kMaxAutoSkipsPerStreak
+        ? queueLength
+        : _kMaxAutoSkipsPerStreak;
+    if (_autoSkippedInStreak >= skipLimit) {
+      debugPrint(
+        '[时音][player] 连续失败 $_consecutivePlayFailures 次，本轮已自动跳过 '
+        '$_autoSkippedInStreak 首（上限 $skipLimit），停止跳转',
+      );
+      return;
+    }
+    _autoSkippedInStreak++;
+    debugPrint(
+      '[时音][player] 连续失败 $_consecutivePlayFailures 次，自动跳过: ${song.title}',
+    );
+    Toast.show('《${song.title}》播放失败，已跳过');
+    // 脱离当前调用栈：本流程的 finally 尚未执行，直接 await next() 会形成
+    // 逐曲嵌套的 await 链；延后一拍让本次收尾先完成（finally 的深度计数
+    // 随后归零，不会误清新流程的守卫）。
+    Future<void>.delayed(Duration.zero, () {
+      if (_disposed) return;
+      unawaited(next());
+    });
   }
 
   /// 预缓存歌曲封面到 Flutter ImageCache，打开播放页时可立即显示。

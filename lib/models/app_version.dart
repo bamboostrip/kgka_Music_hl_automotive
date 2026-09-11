@@ -204,15 +204,24 @@ int compareSemver(String a, String b) {
   return 0;
 }
 
-/// 由语义化版本生成一个单调的整数 code（major*100 + minor*10 + patch）。
+/// 由语义化版本生成一个单调的整数 code
+/// （major*[_kMajorStride] + minor*[_kMinorStride] + patch）。
 /// 口径必须与 docs/release-process.md 及 pubspec `+<code>` 后缀一致
-/// （如 2.5.1 → 251）：fromGitHubRelease 用它与 AppConfig.appVersionCode
+/// （如 2.5.1 → 2005001）：fromGitHubRelease 用它与 AppConfig.appVersionCode
 ///（经 normalizedVersionCode 归一）比较新旧，口径分叉会导致同版本恒判"有更新"。
-/// 约束：minor/patch 须 < 10（与发布流程约定相同），否则高位进位破坏单调性。
+///
+/// 历史口径是 `major*100 + minor*10 + patch`，minor/patch 达到 10 即高位进位
+/// 破坏单调性（2.10.0 与 3.0.0 同为 300）。改为 3 位小数位后约束放宽到
+/// minor/patch < 1000；新 code 恒大于任何旧口径 code（旧值最多 3 位数，
+/// 新值最少 7 位数），跨版本升级比较不会倒退。
 int semverToCode(String version) {
   final p = _semverParts(version);
-  return p[0] * 100 + p[1] * 10 + p[2];
+  return p[0] * _kMajorStride + p[1] * _kMinorStride + p[2];
 }
+
+/// 版本码十进制位宽（minor/patch 各占 [_kMinorStride] 的 3 位）。
+const int _kMajorStride = 1000000;
+const int _kMinorStride = 1000;
 
 int normalizedVersionCode(Object? value) {
   if (value == null) {

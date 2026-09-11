@@ -414,6 +414,7 @@ class _LyricViewportState extends State<LyricViewport>
 
     return ExcludeSemantics(
       // 歌词视图高频更新会触发 Windows AXTree 竞态，仅桌面排除
+      // （上游 flutter/flutter#190357 / #192180 未修复，详见 main.dart）
       excluding: isDesktopPlatform,
       child: LyricView(controller: _lyricController, style: lyricStyle),
     );

@@ -23,6 +23,7 @@ import '../services/playback_stats_service.dart';
 import '../services/super_lyric_service.dart';
 import '../services/vip_background_task.dart';
 import '../ui/form_factor.dart';
+import '../ui/widgets/toast.dart';
 import 'download_controller.dart';
 import 'local_music_controller.dart';
 import 'player_logic.dart';
@@ -36,6 +37,14 @@ part 'player_controller.desktop.dart';
 part 'player_controller.settings.dart';
 
 enum PlaybackMode { playlistLoop, shuffle, singleLoop }
+
+/// 连续播放失败达到该次数后自动跳到下一首（见 [_PlayerPlayback._registerPlaybackFailure]）。
+/// 库级常量：静态成员不能经实例访问，而该逻辑在 part 文件的 mixin 内。
+const int _kAutoSkipFailureThreshold = 3;
+
+/// 单轮失败 streak 内自动跳过的次数上限（与队列长度取小）：连续多首失败
+/// 基本是网络/服务端问题，早点停下报错，避免长队列下的跳歌风暴。
+const int _kMaxAutoSkipsPerStreak = 5;
 
 class AudioEffectPreset {
   const AudioEffectPreset({required this.name, required this.levels});
@@ -396,6 +405,13 @@ abstract class _PlayerControllerBase extends ChangeNotifier {
   /// 后启动者抢先，其 finally 会把后者仍需的"换源中"状态提前清除，
   /// completed 守卫失效。计数化后状态只在最后一个在途加载结束时归零。
   int _changingSourceDepth = 0;
+
+  /// 连续播放失败次数（任一曲成功起播即归零）。
+  int _consecutivePlayFailures = 0;
+
+  /// 本轮失败 streak 内已自动跳过的曲数：上限为队列长度——整轮都失败就
+  /// 停下报错，不做无限循环（坏源/断网时"跳一次失败一次"会瞬间扫光队列）。
+  int _autoSkippedInStreak = 0;
   bool addListeningTimeEnabled = true;
   AudioQuality audioQuality = AudioQuality.standard;
 

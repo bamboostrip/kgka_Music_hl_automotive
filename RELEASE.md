@@ -9,7 +9,8 @@
 | `pubspec.yaml` | `version: X.Y.Z+N` |
 | `lib/config/app_config.dart` | `appVersion = 'X.Y.Z'`、`appVersionCode = 'N'` |
 
-versionCode 规则：`X*100 + Y*10 + Z`（如 2.4.8 → 248）。
+versionCode 规则：`X*1000000 + Y*1000 + Z`（如 2.5.1 → 2005001，minor/patch 须 < 1000）。
+旧口径 `X*100 + Y*10 + Z` 在 minor 达两位数时会进位冲突（2.10.0 与 3.0.0 同为 300），已废弃。
 
 ## 2. 更新应用内更新日志（容易忘！）
 

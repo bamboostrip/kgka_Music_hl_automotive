@@ -374,6 +374,9 @@ class WindowsDesktopLyricsBridge {
     var origin = const Offset(100, 100);
     var scaleFactor = 1.0;
     var visibleAreas = const <Rect>[];
+    // 逻辑可见区 → 该屏缩放比：混合缩放多屏下，记忆位置落在副屏时必须按
+    // 副屏缩放换算（此前恒用主屏缩放，副屏上会整体偏移）。
+    var displayScales = const <({Rect area, double scale})>[];
     try {
       final primary = await screenRetriever.getPrimaryDisplay();
       final all = await screenRetriever.getAllDisplays();
@@ -382,6 +385,13 @@ class WindowsDesktopLyricsBridge {
         primaryArea,
         for (final display in all)
           if (display.id != primary.id) _visibleAreaOf(display),
+      ];
+      displayScales = [
+        for (final display in all)
+          (
+            area: _visibleAreaOf(display),
+            scale: (display.scaleFactor ?? 1.0).toDouble(),
+          ),
       ];
       scaleFactor = (primary.scaleFactor ?? 1.0).toDouble();
       origin = Offset(
@@ -421,15 +431,33 @@ class WindowsDesktopLyricsBridge {
           await prefs.setDouble(windowTopPrefKey, clamped.dy);
         }
         origin = clamped;
+        scaleFactor = scaleForLogicalOrigin(displayScales, origin) ?? scaleFactor;
       }
     } on Exception catch (e) {
       debugPrint('[桌面歌词主窗] 读取/钳制记忆位置失败，用默认位置: $e');
     }
     // desktop_multi_window 的 setFrame 底层是 MoveWindow（物理像素），
-    // 而 screen_retriever/window_manager 记忆位置都是逻辑坐标：
-    // 必须按主显示器缩放换算，否则 DPI>100% 时首帧位置/尺寸偏小偏移。
+    // 而 screen_retriever/window_manager 记忆位置都是逻辑坐标：必须按
+    // **窗口最终落点所在显示器**的缩放换算（见 scaleForLogicalOrigin）。
     return Offset(origin.dx * scaleFactor, origin.dy * scaleFactor) &
         Size(overlayWidth * scaleFactor, overlayHeight * scaleFactor);
+  }
+
+  /// 取逻辑原点所在显示器的缩放比（纯函数，供单测）。
+  ///
+  /// 契约与 [clampOverlayOriginToVisibleAreas] 对齐：原点落在多个可见区的
+  /// 交集（镜像/重叠）时取第一个；都不命中（跨屏缝隙等）返回 null，由调用
+  /// 方回退主屏缩放。
+  @visibleForTesting
+  static double? scaleForLogicalOrigin(
+    List<({Rect area, double scale})> displays,
+    Offset origin,
+  ) {
+    if (displays.isEmpty) return null;
+    for (final display in displays) {
+      if (display.area.contains(origin)) return display.scale;
+    }
+    return null;
   }
 
   /// 显示器的可见区域：优先 visiblePosition/visibleSize，缺失时退回原点/整屏。

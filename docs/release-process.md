@@ -37,16 +37,17 @@ Windows 分发无签名要求（不做代码签名），但 Inno 的 `AppId` 一
 
 | 文件 | 字段 | 示例 |
 |------|------|------|
-| `pubspec.yaml` | `version: x.y.z+code` | `2.4.2+242` |
-| `lib/config/app_config.dart` | `appVersion` | `'2.4.2'` |
-| `lib/config/app_config.dart` | `appVersionCode` | `'242'` |
+| `pubspec.yaml` | `version: x.y.z+code` | `2.5.1+2005001` |
+| `lib/config/app_config.dart` | `appVersion` | `'2.5.1'` |
+| `lib/config/app_config.dart` | `appVersionCode` | `'2005001'` |
 
 > ⚠️ **必须在打 tag 之前完成版本号升级**，否则 CI 打出的包内部版本号是旧的，
 > 会导致"关于"页显示错误版本、检查更新逻辑异常。
 
 版本号规则：
 - `versionName`：语义化版本 `major.minor.patch`
-- `versionCode`：`major * 100 + minor * 10 + patch`（如 `2.4.2` → `242`，pubspec 写作 `2.4.2+242`）
+- `versionCode`：`major * 1000000 + minor * 1000 + patch`（如 `2.5.1` → `2005001`，pubspec 写作 `2.5.1+2005001`）
+- 约束：`minor` 与 `patch` 须 `< 1000`（各占 3 位），否则高位进位破坏单调性
 
 ## 四、更新更新日志
 

@@ -572,6 +572,11 @@ void WindowManagerPlugin::HandleMethodCall(
         flutter::EncodableValue(static_cast<double>(cursorPos.x));
     result_map[flutter::EncodableValue("dy")] =
         flutter::EncodableValue(static_cast<double>(cursorPos.y));
+    // LOCAL PATCH (shiyin): 一并回传光标所在显示器的缩放比。混合缩放的
+    // 多屏环境下，Dart 侧按「本窗口 DPR」换算光标物理坐标会错位，见
+    // WindowManager::GetDpiForMonitorAtPoint 注释。
+    result_map[flutter::EncodableValue("scale")] = flutter::EncodableValue(
+        window_manager->GetDpiForMonitorAtPoint(cursorPos) / 96.0);
     result->Success(flutter::EncodableValue(result_map));
   } else if (method_name.compare("popUpWindowMenu") == 0) {
     const flutter::EncodableMap& args =

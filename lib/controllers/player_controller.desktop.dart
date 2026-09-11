@@ -239,40 +239,19 @@ mixin _PlayerDesktop on _PlayerControllerBase {
     final line = lyrics[index.clamp(0, lyrics.length - 1)];
     final position = smoothPosition;
     final lineDuration = line.duration ?? _estimatedLineDuration(index);
-
-    if (line.words.isEmpty) {
-      // No word-level data: estimate progress from line duration
-      final lineStart = line.time.inMilliseconds;
-      final lineDurationMs = lineDuration?.inMilliseconds ?? 0;
-      if (lineDurationMs > 0) {
-        final elapsed = position.inMilliseconds - lineStart;
-        final progress = (elapsed / lineDurationMs).clamp(0.0, 1.0);
-        _desktopLyrics.updateKaraokeProgress(
-          progress: progress,
-          lineDuration: lineDuration,
-          isPlaying: isPlaying,
-        );
-      } else {
-        _desktopLyrics.updateKaraokeProgress(
-          progress: 1.0,
-          lineDuration: null,
-          isPlaying: isPlaying,
-        );
-      }
-    } else {
-      // Word-level: find active word and compute progress
-      final lineStart = line.time.inMilliseconds;
-      final lineDurationMs = lineDuration?.inMilliseconds ?? 0;
-      if (lineDurationMs > 0) {
-        final elapsed = position.inMilliseconds - lineStart;
-        final progress = (elapsed / lineDurationMs).clamp(0.0, 1.0);
-        _desktopLyrics.updateKaraokeProgress(
-          progress: progress,
-          lineDuration: lineDuration,
-          isPlaying: isPlaying,
-        );
-      }
-    }
+    // 有逐字时间时按字符占比分段映射（字间间隙停住不动），无逐字时间才
+    // 退回整行线性推进。历史实现里 word 分支算的是与行级完全相同的线性
+    // 进度（死分支），且行时长不可得时干脆不推送——高亮会停在半途。
+    final progress = PlayerLyricProgressLogic.forLine(
+      line: line,
+      position: position,
+      lineDuration: lineDuration,
+    );
+    _desktopLyrics.updateKaraokeProgress(
+      progress: progress,
+      lineDuration: lineDuration,
+      isPlaying: isPlaying,
+    );
   }
 
   Future<void> updateDesktopLyricsSettings(

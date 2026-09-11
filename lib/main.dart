@@ -371,8 +371,20 @@ class _ShiyinAppState extends State<ShiyinApp> with WidgetsBindingObserver {
                 ),
               ),
             );
-            // Windows 桌面 AXTree 竞态导致原生崩溃（accessibility_bridge.cc），
-            // 整 app 排除语义树彻底规避。Android/iOS 不受影响。
+            // Windows 桌面 AXTree 竞态导致原生崩溃 / 无障碍树永久冻结
+            // （accessibility_bridge.cc），整 app 排除语义树彻底规避。
+            // Android/iOS 不受影响。
+            //
+            // 上游跟踪（2026-09 复核：均未修复，故 workaround 必须保留）：
+            // - flutter/flutter#190357：pushed route 内的 Slider 会序列化孤儿
+            //   语义节点，ui::AXTree 更新被拒后无障碍树**永久冻结**（读屏失效）。
+            //   stable 3.44.8（本项目版本）与 master 3.47.0-pre 均可复现，
+            //   尚无关联 PR。注意本项目设置页正是 "Navigator.push + Slider"
+            //   组合——移除本 workaround 会直接命中该 bug。
+            // - flutter/flutter#192180：无障碍 hit-test 空指针崩溃
+            //   （FlutterPlatformNodeDelegateWindows::HitTestSync，0xC0000005）。
+            // 代价：桌面端读屏用户无法访问播放页/歌曲列表（已知 tradeoff）；
+            // 上游修复后应移除并回归无障碍测试。
             if (Platform.isWindows) {
               result = ExcludeSemantics(child: result);
             }

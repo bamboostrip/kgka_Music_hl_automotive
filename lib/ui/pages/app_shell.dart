@@ -163,7 +163,9 @@ class _AppShellState extends State<AppShell> {
             body: Row(
               children: [
                 // ExcludeSemantics 规避频繁响应 player 更新导致的
-                // Windows AXTree 竞态崩溃（Flutter Windows 引擎 bug）。
+                // Windows AXTree 竞态崩溃（Flutter Windows 引擎 bug，
+                // 上游 flutter/flutter#190357 / #192180 仍未修复；
+                // 详见 main.dart 全局 workaround 处说明）。
                 // 仅桌面平台排除；车机分支跑在 Android 上，必须保留语义。
                 ExcludeSemantics(
                   excluding: isDesktopPlatform,

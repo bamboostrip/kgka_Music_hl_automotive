@@ -150,6 +150,9 @@ class WindowManager {
   void WindowManager::SetOpacity(const flutter::EncodableMap& args);
   void WindowManager::SetBrightness(const flutter::EncodableMap& args);
   void WindowManager::SetIgnoreMouseEvents(const flutter::EncodableMap& args);
+  // LOCAL PATCH (shiyin): 光标所在显示器的缩放比（供 getCursorScreenPoint
+  // 回传，混合缩放多屏下的坐标换算用）。放在 public 段因为 plugin 需要调用。
+  double GetDpiForMonitorAtPoint(POINT point);
   void WindowManager::PopUpWindowMenu(const flutter::EncodableMap& args);
   void WindowManager::StartDragging();
   void WindowManager::StartResizing(const flutter::EncodableMap& args);
@@ -398,6 +401,37 @@ double WindowManager::GetDpiForHwnd(HWND hWnd) {
       if (FAILED(GetDpiForMonitorFunc(monitor, MDT_EFFECTIVE_DPI, &newDpiX,
                                       &newDpiY))) {
         // If it fails, set the default values again
+        newDpiX = 96;
+        newDpiY = 96;
+      }
+    }
+    FreeLibrary(shcore);
+  }
+  return ((double)newDpiX);
+}
+
+// LOCAL PATCH (shiyin): 取「指定屏幕坐标所在显示器」的 DPI，而非本窗口所在
+// 显示器的 DPI。GetDpiForHwnd 用 MonitorFromWindow(hwnd)，在混合缩放（各屏
+// 缩放比不同）的多显示器环境下，鼠标移到另一块屏上时，用本窗口所在屏的
+// 缩放换算光标坐标会得到错误的逻辑坐标：光标物理坐标属于 A 屏、却按 B 屏
+// 缩放除法，悬浮窗的解锁胶囊悬停判定随之失准。GetCursorPos 返回虚拟屏物理
+// 像素，因此这里用 MonitorFromPoint 定位光标所在屏。
+double WindowManager::GetDpiForMonitorAtPoint(POINT point) {
+  auto monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+  UINT newDpiX = 96;
+  UINT newDpiY = 96;
+
+  HMODULE shcore = LoadLibrary(TEXT("shcore.dll"));
+  if (shcore) {
+    typedef HRESULT (*GetDpiForMonitor)(HMONITOR, int, UINT*, UINT*);
+
+    GetDpiForMonitor GetDpiForMonitorFunc =
+        (GetDpiForMonitor)GetProcAddress(shcore, "GetDpiForMonitor");
+
+    if (GetDpiForMonitorFunc) {
+      const int MDT_EFFECTIVE_DPI = 0;
+      if (FAILED(GetDpiForMonitorFunc(monitor, MDT_EFFECTIVE_DPI, &newDpiX,
+                                      &newDpiY))) {
         newDpiX = 96;
         newDpiY = 96;
       }

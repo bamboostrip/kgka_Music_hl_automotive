@@ -1513,6 +1513,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
               // 触发 Flutter Windows 引擎 AXTree 更新 bug（console 提示
               // "Failed to update ui::AXTree"）。仅桌面平台排除语义树，
               // 移动端保留无障碍功能。
+              // 上游 flutter/flutter#190357 / #192180 未修复，详见 main.dart。
               ExcludeSemantics(
                 excluding: isDesktopPlatform,
                 child: CustomScrollView(

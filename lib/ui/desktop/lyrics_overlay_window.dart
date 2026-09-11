@@ -478,7 +478,8 @@ class _LyricsOverlayApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 与主窗一致：Windows 桌面排除语义树，规避 AXTree 竞态崩溃。
+    // 与主窗一致：Windows 桌面排除语义树，规避 AXTree 竞态崩溃
+    // （上游 flutter/flutter#190357 / #192180 未修复，详见 main.dart）。
     return ExcludeSemantics(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
