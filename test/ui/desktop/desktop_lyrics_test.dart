@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -892,6 +893,236 @@ void main() {
       );
       await tester.pump();
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('悬浮工具栏快捷调节菜单（字号、配色、单双行）', () {
+    Future<void> pumpQuickSettings(
+      WidgetTester tester, {
+      required Widget child,
+    }) async {
+      tester.view.physicalSize = const Size(
+        WindowsDesktopLyricsBridge.overlayWidth,
+        400,
+      );
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: child,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 悬停以唤出工具栏
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(const Offset(390, 44));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('工具栏包含设置按钮 (Icons.settings_rounded)', (tester) async {
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+        ),
+      );
+      expect(find.byIcon(Icons.settings_rounded), findsOneWidget);
+    });
+
+    testWidgets('点击设置按钮展开快捷调节菜单，再次点击或点击遮罩收起', (tester) async {
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+        ),
+      );
+
+      // 初始未展开菜单
+      expect(find.text('字体大小'), findsNothing);
+      expect(find.text('字体颜色'), findsNothing);
+
+      // 点击设置按钮展开
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('字体大小'), findsOneWidget);
+      expect(find.text('字体颜色'), findsOneWidget);
+      expect(find.text('更多设置'), findsOneWidget);
+
+      // 点击遮罩外部（如左上角）收起菜单
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.text('字体大小'), findsNothing);
+      expect(find.text('字体颜色'), findsNothing);
+    });
+
+    testWidgets('点击 [+] 或 [-] 触发字号调节回调并钳制在 [16, 40]', (tester) async {
+      DesktopLyricsSettings? updatedSettings;
+
+      await pumpQuickSettings(
+        tester,
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return DesktopLyricsOverlayContent(
+              settings: updatedSettings ??
+                  const DesktopLyricsSettings(locked: false, fontSize: 24.0),
+              current: '测试歌词',
+              next: '',
+              isPlaying: true,
+              onControlPlayback: (_) {},
+              onToggleLock: (_) {},
+              onClose: () {},
+              onUpdateSettings: (s) => setState(() => updatedSettings = s),
+            );
+          },
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      // 当前字号 24
+      expect(find.text('24'), findsOneWidget);
+
+      // 点击 [+] -> 26
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      expect(updatedSettings?.fontSize, 26.0);
+      expect(find.text('26'), findsOneWidget);
+
+      // 点击 [-] -> 24
+      await tester.tap(find.byIcon(Icons.remove));
+      await tester.pumpAndSettle();
+      expect(updatedSettings?.fontSize, 24.0);
+      expect(find.text('24'), findsOneWidget);
+    });
+
+    testWidgets('点击预设配色触发颜色变更回调', (tester) async {
+      DesktopLyricsSettings? updatedSettings;
+
+      await pumpQuickSettings(
+        tester,
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return DesktopLyricsOverlayContent(
+              settings: updatedSettings ??
+                  const DesktopLyricsSettings(
+                    locked: false,
+                    unplayedTextColor: 0xFF00BFFF,
+                    textColor: 0xFF00BFFF,
+                  ),
+              current: '测试歌词',
+              next: '',
+              isPlaying: true,
+              onControlPlayback: (_) {},
+              onToggleLock: (_) {},
+              onClose: () {},
+              onUpdateSettings: (s) => setState(() => updatedSettings = s),
+            );
+          },
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      // 点击金黄色预设 0xFFFFD700
+      await tester.tap(find.byKey(const ValueKey(0xFFFFD700)));
+      await tester.pumpAndSettle();
+
+      expect(updatedSettings?.unplayedTextColor, 0xFFFFD700);
+      expect(updatedSettings?.textColor, 0xFFFFD700);
+    });
+
+    testWidgets('点击切换单/双行触发单双行切换回调', (tester) async {
+      DesktopLyricsSettings? updatedSettings;
+
+      await pumpQuickSettings(
+        tester,
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return DesktopLyricsOverlayContent(
+              settings: updatedSettings ??
+                  const DesktopLyricsSettings(locked: false, singleLine: true),
+              current: '测试歌词',
+              next: '',
+              isPlaying: true,
+              onControlPlayback: (_) {},
+              onToggleLock: (_) {},
+              onClose: () {},
+              onUpdateSettings: (s) => setState(() => updatedSettings = s),
+            );
+          },
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      // 单行模式下文案为“切换双行”
+      expect(find.text('切换双行'), findsOneWidget);
+      await tester.tap(find.text('切换双行'));
+      await tester.pumpAndSettle();
+
+      expect(updatedSettings?.singleLine, isFalse);
+      expect(find.text('切换单行'), findsOneWidget);
+
+      // 再次点击切回单行
+      await tester.tap(find.text('切换单行'));
+      await tester.pumpAndSettle();
+      expect(updatedSettings?.singleLine, isTrue);
+    });
+
+    testWidgets('点击更多设置触发 onOpenDetailedSettings 回调并关闭菜单', (tester) async {
+      var openedDetailed = false;
+
+      await pumpQuickSettings(
+        tester,
+        child: DesktopLyricsOverlayContent(
+          settings: const DesktopLyricsSettings(locked: false),
+          current: '测试歌词',
+          next: '',
+          isPlaying: true,
+          onControlPlayback: (_) {},
+          onToggleLock: (_) {},
+          onClose: () {},
+          onOpenDetailedSettings: () => openedDetailed = true,
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('更多设置'), findsOneWidget);
+      await tester.tap(find.text('更多设置'));
+      await tester.pumpAndSettle();
+
+      expect(openedDetailed, isTrue);
+      // 菜单已关闭
+      expect(find.text('更多设置'), findsNothing);
     });
   });
 

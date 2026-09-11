@@ -519,6 +519,27 @@ class _LyricsOverlayHomeState extends State<_LyricsOverlayHome>
     }
   }
 
+  Future<void> _updateSettings(DesktopLyricsSettings settings) async {
+    widget.model.settings = settings;
+    try {
+      await DesktopMultiWindow.invokeMethod(
+        0,
+        'updateOverlaySettings',
+        settings.toMap(),
+      );
+    } catch (e) {
+      debugPrint('updateOverlaySettings failed: $e');
+    }
+  }
+
+  Future<void> _openDetailedSettings() async {
+    try {
+      await DesktopMultiWindow.invokeMethod(0, 'openLyricsSettings');
+    } catch (e) {
+      debugPrint('openLyricsSettings failed: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -534,6 +555,8 @@ class _LyricsOverlayHomeState extends State<_LyricsOverlayHome>
           onControlPlayback: (action) => unawaited(_controlPlayback(action)),
           onToggleLock: (locked) => unawaited(_setLocked(locked)),
           onClose: () => unawaited(closeLyricsOverlayWindow()),
+          onUpdateSettings: (settings) => unawaited(_updateSettings(settings)),
+          onOpenDetailedSettings: () => unawaited(_openDetailedSettings()),
         );
       },
     );
@@ -557,6 +580,8 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
     required this.onControlPlayback,
     required this.onToggleLock,
     required this.onClose,
+    this.onUpdateSettings,
+    this.onOpenDetailedSettings,
   });
 
   final DesktopLyricsSettings settings;
@@ -569,6 +594,8 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
   /// 参数为目标锁定状态（true=锁定）。
   final ValueChanged<bool> onToggleLock;
   final VoidCallback onClose;
+  final ValueChanged<DesktopLyricsSettings>? onUpdateSettings;
+  final VoidCallback? onOpenDetailedSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -588,6 +615,8 @@ class DesktopLyricsOverlayContent extends StatelessWidget {
             onControlPlayback: onControlPlayback,
             onToggleLock: onToggleLock,
             onClose: onClose,
+            onUpdateSettings: onUpdateSettings,
+            onOpenDetailedSettings: onOpenDetailedSettings,
           );
     return Material(
       type: MaterialType.transparency,
@@ -632,6 +661,8 @@ class _HoverableOverlay extends StatefulWidget {
     required this.onControlPlayback,
     required this.onToggleLock,
     required this.onClose,
+    this.onUpdateSettings,
+    this.onOpenDetailedSettings,
   });
 
   final DesktopLyricsSettings settings;
@@ -642,6 +673,8 @@ class _HoverableOverlay extends StatefulWidget {
   final ValueChanged<String> onControlPlayback;
   final ValueChanged<bool> onToggleLock;
   final VoidCallback onClose;
+  final ValueChanged<DesktopLyricsSettings>? onUpdateSettings;
+  final VoidCallback? onOpenDetailedSettings;
 
   @override
   State<_HoverableOverlay> createState() => _HoverableOverlayState();
@@ -649,6 +682,12 @@ class _HoverableOverlay extends StatefulWidget {
 
 class _HoverableOverlayState extends State<_HoverableOverlay> {
   bool _hovering = false;
+  bool _showSettingsMenu = false;
+
+  Future<void> _updateSettings(DesktopLyricsSettings newSettings) async {
+    // Update local model for immediate response
+    widget.onUpdateSettings?.call(newSettings);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -681,55 +720,85 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
           ]
         : null;
 
-    return MouseRegion(
-      hitTestBehavior: HitTestBehavior.opaque,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: Material(
-        type: MaterialType.transparency,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: cardBorder,
-            boxShadow: cardShadows,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Stack(
-              children: [
-                // 歌词主体与整卡拖拽热区
-                Positioned.fill(
-                  child: DragToMoveArea(
-                    child: Container(
-                      color: Colors.transparent,
-                      child: buildOverlayLyricsBody(
-                        settings: settings,
-                        current: widget.current,
-                        next: widget.next,
-                        progress: widget.progress,
+    final showToolbar = _hovering || _showSettingsMenu;
+    final totalHeight = _showSettingsMenu ? 260.0 : WindowsDesktopLyricsBridge.overlayHeight;
+
+    return SizedBox(
+      width: WindowsDesktopLyricsBridge.overlayWidth,
+      height: totalHeight,
+      child: MouseRegion(
+        hitTestBehavior: HitTestBehavior.opaque,
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: Material(
+          type: MaterialType.transparency,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SizedBox(
+                width: WindowsDesktopLyricsBridge.overlayWidth,
+                height: WindowsDesktopLyricsBridge.overlayHeight,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: cardBorder,
+                    boxShadow: cardShadows,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: DragToMoveArea(
+                      child: Container(
+                        color: Colors.transparent,
+                        child: buildOverlayLyricsBody(
+                          settings: settings,
+                          current: widget.current,
+                          next: widget.next,
+                          progress: widget.progress,
+                        ),
                       ),
                     ),
                   ),
                 ),
-                // 悬停微型磨砂操作卡片顶部浮现操作栏
-                Positioned(
-                  top: 6,
-                  right: 8,
-                  child: AnimatedOpacity(
-                    opacity: _hovering ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeInOut,
-                    child: IgnorePointer(
-                      ignoring: !_hovering,
-                      child: _buildOverlayToolbar(context),
-                    ),
+              ),
+              if (_showSettingsMenu)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _showSettingsMenu = false),
                   ),
                 ),
-              ],
-            ),
+              Positioned(
+                top: 6,
+                right: 8,
+                child: AnimatedOpacity(
+                  opacity: showToolbar ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeInOut,
+                  child: IgnorePointer(
+                    ignoring: !showToolbar,
+                    child: _buildOverlayToolbar(context),
+                  ),
+                ),
+              ),
+              if (_showSettingsMenu)
+                Positioned(
+                  top: 38,
+                  right: 8,
+                  child: _OverlayQuickSettingsMenu(
+                    settings: settings,
+                    onUpdateSettings: (newSettings) {
+                      _updateSettings(newSettings);
+                    },
+                    onOpenDetailedSettings: () {
+                      setState(() => _showSettingsMenu = false);
+                      widget.onOpenDetailedSettings?.call();
+                    },
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -787,6 +856,15 @@ class _HoverableOverlayState extends State<_HoverableOverlay> {
               tooltip: settings.locked ? '解锁歌词' : '锁定歌词',
               iconSize: 18,
               onPressed: () => widget.onToggleLock(!settings.locked),
+            ),
+            const SizedBox(width: 2),
+            _ToolbarButton(
+              icon: Icons.settings_rounded,
+              tooltip: '桌面歌词设置',
+              iconSize: 18,
+              isActive: _showSettingsMenu,
+              onPressed: () =>
+                  setState(() => _showSettingsMenu = !_showSettingsMenu),
             ),
             const SizedBox(width: 2),
             _ToolbarButton(
@@ -904,12 +982,14 @@ class _ToolbarButton extends StatefulWidget {
     required this.tooltip,
     required this.onPressed,
     this.iconSize = 18,
+    this.isActive = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
   final double iconSize;
+  final bool isActive;
 
   @override
   State<_ToolbarButton> createState() => _ToolbarButtonState();
@@ -935,8 +1015,8 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
             width: 26,
             height: 26,
             decoration: BoxDecoration(
-              color: _hovered
-                  ? Colors.white.withValues(alpha: 0.18)
+              color: (widget.isActive || _hovered)
+                  ? Colors.white.withValues(alpha: widget.isActive ? 0.28 : 0.18)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
             ),
@@ -944,7 +1024,7 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
             child: Icon(
               widget.icon,
               size: widget.iconSize,
-              color: _hovered
+              color: (widget.isActive || _hovered)
                   ? Colors.white
                   : Colors.white.withValues(alpha: 0.88),
             ),
@@ -954,3 +1034,262 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
     );
   }
 }
+
+/// 桌面歌词悬浮工具栏快捷调节菜单（字号加减、预设配色、单双行切换、更多设置）。
+class _OverlayQuickSettingsMenu extends StatelessWidget {
+  const _OverlayQuickSettingsMenu({
+    required this.settings,
+    required this.onUpdateSettings,
+    required this.onOpenDetailedSettings,
+  });
+
+  final DesktopLyricsSettings settings;
+  final ValueChanged<DesktopLyricsSettings> onUpdateSettings;
+  final VoidCallback onOpenDetailedSettings;
+
+  static const List<int> _presetColors = [
+    0xFF00BFFF, // 天蓝 - QQ 音乐经典
+    0xFFFFFFFF, // 亮白
+    0xFFFFD700, // 金黄
+    0xFFFF69B4, // 霓虹粉
+    0xFF00FF7F, // 翠绿
+    0xFFFF6347, // 番茄红
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 240,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xEE1A1E2C),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. 字体大小
+          Row(
+            children: [
+              const Text(
+                '字体大小',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              _buildStepButton(
+                icon: Icons.remove,
+                onTap: () {
+                  final newSize = (settings.fontSize - 2).clamp(16.0, 40.0);
+                  onUpdateSettings(settings.copyWith(fontSize: newSize));
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  '${settings.fontSize.round()}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              _buildStepButton(
+                icon: Icons.add,
+                onTap: () {
+                  final newSize = (settings.fontSize + 2).clamp(16.0, 40.0);
+                  onUpdateSettings(settings.copyWith(fontSize: newSize));
+                },
+              ),
+            ],
+          ),
+          Divider(
+            height: 12,
+            thickness: 0.5,
+            color: Colors.white.withValues(alpha: 0.10),
+          ),
+          // 3. 字体颜色
+          Row(
+            children: [
+              const Text(
+                '字体颜色',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final color in _presetColors) ...[
+                    _buildColorCircle(color),
+                    if (color != _presetColors.last) const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          Divider(
+            height: 12,
+            thickness: 0.5,
+            color: Colors.white.withValues(alpha: 0.10),
+          ),
+          // 5. 切换单/双行
+          InkWell(
+            onTap: () {
+              onUpdateSettings(
+                settings.copyWith(singleLine: !settings.singleLine),
+              );
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              child: Row(
+                children: [
+                  Icon(
+                    settings.singleLine
+                        ? Icons.view_headline_rounded
+                        : Icons.view_agenda_rounded,
+                    size: 16,
+                    color: Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    settings.singleLine ? '切换双行' : '切换单行',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Divider(
+            height: 12,
+            thickness: 0.5,
+            color: Colors.white.withValues(alpha: 0.10),
+          ),
+          // 7. 更多设置
+          InkWell(
+            onTap: onOpenDetailedSettings,
+            borderRadius: BorderRadius.circular(6),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.tune_rounded,
+                    size: 16,
+                    color: Colors.white70,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    '更多设置',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                  Spacer(),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: Colors.white38,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, size: 14, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildColorCircle(int color) {
+    final isSelected = settings.unplayedTextColor == color;
+    return InkWell(
+      key: ValueKey(color),
+      onTap: () {
+        onUpdateSettings(
+          settings.copyWith(
+            unplayedTextColor: color,
+            textColor: color,
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(9),
+      child: Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          color: Color(color),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.3),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Color(color).withValues(alpha: 0.6),
+                    blurRadius: 4,
+                  ),
+                ]
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: isSelected
+            ? Icon(
+                Icons.check,
+                size: 11,
+                color: (color == 0xFFFFFFFF ||
+                        color == 0xFFFFD700 ||
+                        color == 0xFF00FF7F)
+                    ? Colors.black
+                    : Colors.white,
+              )
+            : null,
+      ),
+    );
+  }
+}
+
