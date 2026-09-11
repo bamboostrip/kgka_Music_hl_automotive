@@ -358,11 +358,11 @@ test/
    - 在桌面宽度宽裕时采用左右双栏布局（左侧为紧凑设置面板，右侧为置顶实时预览卡片）；
    - 在窄屏或移动端时预览卡片置于顶部或紧凑排列，确保用户在调节上方选项时，能够同屏直观看到下方/右侧预览效果，无需反复滚动页面。
 
-- [ ] **Step 1: Write widget test for compact/split layout and responsive preview**
-- [ ] **Step 2: Run test to verify failure**
-- [ ] **Step 3: Implement in desktop_lyrics_settings_page.dart**
-- [ ] **Step 4: Run test to verify pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Write widget test for compact/split layout and responsive preview**
+- [x] **Step 2: Run test to verify failure**
+- [x] **Step 3: Implement in desktop_lyrics_settings_page.dart**
+- [x] **Step 4: Run test to verify pass**
+- [x] **Step 5: Commit**
 
 ---
 

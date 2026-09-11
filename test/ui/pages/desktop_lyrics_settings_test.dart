@@ -226,5 +226,129 @@ void main() {
       // Should reflect in preview with dual lines
       expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
     });
+
+    testWidgets(
+      'wide layout renders 2-column split view with sticky preview on right',
+      (tester) async {
+        await pumpSettingsPage(tester, size: const Size(1000, 700));
+
+        // Both appearance and preview sections exist
+        final appearanceHeader = find.text('外观');
+        final previewHeader = find.text('效果预览');
+        expect(appearanceHeader, findsOneWidget);
+        expect(previewHeader, findsOneWidget);
+
+        // In wide layout, preview is on the right side of appearance settings
+        final appearancePos = tester.getTopLeft(appearanceHeader);
+        final previewPos = tester.getTopLeft(previewHeader);
+        expect(previewPos.dx, greaterThan(appearancePos.dx));
+
+        // Both are visible on screen
+        expect(find.byType(LyricsKaraokeLine), findsOneWidget);
+
+        // 1. Updating segments (行数)
+        await tester.tap(find.text('双行显示'));
+        await tester.pumpAndSettle();
+        expect(player.desktopLyricsSettings.singleLine, isFalse);
+        expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
+
+        // 2. Updating slider (字体大小)
+        final fontSizeFinder = find.ancestor(
+          of: find.text('字体大小'),
+          matching: find.byType(Column),
+        );
+        final fontSliderFinder = find.descendant(
+          of: fontSizeFinder.first,
+          matching: find.byType(Slider),
+        );
+        final fontSlider = tester.widget<Slider>(fontSliderFinder);
+        fontSlider.onChanged?.call(32.0);
+        await tester.pumpAndSettle();
+        expect(player.desktopLyricsSettings.fontSize, closeTo(32.0, 0.01));
+
+        // 3. Updating color
+        final pinkPresetFinder = find.byKey(
+          const Key('color_歌词颜色_ffff69b4'),
+        );
+        await tester.ensureVisible(pinkPresetFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(pinkPresetFinder);
+        await tester.pumpAndSettle();
+        expect(player.desktopLyricsSettings.unplayedTextColor, 0xFFFF69B4);
+      },
+    );
+
+    testWidgets(
+      'narrow layout renders preview card at top before appearance section',
+      (tester) async {
+        await pumpSettingsPage(tester, size: const Size(400, 800));
+
+        final appearanceHeader = find.text('外观');
+        final previewHeader = find.text('效果预览');
+        expect(appearanceHeader, findsOneWidget);
+        expect(previewHeader, findsOneWidget);
+
+        // In narrow layout, preview is above appearance settings
+        final appearancePos = tester.getTopLeft(appearanceHeader);
+        final previewPos = tester.getTopLeft(previewHeader);
+        expect(previewPos.dy, lessThan(appearancePos.dy));
+
+        // 1. Updating segments (行数)
+        await tester.tap(find.text('双行显示'));
+        await tester.pumpAndSettle();
+        expect(player.desktopLyricsSettings.singleLine, isFalse);
+        expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
+
+        // 2. Updating slider (字体大小)
+        final fontSizeFinder = find.ancestor(
+          of: find.text('字体大小'),
+          matching: find.byType(Column),
+        );
+        final fontSliderFinder = find.descendant(
+          of: fontSizeFinder.first,
+          matching: find.byType(Slider),
+        );
+        final fontSlider = tester.widget<Slider>(fontSliderFinder);
+        fontSlider.onChanged?.call(30.0);
+        await tester.pumpAndSettle();
+        expect(player.desktopLyricsSettings.fontSize, closeTo(30.0, 0.01));
+
+        // 3. Updating color
+        final pinkPresetFinder = find.byKey(
+          const Key('color_歌词颜色_ffff69b4'),
+        );
+        await tester.ensureVisible(pinkPresetFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(pinkPresetFinder);
+        await tester.pumpAndSettle();
+        expect(player.desktopLyricsSettings.unplayedTextColor, 0xFFFF69B4);
+      },
+    );
+
+    testWidgets(
+      'dual line preview uses unified fontSize * 0.82 and bold weight for second line',
+      (tester) async {
+        await pumpSettingsPage(tester);
+
+        await tester.tap(find.text('双行显示'));
+        await tester.pumpAndSettle();
+
+        final lines = tester
+            .widgetList<LyricsKaraokeLine>(
+              find.byType(LyricsKaraokeLine),
+            )
+            .toList();
+        expect(lines.length, 2);
+
+        final secondLine = lines[1];
+        expect(secondLine.text, '让音乐更自由');
+        expect(
+          secondLine.fontSize,
+          closeTo(player.desktopLyricsSettings.fontSize * 0.82, 0.01),
+        );
+        expect(secondLine.fontWeight, FontWeight.bold);
+      },
+    );
   });
 }
+

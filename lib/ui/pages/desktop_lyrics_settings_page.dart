@@ -52,173 +52,264 @@ class _DesktopLyricsSettingsPageState
     widget.player.updateDesktopLyricsSettings(_settings);
   }
 
+  Widget _buildAppearanceSection(BuildContext context, ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(title: '外观'),
+        const SizedBox(height: 8),
+        _SettingsCard(
+          children: [
+            _SegmentTile<bool>(
+              icon: Icons.table_rows_rounded,
+              iconColor: colorScheme.primary,
+              title: '行数',
+              selected: _settings.singleLine,
+              segments: const [
+                ButtonSegment(value: true, label: Text('单行显示')),
+                ButtonSegment(value: false, label: Text('双行显示')),
+              ],
+              onChanged: (v) => _update((s) => s.copyWith(singleLine: v)),
+            ),
+            _SettingsDivider(),
+            _SegmentTile<String>(
+              icon: Icons.format_align_center_rounded,
+              iconColor: colorScheme.primary,
+              title: '对齐方式',
+              selected: _settings.alignment,
+              segments: const [
+                ButtonSegment(value: 'left', label: Text('左对齐')),
+                ButtonSegment(value: 'center', label: Text('居中对齐')),
+                ButtonSegment(value: 'right', label: Text('右对齐')),
+              ],
+              onChanged: (v) => _update((s) => s.copyWith(alignment: v)),
+            ),
+            _SettingsDivider(),
+            _SliderTile(
+              icon: Icons.format_size_rounded,
+              iconColor: colorScheme.primary,
+              title: '字体大小',
+              value: _settings.fontSize,
+              min: 12,
+              max: 48,
+              label: '${_settings.fontSize.round()}sp',
+              onChanged: (v) => _update((s) => s.copyWith(fontSize: v)),
+            ),
+            _SettingsDivider(),
+            _SliderTile(
+              icon: Icons.format_paint_rounded,
+              iconColor: colorScheme.primary,
+              title: '文字透明度',
+              value: _settings.textOpacity,
+              min: 0.2,
+              max: 1.0,
+              label: '${(_settings.textOpacity * 100).round()}%',
+              onChanged: (v) => _update((s) => s.copyWith(textOpacity: v)),
+            ),
+            _SettingsDivider(),
+            _SliderTile(
+              icon: Icons.opacity_rounded,
+              iconColor: colorScheme.primary,
+              title: '背景透明度',
+              value: _settings.opacity,
+              min: 0.0,
+              max: 1.0,
+              label: '${(_settings.opacity * 100).round()}%',
+              onChanged: (v) => _update((s) => s.copyWith(opacity: v)),
+            ),
+            _SettingsDivider(),
+            _ColorPickerTile(
+              title: '歌词颜色',
+              currentColor: Color(_settings.unplayedTextColor),
+              presets: const [
+                Colors.white,
+                Color(0xFFFFD700), // Gold
+                Color(0xFFFF69B4), // Pink
+                Color(0xFF00BFFF), // Sky blue
+                Color(0xFF00FF7F), // Spring green
+                Color(0xFFFF6347), // Tomato
+                Color(0xFF000000), // Black
+              ],
+              onChanged: (c) => _update(
+                (s) => s.copyWith(
+                  unplayedTextColor: c.toARGB32(),
+                  textColor: c.toARGB32(),
+                ),
+              ),
+            ),
+            _SettingsDivider(),
+            _ColorPickerTile(
+              title: '高亮颜色',
+              currentColor: Color(_settings.playedTextColor),
+              presets: const [
+                Color(0xFFFFD700), // Gold
+                Color(0xFFFFEE58), // Yellow
+                Color(0xFFFF6347), // Coral
+                Color(0xFF00BFFF), // Sky Blue
+                Color(0xFF00FF7F), // Spring Green
+                Color(0xFFFFFFFF), // White
+              ],
+              onChanged: (c) => _update(
+                (s) => s.copyWith(playedTextColor: c.toARGB32()),
+              ),
+            ),
+            _SettingsDivider(),
+            _ColorPickerTile(
+              title: '背景颜色',
+              currentColor: Color(_settings.backgroundColor),
+              presets: const [
+                Color(0xFF1A1A2E), // Default Dark Blue
+                Color(0xFF000000), // Black
+                Color(0xFF222222), // Dark Grey
+                Color(0xFF3B1E1E), // Dark Red/Brown
+                Color(0xFF1B3B1E), // Dark Green
+                Color(0xFF2A1E3B), // Dark Purple
+                Color(0xFF1E353B), // Dark Teal
+              ],
+              onChanged: (c) =>
+                  _update((s) => s.copyWith(backgroundColor: c.toARGB32())),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBehaviorSection(BuildContext context, ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(title: '行为'),
+        const SizedBox(height: 8),
+        _SettingsCard(
+          children: [
+            _SwitchTile(
+              icon: Icons.lock_rounded,
+              iconColor: colorScheme.primary,
+              title: isDesktopFormFactor ? '锁定桌面歌词' : '锁定位置',
+              subtitle: isDesktopFormFactor
+                  ? '锁定后桌面歌词鼠标穿透，可在托盘或此处解锁'
+                  : '锁定后无法拖动移动歌词悬浮窗，点击悬浮窗锁图标可解锁',
+              value: _settings.locked,
+              // PC：桌面歌词未显示时锁定无意义，置灰。
+              // 移动端保持原行为：开关始终可点（不改移动端）。
+              onChanged: !isDesktopFormFactor ||
+                      widget.player.desktopLyricsEnabled
+                  ? (v) => _update((s) => s.copyWith(locked: v))
+                  : null,
+            ),
+            // PC：锁定语义 = QQ 音乐式全穿透，"触摸穿透"已被锁定吸收，
+            // 不再提供独立开关（旧持久化字段仍兼容解析）。
+            // 移动端（Android 悬浮窗）locked 与 passthrough 是两个独立
+            // 原生行为，开关原样保留，不动移动端。
+            if (!isDesktopFormFactor) ...[
+              _SettingsDivider(),
+              _SwitchTile(
+                icon: Icons.touch_app_rounded,
+                iconColor: colorScheme.primary,
+                title: '触摸穿透',
+                subtitle: '启用后点击事件会穿透到下层应用',
+                value: _settings.passthrough,
+                onChanged: (v) => _update((s) => s.copyWith(passthrough: v)),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTipCard(BuildContext context, ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '桌面歌词窗口支持自由拖拽缩放与锁定穿透。悬浮工具栏支持快捷调节播放和进入设置。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('桌面歌词设置')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          // Appearance
-          _SectionHeader(title: '外观'),
-          const SizedBox(height: 8),
-          _SettingsCard(
-            children: [
-              _SegmentTile<bool>(
-                icon: Icons.table_rows_rounded,
-                iconColor: colorScheme.primary,
-                title: '行数',
-                selected: _settings.singleLine,
-                segments: const [
-                  ButtonSegment(value: true, label: Text('单行显示')),
-                  ButtonSegment(value: false, label: Text('双行显示')),
-                ],
-                onChanged: (v) => _update((s) => s.copyWith(singleLine: v)),
-              ),
-              _SettingsDivider(),
-              _SegmentTile<String>(
-                icon: Icons.format_align_center_rounded,
-                iconColor: colorScheme.primary,
-                title: '对齐方式',
-                selected: _settings.alignment,
-                segments: const [
-                  ButtonSegment(value: 'left', label: Text('左对齐')),
-                  ButtonSegment(value: 'center', label: Text('居中对齐')),
-                  ButtonSegment(value: 'right', label: Text('右对齐')),
-                ],
-                onChanged: (v) => _update((s) => s.copyWith(alignment: v)),
-              ),
-              _SettingsDivider(),
-              _SliderTile(
-                icon: Icons.format_size_rounded,
-                iconColor: colorScheme.primary,
-                title: '字体大小',
-                value: _settings.fontSize,
-                min: 12,
-                max: 48,
-                label: '${_settings.fontSize.round()}sp',
-                onChanged: (v) => _update((s) => s.copyWith(fontSize: v)),
-              ),
-              _SettingsDivider(),
-              _SliderTile(
-                icon: Icons.format_paint_rounded,
-                iconColor: colorScheme.primary,
-                title: '文字透明度',
-                value: _settings.textOpacity,
-                min: 0.2,
-                max: 1.0,
-                label: '${(_settings.textOpacity * 100).round()}%',
-                onChanged: (v) => _update((s) => s.copyWith(textOpacity: v)),
-              ),
-              _SettingsDivider(),
-              _SliderTile(
-                icon: Icons.opacity_rounded,
-                iconColor: colorScheme.primary,
-                title: '背景透明度',
-                value: _settings.opacity,
-                min: 0.0,
-                max: 1.0,
-                label: '${(_settings.opacity * 100).round()}%',
-                onChanged: (v) => _update((s) => s.copyWith(opacity: v)),
-              ),
-              _SettingsDivider(),
-              _ColorPickerTile(
-                title: '歌词颜色',
-                currentColor: Color(_settings.unplayedTextColor),
-                presets: const [
-                  Colors.white,
-                  Color(0xFFFFD700), // Gold
-                  Color(0xFFFF69B4), // Pink
-                  Color(0xFF00BFFF), // Sky blue
-                  Color(0xFF00FF7F), // Spring green
-                  Color(0xFFFF6347), // Tomato
-                  Color(0xFF000000), // Black
-                ],
-                onChanged: (c) => _update(
-                  (s) => s.copyWith(
-                    unplayedTextColor: c.toARGB32(),
-                    textColor: c.toARGB32(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 720;
+          if (isWide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 12, 24),
+                    children: [
+                      _buildAppearanceSection(context, colorScheme),
+                      const SizedBox(height: 16),
+                      _buildBehaviorSection(context, colorScheme),
+                    ],
                   ),
                 ),
-              ),
-              _SettingsDivider(),
-              _ColorPickerTile(
-                title: '高亮颜色',
-                currentColor: Color(_settings.playedTextColor),
-                presets: const [
-                  Color(0xFFFFD700), // Gold
-                  Color(0xFFFFEE58), // Yellow
-                  Color(0xFFFF6347), // Coral
-                  Color(0xFF00BFFF), // Sky Blue
-                  Color(0xFF00FF7F), // Spring Green
-                  Color(0xFFFFFFFF), // White
-                ],
-                onChanged: (c) => _update(
-                  (s) => s.copyWith(playedTextColor: c.toARGB32()),
-                ),
-              ),
-              _SettingsDivider(),
-              _ColorPickerTile(
-                title: '背景颜色',
-                currentColor: Color(_settings.backgroundColor),
-                presets: const [
-                  Color(0xFF1A1A2E), // Default Dark Blue
-                  Color(0xFF000000), // Black
-                  Color(0xFF222222), // Dark Grey
-                  Color(0xFF3B1E1E), // Dark Red/Brown
-                  Color(0xFF1B3B1E), // Dark Green
-                  Color(0xFF2A1E3B), // Dark Purple
-                  Color(0xFF1E353B), // Dark Teal
-                ],
-                onChanged: (c) => _update((s) => s.copyWith(backgroundColor: c.toARGB32())),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Behavior
-          _SectionHeader(title: '行为'),
-          const SizedBox(height: 8),
-          _SettingsCard(
-            children: [
-              _SwitchTile(
-                icon: Icons.lock_rounded,
-                iconColor: colorScheme.primary,
-                title: isDesktopFormFactor ? '锁定桌面歌词' : '锁定位置',
-                subtitle: isDesktopFormFactor
-                    ? '锁定后桌面歌词鼠标穿透，可在托盘或此处解锁'
-                    : '锁定后无法拖动移动歌词悬浮窗，点击悬浮窗锁图标可解锁',
-                value: _settings.locked,
-                // PC：桌面歌词未显示时锁定无意义，置灰。
-                // 移动端保持原行为：开关始终可点（不改移动端）。
-                onChanged: !isDesktopFormFactor ||
-                        widget.player.desktopLyricsEnabled
-                    ? (v) => _update((s) => s.copyWith(locked: v))
-                    : null,
-              ),
-              // PC：锁定语义 = QQ 音乐式全穿透，"触摸穿透"已被锁定吸收，
-              // 不再提供独立开关（旧持久化字段仍兼容解析）。
-              // 移动端（Android 悬浮窗）locked 与 passthrough 是两个独立
-              // 原生行为，开关原样保留，不动移动端。
-              if (!isDesktopFormFactor) ...[
-                _SettingsDivider(),
-                _SwitchTile(
-                  icon: Icons.touch_app_rounded,
-                  iconColor: colorScheme.primary,
-                  title: '触摸穿透',
-                  subtitle: '启用后点击事件会穿透到下层应用',
-                  value: _settings.passthrough,
-                  onChanged: (v) => _update((s) => s.copyWith(passthrough: v)),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 4,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(4, 12, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionHeader(title: '效果预览'),
+                        const SizedBox(height: 8),
+                        _LyricsPreviewCard(settings: _settings),
+                        const SizedBox(height: 12),
+                        _buildTipCard(context, colorScheme),
+                      ],
+                    ),
+                  ),
                 ),
               ],
-            ],
-          ),
-          const SizedBox(height: 24),
-          _SectionHeader(title: '效果预览'),
-          const SizedBox(height: 8),
-          _LyricsPreviewCard(settings: _settings),
-        ],
+            );
+          } else {
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+              children: [
+                const _SectionHeader(title: '效果预览'),
+                const SizedBox(height: 8),
+                _LyricsPreviewCard(settings: _settings),
+                const SizedBox(height: 16),
+                _buildAppearanceSection(context, colorScheme),
+                const SizedBox(height: 16),
+                _buildBehaviorSection(context, colorScheme),
+              ],
+            );
+          }
+        },
       ),
     );
   }
@@ -302,7 +393,7 @@ class _SliderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -360,7 +451,7 @@ class _SwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
           SizedBox(
@@ -414,7 +505,7 @@ class _ColorPickerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -500,7 +591,7 @@ class _SegmentTile<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -599,6 +690,7 @@ class _LyricsPreviewCard extends StatelessWidget {
               final dualLineWidth = availableWidth - 40.0;
               final effectiveDualWidth =
                   dualLineWidth > 0 ? dualLineWidth : availableWidth;
+              final dualFontSize = settings.fontSize * 0.82;
               body = Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -607,7 +699,7 @@ class _LyricsPreviewCard extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: LyricsKaraokeLine(
                       text: '时音 听我想听',
-                      fontSize: settings.fontSize * 0.85,
+                      fontSize: dualFontSize,
                       playedColor: playedColor,
                       unplayedColor: unplayedColor,
                       progress: 0.45,
@@ -622,14 +714,14 @@ class _LyricsPreviewCard extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     child: LyricsKaraokeLine(
                       text: '让音乐更自由',
-                      fontSize: settings.fontSize * 0.75,
+                      fontSize: dualFontSize,
                       playedColor: playedColor,
                       unplayedColor: unplayedColor.withValues(alpha: 0.65),
                       progress: 0.0,
                       availableWidth: effectiveDualWidth,
                       alignment: TextAlign.right,
                       textOpacity: settings.textOpacity * 0.65,
-                      fontWeight: FontWeight.normal,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
