@@ -274,8 +274,10 @@ class _DesktopSongTableRowState extends State<DesktopSongTableRow> {
     final selected = widget.selected;
     final isFocused = widget.isFocused;
 
+    // 指针约定：行主体是双击播放 → hover 用默认箭头；单击子元素
+    // （封面播放键 / 歌手链接 / 悬浮操作钮）各自覆盖为手型。
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: ExcludeSemantics(
@@ -368,6 +370,8 @@ class _DesktopSongTableRowState extends State<DesktopSongTableRow> {
                       borderRadius: BorderRadius.circular(6),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(6),
+                        // InkWell 默认 hover 手型，会把外层行的默认箭头盖回去。
+                        mouseCursor: SystemMouseCursors.basic,
                         onTap: widget.onTap,
                         onDoubleTap: widget.onDoubleTap,
                         // PC 右键：在按下时取全局坐标，把菜单锚定到点击处。

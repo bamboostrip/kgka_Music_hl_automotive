@@ -102,6 +102,10 @@ class _CoverPlayOverlayState extends State<CoverPlayOverlay> {
       elevation: 2,
       child: InkWell(
         customBorder: const CircleBorder(),
+        // 单击即播放 → 手型。InkWell 默认（adaptiveClickable）在 Windows/
+        // macOS 原生上解析为 basic 箭头而非 click，会把外层的手型区域
+        // 顶成箭头，必须显式声明。
+        mouseCursor: SystemMouseCursors.click,
         onTap: widget.onPlay,
         child: effectiveButtonSize != null
             ? SizedBox.square(

@@ -439,6 +439,12 @@ class _SongInfoState extends State<SongInfo> {
                   message: openable ? '展开歌曲详情页' : '',
                   child: InkWell(
                     onTap: openable ? widget.onTap : null,
+                    // 单击展开歌曲详情页 → 手型；否则跟随整栏的 basic。
+                    // InkWell 默认（adaptiveClickable）在桌面原生解析为
+                    // basic 箭头，会顶掉外层整栏的手型区域。
+                    mouseCursor: openable
+                        ? SystemMouseCursors.click
+                        : SystemMouseCursors.basic,
                     borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
                       width: 48,

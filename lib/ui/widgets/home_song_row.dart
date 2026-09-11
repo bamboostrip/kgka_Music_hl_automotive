@@ -124,8 +124,12 @@ class _HomeSongRowState extends State<HomeSongRow> {
               ? activeColor.withValues(alpha: isDesktop ? 0.10 : 0.12)
               : (isDesktop && _hovered ? hoverBg : Colors.transparent);
 
+          // 指针约定：桌面双击播放 → 整行默认箭头（封面播放键/收藏钮各自
+          // 覆盖为手型）；移动端形态单击播放 → 手型（触屏无光标，不受影响）。
           return MouseRegion(
-            cursor: SystemMouseCursors.click,
+            cursor: isDesktop
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
             onEnter: isDesktop ? (_) => setState(() => _hovered = true) : null,
             onExit: isDesktop ? (_) => setState(() => _hovered = false) : null,
             child: GestureDetector(
@@ -248,6 +252,8 @@ class _HomeSongRowState extends State<HomeSongRow> {
                     ),
                     const SizedBox(width: 6),
                     IconButton(
+                      // 单击动作 → 手型（IconButton 默认在桌面原生解析为箭头）。
+                      mouseCursor: SystemMouseCursors.click,
                       onPressed: widget.onLikeTap,
                       icon: Icon(
                         widget.isLiked
@@ -264,6 +270,7 @@ class _HomeSongRowState extends State<HomeSongRow> {
                       builder: (moreButtonContext) {
                         return IconButton(
                           tooltip: '更多',
+                          mouseCursor: SystemMouseCursors.click,
                           onPressed: () => _showActionMenu(
                             moreButtonContext,
                             anchor: anchorBelow(moreButtonContext),
