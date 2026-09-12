@@ -172,6 +172,50 @@ void main() {
     });
   });
 
+  group('DesktopLyricsColorScheme 歌词配色方案', () {
+    test('内置方案非空、命名唯一，且歌词色与高亮色两两不同', () {
+      expect(DesktopLyricsColorScheme.presets, isNotEmpty);
+
+      final names = DesktopLyricsColorScheme.presets.map((s) => s.name);
+      expect(names.toSet().length, DesktopLyricsColorScheme.presets.length);
+
+      for (final scheme in DesktopLyricsColorScheme.presets) {
+        // 两色相同会让卡拉OK进度完全不可见——方案必须保证对比。
+        expect(
+          scheme.unplayedTextColor,
+          isNot(scheme.playedTextColor),
+          reason: '方案「${scheme.name}」歌词色与高亮色相同',
+        );
+      }
+    });
+
+    test('首个方案即出厂默认配色，命中默认设置', () {
+      final first = DesktopLyricsColorScheme.presets.first;
+      const defaults = DesktopLyricsSettings();
+      expect(first.unplayedTextColor, defaults.unplayedTextColor);
+      expect(first.playedTextColor, defaults.playedTextColor);
+      expect(DesktopLyricsColorScheme.matchFor(defaults)?.name, first.name);
+    });
+
+    test('matchFor：命中方案返回方案，自定义颜色返回 null', () {
+      final gilded = DesktopLyricsColorScheme.presets[1];
+      final applied = const DesktopLyricsSettings().copyWith(
+        unplayedTextColor: gilded.unplayedTextColor,
+        playedTextColor: gilded.playedTextColor,
+      );
+      expect(DesktopLyricsColorScheme.matchFor(applied)?.name, '鎏金');
+
+      // 只换其中一色（设置页细调过）即不再命中任何方案。
+      final halfCustom = applied.copyWith(playedTextColor: 0xFF123456);
+      expect(DesktopLyricsColorScheme.matchFor(halfCustom), isNull);
+      final allCustom = const DesktopLyricsSettings().copyWith(
+        unplayedTextColor: 0xFF111111,
+        playedTextColor: 0xFF222222,
+      );
+      expect(DesktopLyricsColorScheme.matchFor(allCustom), isNull);
+    });
+  });
+
   group('DesktopLyricsService PlaybackAction', () {
     const channel = MethodChannel('shiyin_music/desktop_lyrics');
 
@@ -1288,14 +1332,14 @@ void main() {
 
       // 初始未展开菜单
       expect(find.text('字体大小'), findsNothing);
-      expect(find.text('字体颜色'), findsNothing);
+      expect(find.text('歌词配色'), findsNothing);
 
       // 点击设置按钮展开
       await tester.tap(find.byIcon(Icons.settings_rounded));
       await tester.pumpAndSettle();
 
       expect(find.text('字体大小'), findsOneWidget);
-      expect(find.text('字体颜色'), findsOneWidget);
+      expect(find.text('歌词配色'), findsOneWidget);
       expect(find.text('更多设置'), findsOneWidget);
 
       // 点击遮罩外部（如左上角）收起菜单
@@ -1303,7 +1347,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('字体大小'), findsNothing);
-      expect(find.text('字体颜色'), findsNothing);
+      expect(find.text('歌词配色'), findsNothing);
     });
 
     testWidgets('点击 [+] 或 [-] 触发字号调节回调并钳制在 [16, 40]', (tester) async {
@@ -1347,7 +1391,7 @@ void main() {
       expect(find.text('24'), findsOneWidget);
     });
 
-    testWidgets('点击预设配色触发颜色变更回调', (tester) async {
+    testWidgets('点击歌词配色方案同步切换歌词色与高亮色', (tester) async {
       DesktopLyricsSettings? updatedSettings;
 
       await pumpQuickSettings(
@@ -1356,11 +1400,7 @@ void main() {
           builder: (context, setState) {
             return DesktopLyricsOverlayContent(
               settings: updatedSettings ??
-                  const DesktopLyricsSettings(
-                    locked: false,
-                    unplayedTextColor: 0xFF00BFFF,
-                    textColor: 0xFF00BFFF,
-                  ),
+                  const DesktopLyricsSettings(locked: false),
               current: '测试歌词',
               next: '',
               isPlaying: true,
@@ -1376,12 +1416,32 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_rounded));
       await tester.pumpAndSettle();
 
-      // 点击金黄色预设 0xFFFFD700
-      await tester.tap(find.byKey(const ValueKey(0xFFFFD700)));
+      // 默认配色命中「经典」方案（天蓝未播放 + 金黄已播放）。
+      expect(
+        DesktopLyricsColorScheme.matchFor(
+          updatedSettings ?? const DesktopLyricsSettings(),
+        )?.name,
+        '经典',
+      );
+
+      // 点击「鎏金」方案：歌词色与高亮色同步变化（白词 + 金黄高亮）。
+      final gilded = DesktopLyricsColorScheme.presets[1];
+      expect(gilded.name, '鎏金');
+      await tester.tap(find.byKey(ValueKey('scheme_${gilded.name}')));
       await tester.pumpAndSettle();
 
-      expect(updatedSettings?.unplayedTextColor, 0xFFFFD700);
-      expect(updatedSettings?.textColor, 0xFFFFD700);
+      expect(updatedSettings?.unplayedTextColor, gilded.unplayedTextColor);
+      expect(updatedSettings?.textColor, gilded.unplayedTextColor);
+      expect(updatedSettings?.playedTextColor, gilded.playedTextColor);
+
+      // 再点「月白」：蓝灰词 + 纯白高亮。
+      final mono = DesktopLyricsColorScheme.presets[5];
+      expect(mono.name, '月白');
+      await tester.tap(find.byKey(ValueKey('scheme_${mono.name}')));
+      await tester.pumpAndSettle();
+
+      expect(updatedSettings?.unplayedTextColor, mono.unplayedTextColor);
+      expect(updatedSettings?.playedTextColor, mono.playedTextColor);
     });
 
     testWidgets('点击切换单/双行触发单双行切换回调', (tester) async {

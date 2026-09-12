@@ -48,19 +48,45 @@ class DesktopLyricsSettings {
   static const double fontSizeMin = 12.0;
   static const double fontSizeMax = 48.0;
 
+  /// 外观默认值：构造参数、fromMap 兜底与设置页「恢复默认」共用的
+  /// 唯一定义处，改动默认配色/字号只需改这里。
+  static const double defaultOpacity = 0.0;
+  static const int defaultBackgroundColor = 0xFF1A1A2E;
+  static const double defaultFontSize = 24.0;
+  static const bool defaultSingleLine = true;
+  static const String defaultAlignment = DesktopLyricsAlignment.split;
+  static const double defaultTextOpacity = 1.0;
+  static const int defaultPlayedTextColor = 0xFFFFD700;
+  static const int defaultUnplayedTextColor = 0xFF00BFFF;
+
   const DesktopLyricsSettings({
-    this.opacity = 0.0,
+    this.opacity = defaultOpacity,
     this.locked = false,
     this.passthrough = false,
     int? textColor,
-    this.backgroundColor = 0xFF1A1A2E,
-    this.fontSize = 24.0,
-    this.singleLine = true,
-    this.alignment = DesktopLyricsAlignment.split,
-    this.textOpacity = 1.0,
-    this.playedTextColor = 0xFFFFD700,
+    this.backgroundColor = defaultBackgroundColor,
+    this.fontSize = defaultFontSize,
+    this.singleLine = defaultSingleLine,
+    this.alignment = defaultAlignment,
+    this.textOpacity = defaultTextOpacity,
+    this.playedTextColor = defaultPlayedTextColor,
     int? unplayedTextColor,
-  }) : unplayedTextColor = unplayedTextColor ?? textColor ?? 0xFF00BFFF;
+  }) : unplayedTextColor =
+           unplayedTextColor ?? textColor ?? defaultUnplayedTextColor;
+
+  /// 外观恢复出厂默认（配色/字号/行数/对齐/透明度），设置页「恢复默认」
+  /// 按钮使用。锁定与触摸穿透是行为状态，不在此重置——正在使用的
+  /// 悬浮窗不应因恢复外观而突然解锁或改变穿透。
+  DesktopLyricsSettings withDefaultAppearance() => copyWith(
+    opacity: defaultOpacity,
+    backgroundColor: defaultBackgroundColor,
+    fontSize: defaultFontSize,
+    singleLine: defaultSingleLine,
+    alignment: defaultAlignment,
+    textOpacity: defaultTextOpacity,
+    playedTextColor: defaultPlayedTextColor,
+    unplayedTextColor: defaultUnplayedTextColor,
+  );
 
   final double opacity;
   final bool locked;
@@ -148,21 +174,87 @@ class DesktopLyricsSettings {
 
   factory DesktopLyricsSettings.fromMap(Map<String, dynamic> map) {
     return DesktopLyricsSettings(
-      opacity: (map['opacity'] as num?)?.toDouble() ?? 0.0,
+      opacity: (map['opacity'] as num?)?.toDouble() ?? defaultOpacity,
       locked: map['locked'] as bool? ?? false,
       passthrough: map['passthrough'] as bool? ?? false,
-      backgroundColor: (map['backgroundColor'] as num?)?.toInt() ?? 0xFF1A1A2E,
-      fontSize: (map['fontSize'] as num?)?.toDouble() ?? 24.0,
-      singleLine: map['singleLine'] as bool? ?? true,
-      alignment: map['alignment'] as String? ?? DesktopLyricsAlignment.split,
-      textOpacity: (map['textOpacity'] as num?)?.toDouble() ?? 1.0,
+      backgroundColor:
+          (map['backgroundColor'] as num?)?.toInt() ?? defaultBackgroundColor,
+      fontSize: (map['fontSize'] as num?)?.toDouble() ?? defaultFontSize,
+      singleLine: map['singleLine'] as bool? ?? defaultSingleLine,
+      alignment: map['alignment'] as String? ?? defaultAlignment,
+      textOpacity: (map['textOpacity'] as num?)?.toDouble() ?? defaultTextOpacity,
       playedTextColor:
-          (map['playedTextColor'] as num?)?.toInt() ?? 0xFFFFD700,
+          (map['playedTextColor'] as num?)?.toInt() ?? defaultPlayedTextColor,
       unplayedTextColor:
           (map['unplayedTextColor'] as num?)?.toInt() ??
           (map['textColor'] as num?)?.toInt() ??
-          0xFF00BFFF,
+          defaultUnplayedTextColor,
     );
+  }
+}
+
+/// 歌词配色方案：「歌词颜色（未播放）+ 高亮颜色（已播放）」成组预设。
+///
+/// 悬浮窗快捷菜单按方案一键切换两项颜色；两色由方案统一给出且保证
+/// 对比明显，避免用户分别挑色时把高亮与歌词选成同色、卡拉OK进度
+/// 看不出来。设置页的独立取色器仍可细调（自定义后不再命中任何方案）。
+class DesktopLyricsColorScheme {
+  const DesktopLyricsColorScheme({
+    required this.name,
+    required this.unplayedTextColor,
+    required this.playedTextColor,
+  });
+
+  final String name;
+  final int unplayedTextColor;
+  final int playedTextColor;
+
+  /// 内置方案：首个与 [DesktopLyricsSettings] 的出厂默认配色一致。
+  static const List<DesktopLyricsColorScheme> presets = [
+    // 经典卡拉OK：天蓝未播放 + 金黄已播放（QQ 音乐式默认）。
+    DesktopLyricsColorScheme(
+      name: '经典',
+      unplayedTextColor: 0xFF00BFFF,
+      playedTextColor: 0xFFFFD700,
+    ),
+    // 以下为白词 + 彩色高亮的常见配色。
+    DesktopLyricsColorScheme(
+      name: '鎏金',
+      unplayedTextColor: 0xFFFFFFFF,
+      playedTextColor: 0xFFFFD700,
+    ),
+    DesktopLyricsColorScheme(
+      name: '樱粉',
+      unplayedTextColor: 0xFFFFFFFF,
+      playedTextColor: 0xFFFF69B4,
+    ),
+    DesktopLyricsColorScheme(
+      name: '青柠',
+      unplayedTextColor: 0xFFFFFFFF,
+      playedTextColor: 0xFF00FF7F,
+    ),
+    DesktopLyricsColorScheme(
+      name: '落日',
+      unplayedTextColor: 0xFFFFFFFF,
+      playedTextColor: 0xFFFF6347,
+    ),
+    // 黑白灰极简：蓝灰未播放 + 纯白高亮。
+    DesktopLyricsColorScheme(
+      name: '月白',
+      unplayedTextColor: 0xFF90A4AE,
+      playedTextColor: 0xFFFFFFFF,
+    ),
+  ];
+
+  /// 当前设置命中的内置方案；颜色被单独细调过（非方案组合）时返回 null。
+  static DesktopLyricsColorScheme? matchFor(DesktopLyricsSettings settings) {
+    for (final scheme in presets) {
+      if (scheme.unplayedTextColor == settings.unplayedTextColor &&
+          scheme.playedTextColor == settings.playedTextColor) {
+        return scheme;
+      }
+    }
+    return null;
   }
 }
 

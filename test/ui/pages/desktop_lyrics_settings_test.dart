@@ -98,39 +98,53 @@ void main() {
       expect(player.updatedSettingsList.last.singleLine, isTrue);
     });
 
-    testWidgets('renders alignment selection and updates alignment setting', (
+    testWidgets('alignment options follow line count (split is dual-only)', (
       tester,
     ) async {
       await pumpSettingsPage(tester);
 
-      // 四种对齐：居中/左/右 = 双行两行同侧；左右分离 = 上行居左、下行居右。
+      // 单行模式只有居中/左/右三种；「左右分离」只对双行显示有意义。
       expect(find.text('居中'), findsOneWidget);
       expect(find.text('左对齐'), findsOneWidget);
       expect(find.text('右对齐'), findsOneWidget);
-      expect(find.text('左右分离'), findsOneWidget);
+      expect(find.text('左右分离'), findsNothing);
+
+      // 默认 split 在单行下与居中渲染完全一致 → 展示为居中，避免空选中。
+      var alignmentSelector = tester.widget<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      );
+      expect(alignmentSelector.selected, {DesktopLyricsAlignment.center});
 
       // Tap left align
       await tester.tap(find.text('左对齐'));
       await tester.pumpAndSettle();
       expect(player.desktopLyricsSettings.alignment, 'left');
 
-      // Tap right align
-      await tester.tap(find.text('右对齐'));
+      // 切到双行：出现「左右分离」并可选中。
+      await tester.tap(find.text('双行显示'));
       await tester.pumpAndSettle();
-      expect(player.desktopLyricsSettings.alignment, 'right');
+      expect(find.text('左右分离'), findsOneWidget);
 
-      // Tap center align
-      await tester.tap(find.text('居中'));
-      await tester.pumpAndSettle();
-      expect(player.desktopLyricsSettings.alignment, 'center');
-
-      // Tap split（左右分离）
       await tester.tap(find.text('左右分离'));
       await tester.pumpAndSettle();
       expect(
         player.desktopLyricsSettings.alignment,
         DesktopLyricsAlignment.split,
       );
+
+      // 切回单行：左右分离消失，且回落为渲染等价的居中。
+      await tester.tap(find.text('单行显示'));
+      await tester.pumpAndSettle();
+      expect(find.text('左右分离'), findsNothing);
+      expect(
+        player.desktopLyricsSettings.alignment,
+        DesktopLyricsAlignment.center,
+      );
+
+      alignmentSelector = tester.widget<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      );
+      expect(alignmentSelector.selected, {DesktopLyricsAlignment.center});
     });
 
     testWidgets('renders text opacity slider and updates textOpacity', (
@@ -141,18 +155,12 @@ void main() {
       expect(find.text('文字透明度'), findsOneWidget);
       expect(find.text('100%'), findsWidgets);
 
-      // Find the Slider for text opacity
-      final textOpacityFinder = find.ancestor(
-        of: find.text('文字透明度'),
-        matching: find.byType(Column),
+      final slider = tester.widget<Slider>(
+        find.descendant(
+          of: find.byKey(const Key('slider_text_opacity')),
+          matching: find.byType(Slider),
+        ),
       );
-      final sliderFinder = find.descendant(
-        of: textOpacityFinder.first,
-        matching: find.byType(Slider),
-      );
-      expect(sliderFinder, findsOneWidget);
-
-      final slider = tester.widget<Slider>(sliderFinder);
       expect(slider.min, 0.2);
       expect(slider.max, 1.0);
 
@@ -172,26 +180,40 @@ void main() {
       expect(find.text('歌词颜色'), findsOneWidget);
       expect(find.text('高亮颜色'), findsOneWidget);
 
-      // Pick Yellow for played color (高亮颜色)
-      final yellowPresetFinder = find.byKey(
-        const Key('color_高亮颜色_ffffee58'),
-      );
-      expect(yellowPresetFinder, findsOneWidget);
-      await tester.tap(yellowPresetFinder);
+      // 打开「高亮颜色」取色弹窗，选黄色预设并确认
+      await tester.tap(find.byKey(const Key('color_field_高亮颜色')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('color_高亮颜色_ffffee58')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
 
       expect(player.desktopLyricsSettings.playedTextColor, 0xFFFFEE58);
 
-      // Pick White for unplayed color (歌词颜色)
-      final whitePresetFinder = find.byKey(
-        const Key('color_歌词颜色_ffffffff'),
-      );
-      expect(whitePresetFinder, findsOneWidget);
-      await tester.tap(whitePresetFinder);
+      // 打开「歌词颜色」取色弹窗，选白色预设并确认
+      await tester.tap(find.byKey(const Key('color_field_歌词颜色')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('color_歌词颜色_ffffffff')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
 
       expect(player.desktopLyricsSettings.unplayedTextColor, 0xFFFFFFFF);
       expect(player.desktopLyricsSettings.textColor, 0xFFFFFFFF);
+    });
+
+    testWidgets('tapping a lyrics color scheme chip updates both colors', (
+      tester,
+    ) async {
+      await pumpSettingsPage(tester);
+
+      // 点击「鎏金」方案：歌词色与高亮色同步切换（白词 + 金黄高亮）。
+      final gilded = DesktopLyricsColorScheme.presets[1];
+      await tester.tap(find.byKey(ValueKey('scheme_${gilded.name}')));
+      await tester.pumpAndSettle();
+
+      expect(player.desktopLyricsSettings.unplayedTextColor, 0xFFFFFFFF);
+      expect(player.desktopLyricsSettings.playedTextColor, 0xFFFFD700);
     });
 
     testWidgets('renders live preview section and updates on settings change', (
@@ -217,16 +239,72 @@ void main() {
       expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
     });
 
+    testWidgets('restore defaults resets appearance and keeps locked', (
+      tester,
+    ) async {
+      await pumpSettingsPage(tester);
+
+      // 先把外观调乱：双行、大字号、粉色歌词色。
+      await tester.tap(find.text('双行显示'));
+      await tester.pumpAndSettle();
+      final fontSlider = tester.widget<Slider>(
+        find.descendant(
+          of: find.byKey(const Key('slider_font_size')),
+          matching: find.byType(Slider),
+        ),
+      );
+      fontSlider.onChanged?.call(40.0);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('color_field_歌词颜色')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('color_歌词颜色_ffff69b4')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(player.desktopLyricsSettings.fontSize, closeTo(40.0, 0.01));
+
+      // 锁定是行为状态，恢复默认后应保持不变。
+      await player.updateDesktopLyricsSettings(
+        player.desktopLyricsSettings.copyWith(locked: true),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('恢复默认'));
+      // 等 SnackBar 完整走完显示/定时/退出，避免测试结束时 Timer 未决。
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+
+      final restored = player.updatedSettingsList.last;
+      expect(restored.singleLine, isTrue);
+      expect(restored.fontSize, DesktopLyricsSettings.defaultFontSize);
+      expect(restored.alignment, DesktopLyricsAlignment.split);
+      expect(restored.opacity, DesktopLyricsSettings.defaultOpacity);
+      expect(
+        restored.unplayedTextColor,
+        DesktopLyricsSettings.defaultUnplayedTextColor,
+      );
+      expect(
+        restored.playedTextColor,
+        DesktopLyricsSettings.defaultPlayedTextColor,
+      );
+      expect(
+        restored.backgroundColor,
+        DesktopLyricsSettings.defaultBackgroundColor,
+      );
+      expect(restored.locked, isTrue);
+    });
+
     testWidgets('updates UI when player desktopLyricsSettings changes externally', (
       tester,
     ) async {
       await pumpSettingsPage(tester);
 
-      // 默认对齐为「左右分离」(split)
+      // 默认 split 在单行下展示为渲染等价的居中（split 仅双行可选）。
       final alignmentSelector = tester.widget<SegmentedButton<String>>(
         find.byType(SegmentedButton<String>),
       );
-      expect(alignmentSelector.selected, {DesktopLyricsAlignment.split});
+      expect(alignmentSelector.selected, {DesktopLyricsAlignment.center});
 
       // Externally update player settings
       await player.updateDesktopLyricsSettings(
@@ -271,26 +349,22 @@ void main() {
         expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
 
         // 2. Updating slider (字体大小)
-        final fontSizeFinder = find.ancestor(
-          of: find.text('字体大小'),
-          matching: find.byType(Column),
+        final fontSlider = tester.widget<Slider>(
+          find.descendant(
+            of: find.byKey(const Key('slider_font_size')),
+            matching: find.byType(Slider),
+          ),
         );
-        final fontSliderFinder = find.descendant(
-          of: fontSizeFinder.first,
-          matching: find.byType(Slider),
-        );
-        final fontSlider = tester.widget<Slider>(fontSliderFinder);
         fontSlider.onChanged?.call(32.0);
         await tester.pumpAndSettle();
         expect(player.desktopLyricsSettings.fontSize, closeTo(32.0, 0.01));
 
-        // 3. Updating color
-        final pinkPresetFinder = find.byKey(
-          const Key('color_歌词颜色_ffff69b4'),
-        );
-        await tester.ensureVisible(pinkPresetFinder);
+        // 3. Updating color (open picker dialog, pick pink, confirm)
+        await tester.tap(find.byKey(const Key('color_field_歌词颜色')));
         await tester.pumpAndSettle();
-        await tester.tap(pinkPresetFinder);
+        await tester.tap(find.byKey(const Key('color_歌词颜色_ffff69b4')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
         expect(player.desktopLyricsSettings.unplayedTextColor, 0xFFFF69B4);
       },
@@ -318,26 +392,26 @@ void main() {
         expect(find.byType(LyricsKaraokeLine), findsNWidgets(2));
 
         // 2. Updating slider (字体大小)
-        final fontSizeFinder = find.ancestor(
-          of: find.text('字体大小'),
-          matching: find.byType(Column),
+        final fontSlider = tester.widget<Slider>(
+          find.descendant(
+            of: find.byKey(const Key('slider_font_size')),
+            matching: find.byType(Slider),
+          ),
         );
-        final fontSliderFinder = find.descendant(
-          of: fontSizeFinder.first,
-          matching: find.byType(Slider),
-        );
-        final fontSlider = tester.widget<Slider>(fontSliderFinder);
         fontSlider.onChanged?.call(30.0);
         await tester.pumpAndSettle();
         expect(player.desktopLyricsSettings.fontSize, closeTo(30.0, 0.01));
 
-        // 3. Updating color
-        final pinkPresetFinder = find.byKey(
-          const Key('color_歌词颜色_ffff69b4'),
+        // 3. Updating color (open picker dialog, pick pink, confirm)
+        await tester.ensureVisible(
+          find.byKey(const Key('color_field_歌词颜色')),
         );
-        await tester.ensureVisible(pinkPresetFinder);
         await tester.pumpAndSettle();
-        await tester.tap(pinkPresetFinder);
+        await tester.tap(find.byKey(const Key('color_field_歌词颜色')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('color_歌词颜色_ffff69b4')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
         expect(player.desktopLyricsSettings.unplayedTextColor, 0xFFFF69B4);
       },

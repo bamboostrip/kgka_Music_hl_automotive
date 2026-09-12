@@ -1591,7 +1591,7 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
 @visibleForTesting
 typedef OverlayQuickSettingsMenu = _OverlayQuickSettingsMenu;
 
-/// 桌面歌词悬浮工具栏快捷调节菜单（字号加减、预设配色、单双行切换、更多设置）。
+/// 桌面歌词悬浮工具栏快捷调节菜单（字号加减、歌词配色方案、单双行切换、更多设置）。
 class _OverlayQuickSettingsMenu extends StatelessWidget {
   const _OverlayQuickSettingsMenu({
     required this.settings,
@@ -1602,15 +1602,6 @@ class _OverlayQuickSettingsMenu extends StatelessWidget {
   final DesktopLyricsSettings settings;
   final ValueChanged<DesktopLyricsSettings> onUpdateSettings;
   final VoidCallback onOpenDetailedSettings;
-
-  static const List<int> _presetColors = [
-    0xFF00BFFF, // 天蓝 - QQ 音乐经典
-    0xFFFFFFFF, // 亮白
-    0xFFFFD700, // 金黄
-    0xFFFF69B4, // 霓虹粉
-    0xFF00FF7F, // 翠绿
-    0xFFFF6347, // 番茄红
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1685,11 +1676,12 @@ class _OverlayQuickSettingsMenu extends StatelessWidget {
             thickness: 0.5,
             color: Colors.white.withValues(alpha: 0.10),
           ),
-          // 3. 字体颜色
+          // 3. 歌词配色：歌词（未播放）+ 高亮（已播放）成组切换，
+          //    避免只改字体颜色导致高亮不跟随、甚至两色相同看不清。
           Row(
             children: [
               const Text(
-                '字体颜色',
+                '歌词配色',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 12,
@@ -1699,9 +1691,10 @@ class _OverlayQuickSettingsMenu extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final color in _presetColors) ...[
-                    _buildColorCircle(color),
-                    if (color != _presetColors.last) const SizedBox(width: 6),
+                  for (final scheme in DesktopLyricsColorScheme.presets) ...[
+                    _buildSchemeChip(scheme),
+                    if (scheme != DesktopLyricsColorScheme.presets.last)
+                      const SizedBox(width: 6),
                   ],
                 ],
               ),
@@ -1804,52 +1797,58 @@ class _OverlayQuickSettingsMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildColorCircle(int color) {
-    final isSelected = settings.unplayedTextColor == color;
-    return InkWell(
-      key: ValueKey(color),
-      onTap: () {
-        onUpdateSettings(
-          settings.copyWith(
-            unplayedTextColor: color,
-            textColor: color,
+  /// 配色方案圆点：左右对半双色（左=歌词色，右=高亮色），一眼看出
+  /// 该方案切换的两项颜色；命中当前设置时白圈高亮。
+  Widget _buildSchemeChip(DesktopLyricsColorScheme scheme) {
+    final isSelected =
+        settings.unplayedTextColor == scheme.unplayedTextColor &&
+        settings.playedTextColor == scheme.playedTextColor;
+    return Tooltip(
+      message: scheme.name,
+      child: InkWell(
+        key: ValueKey('scheme_${scheme.name}'),
+        onTap: () {
+          onUpdateSettings(
+            settings.copyWith(
+              unplayedTextColor: scheme.unplayedTextColor,
+              textColor: scheme.unplayedTextColor,
+              playedTextColor: scheme.playedTextColor,
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                Color(scheme.unplayedTextColor),
+                Color(scheme.playedTextColor),
+              ],
+              stops: const [0.5, 0.5],
+            ),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.3),
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Color(
+                        scheme.playedTextColor,
+                      ).withValues(alpha: 0.6),
+                      blurRadius: 4,
+                    ),
+                  ]
+                : null,
           ),
-        );
-      },
-      borderRadius: BorderRadius.circular(9),
-      child: Container(
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(
-          color: Color(color),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected
-                ? Colors.white
-                : Colors.white.withValues(alpha: 0.3),
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Color(color).withValues(alpha: 0.6),
-                    blurRadius: 4,
-                  ),
-                ]
-              : null,
         ),
-        alignment: Alignment.center,
-        child: isSelected
-            ? Icon(
-                Icons.check,
-                size: 11,
-                color: (color == 0xFFFFFFFF ||
-                        color == 0xFFFFD700 ||
-                        color == 0xFF00FF7F)
-                    ? Colors.black
-                    : Colors.white,
-              )
-            : null,
       ),
     );
   }
